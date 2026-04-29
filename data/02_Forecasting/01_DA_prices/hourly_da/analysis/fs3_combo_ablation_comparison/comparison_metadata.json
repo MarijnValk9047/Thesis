@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-04-23T05:10:05",
+  "lear_aggregate_run_dir": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260422_155110_feature_family_ablation__lear_fs3_combo_promoted_benchmark",
+  "xgboost_aggregate_run_dir": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260422_210255_feature_family_ablation__xgboost_fs3_combo_promoted_benchmark",
+  "reporting_levels": [
+    "d_only",
+    "stitched_all_horizon"
+  ],
+  "splits": [
+    "validation",
+    "test"
+  ],
+  "metrics": [
+    "mae",
+    "rmae_vs_official_naive"
+  ],
+  "artifacts": {
+    "parent_mae_comparison": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\analysis\\fs3_combo_ablation_comparison\\parent_mae_comparison.csv",
+    "family_delta_comparison": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\analysis\\fs3_combo_ablation_comparison\\family_delta_comparison.csv",
+    "lear_validation_mae_rank": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\analysis\\fs3_combo_ablation_comparison\\lear_validation_mae_rank.csv",
+    "xgboost_validation_mae_rank": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\analysis\\fs3_combo_ablation_comparison\\xgboost_validation_mae_rank.csv",
+    "comparison_summary": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\analysis\\fs3_combo_ablation_comparison\\comparison_summary.md"
+  }
+}

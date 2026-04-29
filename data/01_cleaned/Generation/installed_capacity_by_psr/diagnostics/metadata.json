@@ -1,0 +1,10 @@
+{
+  "family": "installed_capacity_by_psr",
+  "availability_category": "future_horizon_known",
+  "future_horizon_safe": true,
+  "known_at_rule": "valid_from_utc",
+  "notes": "Installed capacity changes slowly and is treated as known from the start of its validity interval.",
+  "parsed_long_path": "data\\01_cleaned\\Generation\\installed_capacity_by_psr\\parsed\\installed_capacity_by_psr_long.csv",
+  "hourly_long_path": "data\\01_cleaned\\Generation\\installed_capacity_by_psr\\hourly\\installed_capacity_by_psr_hourly_long.csv",
+  "hourly_wide_path": "data\\01_cleaned\\Generation\\installed_capacity_by_psr\\hourly\\installed_capacity_by_psr_hourly_wide.csv"
+}

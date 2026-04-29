@@ -1,0 +1,10 @@
+{
+  "family": "da_total_load_forecast",
+  "availability_category": "previous_delivery_day_known_under_current_method",
+  "future_horizon_safe": false,
+  "known_at_rule": "day_ahead_local_08",
+  "notes": "Under the current thesis simplification, the full day-ahead curve for local delivery day t is treated as known at t 08:00 local. That makes this family safe for historical use but not as a direct full-horizon future regressor for D..D+5.",
+  "parsed_long_path": "data\\01_cleaned\\Load\\da_total_load_forecast\\parsed\\da_total_load_forecast_long.csv",
+  "hourly_long_path": "data\\01_cleaned\\Load\\da_total_load_forecast\\hourly\\da_total_load_forecast_hourly_long.csv",
+  "hourly_wide_path": "data\\01_cleaned\\Load\\da_total_load_forecast\\hourly\\da_total_load_forecast_hourly_wide.csv"
+}

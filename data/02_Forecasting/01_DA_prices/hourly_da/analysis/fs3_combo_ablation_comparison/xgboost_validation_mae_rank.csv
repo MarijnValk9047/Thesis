@@ -1,0 +1,25 @@
+reporting_level,reporting_level_label,feature_family,xgboost_delta,xgboost_relative_delta,rank_within_reporting_level
+d_only,D only,da_generation_day1_crossborder,1.7871017484254563,0.0933977929441208,1
+d_only,D only,da_load_day1_crossborder,0.4955798590054279,0.0259000726172677,2
+d_only,D only,wa_load_crossborder,0.2956613553882334,0.0154519003053172,3
+d_only,D only,installed_capacity_crossborder,0.128761748031998,0.0067293667483741,4
+d_only,D only,generation_history_crossborder,0.0171810110489722,0.0008979167044833,5
+d_only,D only,da_generation_day1_domestic,0.0,0.0,6
+d_only,D only,da_load_day1_domestic,0.0,0.0,7
+d_only,D only,generation_history_domestic,0.0,0.0,8
+d_only,D only,load_history_domestic,0.0,0.0,9
+d_only,D only,wa_load_domestic,0.0,0.0,10
+d_only,D only,neighbor_price_weekly,-0.1226051992504118,-0.0064076122266411,11
+d_only,D only,load_history_crossborder,-0.220504018023437,-0.011524015706909,12
+stitched_all_horizon,Full-horizon,wa_load_crossborder,0.5136238841563099,0.0204493034731532,1
+stitched_all_horizon,Full-horizon,da_generation_day1_crossborder,0.3564595200272968,0.0141919975409756,2
+stitched_all_horizon,Full-horizon,da_load_day1_crossborder,0.0963910543867925,0.0038376913224947,3
+stitched_all_horizon,Full-horizon,installed_capacity_crossborder,0.0222862523068414,0.0008872997357793,4
+stitched_all_horizon,Full-horizon,da_generation_day1_domestic,0.0,0.0,5
+stitched_all_horizon,Full-horizon,da_load_day1_domestic,0.0,0.0,6
+stitched_all_horizon,Full-horizon,generation_history_domestic,0.0,0.0,7
+stitched_all_horizon,Full-horizon,load_history_domestic,0.0,0.0,8
+stitched_all_horizon,Full-horizon,wa_load_domestic,0.0,0.0,9
+stitched_all_horizon,Full-horizon,generation_history_crossborder,-0.0135207997286244,-0.0005383140180572,10
+stitched_all_horizon,Full-horizon,neighbor_price_weekly,-0.0456220629212396,-0.0018163863451953,11
+stitched_all_horizon,Full-horizon,load_history_crossborder,-0.1971376461307947,-0.0078487930099544,12

@@ -1,0 +1,39 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Virtual environments
+.venv/
+.venv312/
+venv/
+
+# Python bytecode/cache
+__pycache__/
+*.py[cod]
+
+# IDE and local history
+.idea/
+.Rhistory
+.ipynb_checkpoints/
+
+# Temporary and local helper outputs
+tmp/
+
+# Raw source data kept locally / backed up outside Git
+data/00_Raw/
+
+# Generated or backup-only cleaned data outside current Git scope
+data/01_cleaned/Balancing/
+data/01_cleaned/**/parsed/
+data/01_cleaned/**/quarterhour/
+data/01_cleaned/Day_ahead_prices/DA_prices/quarterly/
+data/01_cleaned/Day_ahead_prices/plots/
+data/01_cleaned/Generation/actual_generation_by_psr/hourly/actual_generation_by_psr_hourly_long.csv
+data/01_cleaned/Generation/installed_capacity_by_psr/hourly/installed_capacity_by_psr_hourly_long.csv
+
+# Forecasting run artifacts and notebook exports
+data/02_Forecasting/**/runs/
+data/02_Forecasting/**/notebook_artifacts/
+data/02_Forecasting/**/archived_post_phase_b/
+data/02_Forecasting/01_DA_prices/archive/

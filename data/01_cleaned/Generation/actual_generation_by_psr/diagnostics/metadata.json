@@ -1,0 +1,10 @@
+{
+  "family": "actual_generation_by_psr",
+  "availability_category": "historical_only",
+  "future_horizon_safe": false,
+  "known_at_rule": "actual_interval_end",
+  "notes": "Actual generation by production type is historical-only and should enter forecasting only via lagged summaries.",
+  "parsed_long_path": "data\\01_cleaned\\Generation\\actual_generation_by_psr\\parsed\\actual_generation_by_psr_long.csv",
+  "hourly_long_path": "data\\01_cleaned\\Generation\\actual_generation_by_psr\\hourly\\actual_generation_by_psr_hourly_long.csv",
+  "hourly_wide_path": "data\\01_cleaned\\Generation\\actual_generation_by_psr\\hourly\\actual_generation_by_psr_hourly_wide.csv"
+}

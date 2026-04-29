@@ -1,0 +1,10 @@
+{
+  "family": "actual_total_load",
+  "availability_category": "historical_only",
+  "future_horizon_safe": false,
+  "known_at_rule": "actual_interval_end",
+  "notes": "Actual load is only known after delivery and can only be used as historical information or lagged errors.",
+  "parsed_long_path": "data\\01_cleaned\\Load\\actual_total_load\\parsed\\actual_total_load_long.csv",
+  "hourly_long_path": "data\\01_cleaned\\Load\\actual_total_load\\hourly\\actual_total_load_hourly_long.csv",
+  "hourly_wide_path": "data\\01_cleaned\\Load\\actual_total_load\\hourly\\actual_total_load_hourly_wide.csv"
+}

@@ -1,0 +1,12 @@
+{
+  "raw_root": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\00_Raw\\DA_Prices",
+  "output_root": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\01_cleaned\\Day_ahead_prices",
+  "cutoff_local": "2025-10-01T00:00:00+02:00",
+  "cutoff_utc": "2025-09-30T22:00:00+00:00",
+  "max_timestamp_utc": "2026-01-01T00:00:00+00:00",
+  "regions": [
+    "BE",
+    "DE",
+    "NL"
+  ]
+}

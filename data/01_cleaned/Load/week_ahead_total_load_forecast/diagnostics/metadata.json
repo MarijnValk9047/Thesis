@@ -1,0 +1,10 @@
+{
+  "family": "week_ahead_total_load_forecast",
+  "availability_category": "future_horizon_known",
+  "future_horizon_safe": true,
+  "known_at_rule": "week_ahead_local_08",
+  "notes": "Week-ahead load forecast is treated as known one week before the delivery day at 08:00 local, which makes it directly usable over the D..D+5 horizon under the current setup.",
+  "parsed_long_path": "data\\01_cleaned\\Load\\week_ahead_total_load_forecast\\parsed\\week_ahead_total_load_forecast_long.csv",
+  "hourly_long_path": "data\\01_cleaned\\Load\\week_ahead_total_load_forecast\\hourly\\week_ahead_total_load_forecast_hourly_long.csv",
+  "hourly_wide_path": "data\\01_cleaned\\Load\\week_ahead_total_load_forecast\\hourly\\week_ahead_total_load_forecast_hourly_wide.csv"
+}

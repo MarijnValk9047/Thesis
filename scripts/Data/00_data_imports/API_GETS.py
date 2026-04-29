@@ -234,11 +234,6 @@ def add_dataset(key: str, config: DatasetConfig) -> None:
 
 
 ALL_PSR_VARIANTS = build_psr_variants(list(PSR_TYPE_LABELS.keys()))
-WIND_SOLAR_PSR = [
-    ("B16", "Solar"),
-    ("B18", "Offshore"),
-    ("B19", "Onshore"),
-]
 
 
 for country_code, domain in COUNTRY_BIDDING_ZONE_DOMAINS.items():
@@ -363,33 +358,12 @@ for country_code, domain in COUNTRY_BIDDING_ZONE_DOMAINS.items():
         ),
     )
 
-    for psr, folder in WIND_SOLAR_PSR:
-        add_dataset(
-            f"14_1_d_intraday_generation_forecast_{cc}_{folder.lower()}",
-            DatasetConfig(
-                name=(
-                    f"14_1_d_intraday_generation_forecast_{country_code}_"
-                    f"{PSR_TYPE_LABELS[psr]}"
-                ),
-                output_subdir=f"RES_Generation_Forecast/{country_code}_intraday_forecast/{folder}",
-                default_start_year=2022,
-                default_end_year=2025,
-                page_size=100,
-                params={
-                    "documentType": "A69",
-                    "processType": "A40",
-                    "in_Domain": domain,
-                    "psrType": psr,
-                },
-            ),
-        )
-
     add_dataset(
         f"12_1_d_energy_prices_a01_day_ahead_{cc}",
         DatasetConfig(
             name=f"12_1_d_energy_prices_a01_day_ahead_{country_code}",
             output_subdir=f"DA_Prices/DA_prices_{country_code}/A01_Day_Ahead_Market",
-            default_start_year=2022,
+            default_start_year=2021,
             default_end_year=2025,
             page_size=100,
             params={

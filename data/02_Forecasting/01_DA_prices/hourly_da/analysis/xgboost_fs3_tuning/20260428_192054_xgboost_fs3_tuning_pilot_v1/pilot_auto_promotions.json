@@ -1,0 +1,14 @@
+{
+  "run_id": "20260428_192054_xgboost_fs3_tuning_pilot_v1",
+  "run_label": "xgboost_fs3_tuning_pilot_v1",
+  "primary_split": "validation",
+  "pilot_origin_count": 48,
+  "min_validation_coverage_pct": 95.0,
+  "top_k": 3,
+  "promoted_candidate_ids": [],
+  "plot_paths": {
+    "candidate_sequence_metrics": "data\\02_Forecasting\\01_DA_prices\\hourly_da\\analysis\\xgboost_fs3_tuning\\20260428_192054_xgboost_fs3_tuning_pilot_v1\\plots\\pilot_candidate_sequence_metrics.png",
+    "ranked_delta_vs_baseline": "data\\02_Forecasting\\01_DA_prices\\hourly_da\\analysis\\xgboost_fs3_tuning\\20260428_192054_xgboost_fs3_tuning_pilot_v1\\plots\\pilot_ranked_delta_vs_baseline.png",
+    "runtime_vs_mae": "data\\02_Forecasting\\01_DA_prices\\hourly_da\\analysis\\xgboost_fs3_tuning\\20260428_192054_xgboost_fs3_tuning_pilot_v1\\plots\\pilot_runtime_vs_mae.png"
+  }
+}

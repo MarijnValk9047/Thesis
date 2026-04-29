@@ -1,0 +1,13 @@
+experiment_name,family_group,defined_in_code,currently_available,availability_reason,missing_requirements,required_column_count,available_required_column_count,missing_required_column_count,direct_column_count,lagged_column_count,lag_hours,description
+da_generation_day1_crossborder,day1_only,True,True,all_required_columns_present,,3,3,0,3,0,,Domestic plus neighboring day-ahead generation forecasts for the explicit D-only branch.
+da_generation_day1_domestic,day1_only,True,True,all_required_columns_present,,1,1,0,1,0,,Domestic day-ahead generation forecast for the explicit D-only branch.
+da_load_day1_crossborder,day1_only,True,True,all_required_columns_present,,3,3,0,3,0,,Domestic plus neighboring day-ahead total load forecasts for the explicit D-only branch.
+da_load_day1_domestic,day1_only,True,True,all_required_columns_present,,1,1,0,1,0,,Domestic day-ahead total load forecast for the explicit D-only branch.
+installed_capacity_crossborder,full_horizon,True,True,all_required_columns_present,,12,12,0,12,0,,Domestic plus neighboring installed-capacity summaries.
+wa_load_crossborder,full_horizon,True,True,all_required_columns_present,,3,3,0,3,0,,Domestic plus neighboring week-ahead total load forecasts.
+wa_load_domestic,full_horizon,True,True,all_required_columns_present,,1,1,0,1,0,,Domestic week-ahead total load forecast.
+generation_history_crossborder,historical,True,True,all_required_columns_present,,12,12,0,0,12,"168, 336",Domestic plus neighboring lagged generation regime indicators.
+generation_history_domestic,historical,True,True,all_required_columns_present,,4,4,0,0,4,"168, 336","Domestic lagged generation regime indicators: total, RES, DA generation, and DA generation minus actual load."
+load_history_crossborder,historical,True,True,all_required_columns_present,,6,6,0,0,6,"168, 336",Domestic plus neighboring lagged actual load and lagged load-forecast errors.
+load_history_domestic,historical,True,True,all_required_columns_present,,2,2,0,0,2,"168, 336",Domestic lagged actual load and lagged load-forecast error using weekly-safe lags.
+neighbor_price_weekly,historical,True,True,all_required_columns_present,,2,2,0,0,2,"168, 336",Neighboring day-ahead price weekly-safe lags.

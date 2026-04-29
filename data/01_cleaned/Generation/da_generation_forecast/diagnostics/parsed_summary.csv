@@ -1,0 +1,4 @@
+family,stage,market,psr_scope,rows,unique_timestamps,duplicates,missing_values,min_timestamp_utc,max_timestamp_utc,coverage_rows_complete
+da_generation_forecast,parsed,BE,TOTAL,35064,35064,0,0,2022-01-01T00:00:00+00:00,2025-12-31T23:00:00+00:00,
+da_generation_forecast,parsed,DE,TOTAL,61347,61347,0,0,2022-01-01T00:00:00+00:00,2025-12-31T23:45:00+00:00,
+da_generation_forecast,parsed,NL,TOTAL,140183,140183,0,0,2022-01-01T00:00:00+00:00,2025-12-31T23:45:00+00:00,

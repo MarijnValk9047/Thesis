@@ -1,0 +1,10 @@
+{
+  "family": "da_generation_forecast",
+  "availability_category": "previous_delivery_day_known_under_current_method",
+  "future_horizon_safe": false,
+  "known_at_rule": "day_ahead_local_08",
+  "notes": "The remaining raw day-ahead generation forecast files contain total generation forecast rather than type-specific future curves. Under the current availability simplification they are safe as historical information, not as direct D..D+5 future regressors.",
+  "parsed_long_path": "data\\01_cleaned\\Generation\\da_generation_forecast\\parsed\\da_generation_forecast_long.csv",
+  "hourly_long_path": "data\\01_cleaned\\Generation\\da_generation_forecast\\hourly\\da_generation_forecast_hourly_long.csv",
+  "hourly_wide_path": "data\\01_cleaned\\Generation\\da_generation_forecast\\hourly\\da_generation_forecast_hourly_wide.csv"
+}
