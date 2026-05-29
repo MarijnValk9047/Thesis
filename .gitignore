@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+gurobi.lic
+*.lic
 
 # Virtual environments
 .venv/
@@ -28,6 +30,7 @@ data/01_cleaned/Balancing/
 data/01_cleaned/**/parsed/
 data/01_cleaned/**/quarterhour/
 data/01_cleaned/Day_ahead_prices/DA_prices/quarterly/
+data/01_cleaned/Day_ahead_prices_quarterly/
 data/01_cleaned/Day_ahead_prices/plots/
 data/01_cleaned/Generation/actual_generation_by_psr/hourly/actual_generation_by_psr_hourly_long.csv
 data/01_cleaned/Generation/installed_capacity_by_psr/hourly/installed_capacity_by_psr_hourly_long.csv
@@ -37,3 +40,20 @@ data/02_Forecasting/**/runs/
 data/02_Forecasting/**/notebook_artifacts/
 data/02_Forecasting/**/archived_post_phase_b/
 data/02_Forecasting/01_DA_prices/archive/
+
+# Workspace triage and local cleanup reports
+workspace_triage/
+
+# Hydrogen optimisation run artifacts
+scripts/Data/03_Hydrogen_Test_Case/runs/
+
+# Documentation export bundles
+docs/optimisation/exports/
+docs/optimisation/*.zip
+
+# Temporary debug folders and accidental local files
+tmp_phase07_debug/
+--config
+
+# Solver and runtime logs
+*.log
