@@ -1,0 +1,373 @@
+DA Forecast Pipeline - Detailed Engineering Description
+Generated on: 2026-05-06
+Project root: C:/Users/marijnvalk/PycharmProjects/Thesis
+
+1) Scope and source files reviewed
+
+Reviewed files (hourly core and runners):
+- scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/config.py
+- scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/schedule.py
+- scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/evaluation.py
+- scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/pipeline.py
+- scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/metrics.py
+- scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/reporting.py
+- scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/methodology.py
+- scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/tuning.py
+- scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/ablation_blocks.py
+- scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/feature_value.py
+- scripts/Data/02_Forecasting/01_DA_prices/run_lear_benchmark.py
+- scripts/Data/02_Forecasting/01_DA_prices/run_xgboost_benchmark.py
+- scripts/Data/02_Forecasting/01_DA_prices/run_model_comparison.py
+- scripts/Data/02_Forecasting/01_DA_prices/run_feature_family_ablation.py
+- scripts/Data/02_Forecasting/01_DA_prices/run_staged_block_ablation.py
+- scripts/Data/02_Forecasting/01_DA_prices/run_revised_parent_benchmark.py
+
+Reviewed files (quarter-hour canonical observed deterministic path and reporting):
+- scripts/Data/02_Forecasting/01_DA_prices/quarterhour_da/observed_deterministic.py
+- scripts/Data/02_Forecasting/01_DA_prices/quarterhour_da/reporting_metrics.py
+- scripts/Data/02_Forecasting/01_DA_prices/run_15min_observed_deterministic_forecast.py
+
+
+2) Hourly DA pipeline: execution handling (how it runs)
+
+2.1 Configuration backbone
+- Central config object: HourlyDAPipelineConfig.
+- Fixed methodology values in code:
+  - train: 2022-01-01 to 2023-09-30
+  - validation: 2023-10-01 to 2024-09-30
+  - test: 2024-10-01 to 2025-09-30
+  - origin: 08:00 local on D-1
+  - horizon: D..D+4 (5 days)
+  - evaluation splits actually executed in benchmark runs: validation + test.
+- Time policy:
+  - internal timestamps in UTC
+  - local timezone used for schedule construction/reporting semantics.
+
+2.2 Schedule generation
+- Split-aware origins generated with full-horizon containment.
+- If origin would cause target horizon to cross split boundary, pipeline raises RuntimeError.
+- Target schedule includes lead_day, lead_day_label, horizon_index and known_at for each target timestamp.
+- DST-safe behavior: hours per local day can be 23/24/25.
+
+2.3 Walk-forward execution
+- For each split and each forecast origin:
+  - history = rows where known_at_utc <= forecast_origin_utc (core leakage firewall).
+  - build target frame for D..D+4.
+  - model.fit(history, target_index, config, optional feature_context).
+  - model.predict(...) and align index to target schedule.
+- For each origin-model pair runtime is captured:
+  - fit_time_sec
+  - predict_time_sec
+  - fit time warning flags (absolute and relative monitor).
+
+2.4 Stored prediction schema
+- Long-format prediction rows include:
+  - run_id, model, model_family, fs_level, dataset_split
+  - forecast_origin_utc
+  - target_timestamp_utc
+  - target_delivery_local_date, target_hour_local, target_known_at_utc
+  - lead_day, lead_day_label, horizon_index
+  - y_true, y_pred
+  - is_observed_target
+  - fit/predict timing and runtime_info_json
+- y_true is masked to NaN when is_observed_target is false.
+
+2.5 Benchmark suite orchestration
+- run_benchmark_suite does:
+  1) prepare_data_bundle
+  2) per-split walk-forward
+  3) score and summarize metrics
+  4) choose official naive reference on validation (stitched_all_horizon)
+  5) compute rMAE against that official naive
+  6) run DM tests
+  7) write artifacts and run summary
+  8) plot lead-day and overview charts.
+
+
+3) Reporting and artifact contract
+
+3.1 Core run artifacts
+- config_snapshot.json
+- methodology_snapshot.json
+- tuning_policy_snapshot.json
+- timezone_audit.json
+- gap_summary.csv, gap_intervals.csv
+- split_summary.csv
+- origin_schedule.csv
+- predictions_long.parquet (and csv-readable via helper fallback)
+- origin_timing.csv
+- origin_timing_summary.csv
+- metrics_overall.csv
+- metrics_by_lead_day.csv
+- metrics_by_reporting_level.csv
+- diebold_mariano_results.csv
+- diebold_mariano_by_reporting_level.csv
+- model_settings_summary.csv
+- official_naive_reference.json
+- suite_models.json
+- run_summary.json
+
+3.2 Reporting levels (shared taxonomy)
+- d_only: lead_day 0
+- guidance_only: lead_day 1..4
+- stitched_all_horizon: lead_day 0..4
+
+3.3 Aggregate comparison runs
+- run_model_comparison combines upstream benchmark runs (naive + model-specific runs) into one FS-level comparison run.
+- It preserves provenance with source_runs.json and model settings merged from source runs.
+- For FS1 output label is fs1_model_comparison.
+- For FS2 output label is model_comparison (kept for compatibility).
+
+
+4) Evaluation metrics and statistical comparison
+
+4.1 Primary metrics
+- MAE
+- RMSE
+- Bias
+- rMAE vs official naive
+
+4.2 Additional metric in code
+- sMAPE component is computed and reported in metric rows.
+
+4.3 Coverage tracking
+- observations_total
+- observations_scored
+- coverage_pct
+- coverage gate used for official naive selection.
+
+4.4 Official naive selection policy
+- Candidate models:
+  - naive_previous_week
+  - naive_previous_year
+- Selection split: validation
+- Default reporting level for selection in benchmark suite: stitched_all_horizon
+- Rule:
+  - prefer candidates with coverage_pct >= minimum_coverage_pct (default 95)
+  - pick lowest MAE among feasible candidates
+  - fallback if no feasible candidate: highest coverage, then MAE.
+
+4.5 Diebold-Mariano
+- Pairwise benchmark vs challenger DM with Newey-West HAC variance.
+- Loss options implemented: absolute (default), squared.
+- Outputs:
+  - overall and per lead_day
+  - by reporting level.
+
+
+5) Tuning logic and policy implementation
+
+5.1 Global tuning doctrine (codified in tuning.py)
+- Tune structurally by FS level on validation only.
+- Freeze settings after selection for that FS.
+- Daily rolling-origin run only re-fits, no full search per origin.
+
+5.2 FS cadence
+- FS0: no tuning
+- FS1: fast/coarse
+- FS2: first serious tuning round
+- FS3: mandatory retuning
+- FS4: selective rigorous finalist retuning
+
+5.3 Benchmark runners and parameter application
+- run_lear_benchmark.py and run_xgboost_benchmark.py take explicit params (alpha/window or xgb hyperparams), run benchmark suite, and produce full artifact contract.
+- Fit-time warning thresholds can be overridden per runner.
+
+5.4 Run summaries contain policy snapshots
+- run_summary.json embeds:
+  - effective policy summary for the run role
+  - rMAE policy metadata
+  - parent_benchmark_rmae_reference structure for lineage/inheritance.
+
+
+6) Ablation implementation details
+
+6.1 Two ablation modes
+- Feature-family ablation (run_feature_family_ablation.py)
+  - uses supported feature families per context
+  - creates child runs per removed family
+  - creates aggregate run with parent-child comparisons.
+- Staged block ablation (run_staged_block_ablation.py)
+  - scheme layers:
+    - Stage A (top-level)
+    - Layer 1 (mutually exclusive blocks)
+    - Layer 2 (subgroups under one chosen Layer 1 block)
+  - performs preflight assignment checks before execution.
+
+6.2 Block taxonomy
+- Defined in ablation_blocks.py.
+- FS2 and FS3 each have explicit block maps and subgroup maps.
+- Includes scheme hash and feature taxonomy hash for reproducible ablation lineage.
+
+6.3 Preflight and validity checks
+- For each branch/model context:
+  - check each effective feature assigned exactly once
+  - detect duplicate or unassigned columns
+  - detect zero-size blocks
+  - mark scheme valid/invalid before child execution.
+
+6.4 Parent-child comparison outputs
+- feature_family_value_by_origin.csv
+- feature_family_value_by_reporting_level.csv
+- feature_family_value_summary.csv
+- feature_family_parent_child_map.csv
+- plus preflight artifacts for staged ablation runs.
+
+
+7) rMAE denominator inheritance and lineage control
+
+7.1 Parent context resolution
+- feature_value.py resolves parent benchmark run by expected labels and required files.
+- Validates compatibility:
+  - critical config subset
+  - reporting-level definition consistency
+  - single model settings row for parent model context.
+
+7.2 Denominator materialization
+- Parent naive denominator extracted from parent metrics for:
+  - overall
+  - by lead day
+  - by reporting level.
+- Child metrics recomputed using inherited denominators, not locally re-selected naive.
+
+7.3 Child run mutation
+- Child run metrics files overwritten with inherited-rMAE versions.
+- official_naive_reference.json copied from parent.
+- run_summary.json enriched with:
+  - parent lineage fields
+  - settings inheritance policy
+  - parent benchmark rMAE reference snapshot.
+
+
+8) Pruning / shortlisting behavior in practice
+
+8.1 Methodological stage decisions
+- No shortlist after FS1.
+- First shortlist after FS2 (across LEAR, XGBoost, Prophet).
+- FS3/FS4 continue only with survivors.
+
+8.2 Practical implementation route
+- Model comparison runs provide fair FS-layer ranking.
+- Ablation and revised-parent benchmarks provide structured pruning evidence:
+  - remove block/family
+  - check validation deltas and stability
+  - produce revised benchmark candidate with frozen parent setting lineage.
+
+8.3 Revised parent benchmark runner
+- run_revised_parent_benchmark reconstructs parent settings and excludes selected blocks, preserving parent lineage metadata in run summary.
+
+
+9) Quarter-hour observed deterministic pipeline (current canonical path)
+
+9.1 Canonical runner
+- run_15min_observed_deterministic_forecast.py calls quarterhour_da.run_observed_market_deterministic_forecast.
+- Canonical implementation file: quarterhour_da/observed_deterministic.py.
+
+9.2 Core quarter-hour handling
+- Builds canonical 15-minute frame from authoritative source.
+- Maintains observed-target semantics:
+  - is_observed_target true only for real observed, non-interpolated, non-flagged values.
+  - non-observed targets remain in schedule but are excluded from scored truth (y_true = NaN).
+- Uses inherited hourly known_at convention and D-1 08:00 origin semantics.
+
+9.3 Split policy for observed period
+- Preferred: chronological 60/20/20 over eligible origins.
+- Includes fallback policies when history is short.
+- Stores per-origin counts:
+  - expected normal target count
+  - actual target count (DST-aware)
+  - observed target count and coverage.
+
+9.4 Model/benchmark set in observed deterministic
+- Benchmarks:
+  - repeated_hourly_backbone
+  - naive_previous_available_same_quarter
+  - naive_previous_week_same_quarter
+  - naive_last_full_day_profile
+- Mixed-frequency models:
+  - mean_shape_deviation
+  - xgboost_deviation
+- Official naive denominator chosen on validation with coverage constraints, and repeated-hourly is not silently forced as denominator.
+
+9.5 Quarter-hour run outputs (observed deterministic)
+- predictions_long.csv / forecasts_by_origin.csv
+- origin timing files
+- metrics overall/lead day/reporting level
+- extra time-resolution diagnostics:
+  - metrics by hour_of_day
+  - metrics by quarter_of_day
+- official_naive_reference.json
+- feature_schema.json
+- scenario_generation_compatibility.json
+- run_summary.json with leakage guard, benchmark causality summary, limitations.
+
+
+10) Quarter-hour advanced reporting metrics module
+
+10.1 Standard shared metrics
+- Reuses hourly metric engine for:
+  - overall
+  - by lead day
+  - by reporting level.
+
+10.2 Additional quarter-hour specific analytics
+- top-k high/low hit and miss rates
+- extreme-event precision/recall/F1 by quantiles
+- daily Spearman rank correlation
+- mean forecast rank of actual extremes
+- tail MAE (top/bottom/middle quantile partitions)
+- high-low spread error diagnostics
+- bundled via build_qh_phase2_reporting_bundle().
+
+
+11) Exact replication blueprint: build quarter-hour pipeline equal to hourly governance
+
+11.1 Keep same orchestration skeleton
+- Implement a quarter-hour run_benchmark_suite analogue with same stages:
+  prepare -> walk-forward -> score -> naive select -> rMAE -> DM -> artifacts -> summary.
+
+11.2 Keep identical artifact contract names
+- Reuse hourly naming wherever possible:
+  metrics_overall, metrics_by_lead_day, metrics_by_reporting_level,
+  official_naive_reference, model_settings_summary, run_summary, suite_models, origin_timing, split_summary.
+- Add quarter-hour extras without breaking base contract:
+  is_observed_target fields, observed coverage summaries, quarter-specific diagnostic metrics.
+
+11.3 Keep same denominator and ablation lineage logic
+- Parent benchmark defines official naive denominator.
+- Child ablation/pruning runs inherit denominator from parent, with explicit lineage metadata.
+
+11.4 Keep same stage governance
+- FS0/FS1/FS2 policy, shortlisting timing, tuning cadence and freeze strategy remain aligned.
+- No origin-level retuning.
+
+11.5 Keep same leakage and time policy
+- known_at_utc <= forecast_origin_utc
+- UTC internal time
+- local-time conversion only for scheduling/reporting.
+
+11.6 Quarter-hour mandatory constraints
+- Score only observed targets.
+- y_true remains NaN for non-observed rows.
+- Do not use scenario_generation test-preferred slice logic for quarter-hour backbone/benchmark/rMAE denominator choices.
+
+
+12) Practical implementation checklist for parity
+
+- [ ] Create quarterhour_da/core-style orchestration module mirroring hourly pipeline.py responsibilities.
+- [ ] Standardize quarter-hour prediction schema to hourly long format + is_observed_target + per-origin coverage counts.
+- [ ] Centralize quarter-hour naive reference selection with validation-only and coverage gate.
+- [ ] Reuse/port rMAE inheritance helpers from feature_value.py for quarter-hour ablation runs.
+- [ ] Add quarter-hour model settings summary contract matching hourly model_settings_summary.csv semantics.
+- [ ] Provide aggregate model comparison runner for quarter-hour FS levels equivalent to run_model_comparison.
+- [ ] Add staged ablation runner for quarter-hour with scheme hash and preflight checks.
+- [ ] Keep run_summary policy snapshots complete and explicit.
+
+
+13) Notes on current maturity
+
+- Hourly pipeline governance (policy snapshots, rMAE inheritance, staged ablation preflight) is mature and well-structured for reuse.
+- Quarter-hour observed deterministic path already implements most required guardrails and rich diagnostics.
+- Main remaining gap for full parity is structural unification:
+  - one canonical quarter-hour benchmark-suite orchestration with exactly the same governance contract as hourly parent/aggregate/ablation stages.
+
