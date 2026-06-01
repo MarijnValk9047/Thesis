@@ -80,8 +80,8 @@ def resolve_tabular_path(run_dir: Path, filename: str) -> Path:
     suffix = Path(filename).suffix.lower()
     stem = Path(filename).stem if suffix in {".csv", ".parquet"} else filename
     candidates = [
-        run_dir / f"{stem}.parquet",
         run_dir / f"{stem}.csv",
+        run_dir / f"{stem}.parquet",
     ]
     for candidate in candidates:
         if candidate.exists():

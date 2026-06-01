@@ -84,6 +84,15 @@ def parse_args() -> argparse.Namespace:
         help="Region codes to process.",
     )
     parser.add_argument(
+        "--quarterly-regions",
+        nargs="+",
+        default=["NL"],
+        help=(
+            "Region codes that should switch from hourly to quarter-hourly data from the cutoff date onward. "
+            "Regions not listed here keep their hourly series across the full cleaned horizon."
+        ),
+    )
+    parser.add_argument(
         "--max-timestamp-utc",
         type=str,
         default="2026-01-01T00:00:00Z",
@@ -907,6 +916,7 @@ def run(
     cutoff_local_date: str,
     local_timezone: str,
     regions: list[str],
+    quarterly_regions: set[str],
     max_timestamp_utc_str: str,
 ) -> None:
     output_root.mkdir(parents=True, exist_ok=True)
@@ -955,11 +965,15 @@ def run(
         df_clean_all, duplicate_rows_removed = split_duplicate_stats(df_raw)
         df_clean_all = clip_to_max_timestamp(df_clean_all, max_timestamp_utc=max_timestamp_utc)
 
-        pre = df_clean_all[df_clean_all["timestamp_utc"] < cutoff_utc].copy()
-        post = df_clean_all[df_clean_all["timestamp_utc"] >= cutoff_utc].copy()
-
-        hourly_raw = pre[pre["resolution_minutes"] == 60].copy()
-        quarterly_raw = post[post["resolution_minutes"] == 15].copy()
+        uses_quarterly_cutoff = region in quarterly_regions
+        if uses_quarterly_cutoff:
+            pre = df_clean_all[df_clean_all["timestamp_utc"] < cutoff_utc].copy()
+            post = df_clean_all[df_clean_all["timestamp_utc"] >= cutoff_utc].copy()
+            hourly_raw = pre[pre["resolution_minutes"] == 60].copy()
+            quarterly_raw = post[post["resolution_minutes"] == 15].copy()
+        else:
+            hourly_raw = df_clean_all[df_clean_all["resolution_minutes"] == 60].copy()
+            quarterly_raw = df_clean_all.iloc[0:0].copy()
 
         hourly_fix = apply_missing_datapoint_fix(
             hourly_raw,
@@ -977,8 +991,12 @@ def run(
         quarterly = quarterly_fix.cleaned_frame
 
         other_rows = df_clean_all.copy()
-        hourly_scope_mask = (other_rows["timestamp_utc"] < cutoff_utc) & (other_rows["resolution_minutes"] == 60)
-        quarterly_scope_mask = (other_rows["timestamp_utc"] >= cutoff_utc) & (other_rows["resolution_minutes"] == 15)
+        if uses_quarterly_cutoff:
+            hourly_scope_mask = (other_rows["timestamp_utc"] < cutoff_utc) & (other_rows["resolution_minutes"] == 60)
+            quarterly_scope_mask = (other_rows["timestamp_utc"] >= cutoff_utc) & (other_rows["resolution_minutes"] == 15)
+        else:
+            hourly_scope_mask = other_rows["resolution_minutes"] == 60
+            quarterly_scope_mask = pd.Series(False, index=other_rows.index)
         other_rows = other_rows[~hourly_scope_mask & ~quarterly_scope_mask].copy()
         frames_to_concat = [frame for frame in [other_rows, hourly, quarterly] if not frame.empty]
         if frames_to_concat:
@@ -1082,5 +1100,6 @@ if __name__ == "__main__":
         cutoff_local_date=args.cutoff_local_date,
         local_timezone=args.local_timezone,
         regions=args.regions,
+        quarterly_regions={region.upper() for region in args.quarterly_regions},
         max_timestamp_utc_str=args.max_timestamp_utc,
     )
