@@ -1,0 +1,92 @@
+﻿{
+    "move_type":  "one_off_script_relocation",
+    "executed_local":  "2026-05-14T17:10:20+02:00",
+    "destination":  "scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign",
+    "moved_count":  21,
+    "scripts":  [
+                    {
+                        "script":  "run_dplus4_applicability_scan.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_dplus4_applicability_scan.py"
+                    },
+                    {
+                        "script":  "run_fs3_taxonomy_inventory.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_fs3_taxonomy_inventory.py"
+                    },
+                    {
+                        "script":  "run_gap_audit.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_gap_audit.py"
+                    },
+                    {
+                        "script":  "run_hourly_donly_calibration_sensitivity.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_hourly_donly_calibration_sensitivity.py"
+                    },
+                    {
+                        "script":  "run_hourly_donly_tail_diagnostics.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_hourly_donly_tail_diagnostics.py"
+                    },
+                    {
+                        "script":  "run_hourly_scenario_generation_with_lear_strict.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_hourly_scenario_generation_with_lear_strict.py"
+                    },
+                    {
+                        "script":  "run_lago_lear_audit.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_lago_lear_audit.py"
+                    },
+                    {
+                        "script":  "run_lago_lear_cleaning.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_lago_lear_cleaning.py"
+                    },
+                    {
+                        "script":  "run_lago_lear_data_import.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_lago_lear_data_import.py"
+                    },
+                    {
+                        "script":  "run_lago_lear_export_for_qh.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_lago_lear_export_for_qh.py"
+                    },
+                    {
+                        "script":  "run_lago_lear_res_forecast_import.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_lago_lear_res_forecast_import.py"
+                    },
+                    {
+                        "script":  "run_lago_lear_six_year_benchmark.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_lago_lear_six_year_benchmark.py"
+                    },
+                    {
+                        "script":  "run_lago_multiday_feature_audit.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_lago_multiday_feature_audit.py"
+                    },
+                    {
+                        "script":  "run_lago_settings_availability_audit.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_lago_settings_availability_audit.py"
+                    },
+                    {
+                        "script":  "run_lago_variant_decision_analysis.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_lago_variant_decision_analysis.py"
+                    },
+                    {
+                        "script":  "run_option_ab_validation_sweep.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_option_ab_validation_sweep.py"
+                    },
+                    {
+                        "script":  "run_option_c_validation_sweep.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_option_c_validation_sweep.py"
+                    },
+                    {
+                        "script":  "run_revised_parent_benchmark.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_revised_parent_benchmark.py"
+                    },
+                    {
+                        "script":  "run_staged_block_ablation.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_staged_block_ablation.py"
+                    },
+                    {
+                        "script":  "run_xgboost_fs3_tuning_pilot.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\run_xgboost_fs3_tuning_pilot.py"
+                    },
+                    {
+                        "script":  "validate_frozen_d_only_lago.py",
+                        "new_path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\scripts\\Data\\02_Forecasting\\01_DA_prices\\one_off\\2026-05_campaign\\validate_frozen_d_only_lago.py"
+                    }
+                ]
+}

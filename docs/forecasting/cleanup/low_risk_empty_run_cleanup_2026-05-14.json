@@ -1,0 +1,324 @@
+﻿{
+    "cleanup_type":  "low_risk_empty_top_level_run_folders",
+    "executed_local":  "2026-05-14T16:53:12+02:00",
+    "workspace":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis",
+    "parent_roots":  [
+                         "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                         "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs_lago_lear",
+                         "data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly",
+                         "data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly_with_lear_strict",
+                         "data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\runs",
+                         "data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\phase04_runs",
+                         "data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\finalisation_runs\\qh_fs1_endogenous_ablation",
+                         "data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\finalisation_runs\\qh_model3_lear_strict"
+                     ],
+    "removed_count":  51,
+    "removed_paths":  [
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly\\20260429_140100_01_da_price_scenario_generation_hourly",
+                              "RunFolder":  "20260429_140100_01_da_price_scenario_generation_hourly",
+                              "LastWrite":  "\/Date(1777480908436)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly\\20260429_140222_01_da_price_scenario_generation_hourly",
+                              "RunFolder":  "20260429_140222_01_da_price_scenario_generation_hourly",
+                              "LastWrite":  "\/Date(1777480908425)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly\\20260429_141123_01_da_price_scenario_generation_hourly",
+                              "RunFolder":  "20260429_141123_01_da_price_scenario_generation_hourly",
+                              "LastWrite":  "\/Date(1777480908364)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly\\20260429_150523",
+                              "RunFolder":  "20260429_150523",
+                              "LastWrite":  "\/Date(1777480906141)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly\\20260430_174240",
+                              "RunFolder":  "20260430_174240",
+                              "LastWrite":  "\/Date(1777570960058)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly_with_lear_strict",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly_with_lear_strict\\20260513_072848",
+                              "RunFolder":  "20260513_072848",
+                              "LastWrite":  "\/Date(1778657328278)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly_with_lear_strict",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\notebook_artifacts\\01_da_price_scenario_generation_hourly_with_lear_strict\\20260513_073046",
+                              "RunFolder":  "20260513_073046",
+                              "LastWrite":  "\/Date(1778657446935)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260402_155819_gap_audit",
+                              "RunFolder":  "20260402_155819_gap_audit",
+                              "LastWrite":  "\/Date(1775138299769)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260403_124051_naive_benchmark",
+                              "RunFolder":  "20260403_124051_naive_benchmark",
+                              "LastWrite":  "\/Date(1775212851450)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260403_202108_fs3_full_horizon_xgboost_screen",
+                              "RunFolder":  "20260403_202108_fs3_full_horizon_xgboost_screen",
+                              "LastWrite":  "\/Date(1775240468747)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260404_133259_naive_benchmark",
+                              "RunFolder":  "20260404_133259_naive_benchmark",
+                              "LastWrite":  "\/Date(1775302379299)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260408_155244_xgboost_benchmark",
+                              "RunFolder":  "20260408_155244_xgboost_benchmark",
+                              "LastWrite":  "\/Date(1775656364637)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260408_163841_model_comparison",
+                              "RunFolder":  "20260408_163841_model_comparison",
+                              "LastWrite":  "\/Date(1775659121444)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260408_163936_model_comparison",
+                              "RunFolder":  "20260408_163936_model_comparison",
+                              "LastWrite":  "\/Date(1775659176585)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260408_163957_model_comparison",
+                              "RunFolder":  "20260408_163957_model_comparison",
+                              "LastWrite":  "\/Date(1775659197438)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260408_164122_model_comparison",
+                              "RunFolder":  "20260408_164122_model_comparison",
+                              "LastWrite":  "\/Date(1775659282704)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260409_115441_prophet_benchmark",
+                              "RunFolder":  "20260409_115441_prophet_benchmark",
+                              "LastWrite":  "\/Date(1775728481726)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260409_115636_prophet_benchmark",
+                              "RunFolder":  "20260409_115636_prophet_benchmark",
+                              "LastWrite":  "\/Date(1775728596304)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260409_120804_prophet_benchmark",
+                              "RunFolder":  "20260409_120804_prophet_benchmark",
+                              "LastWrite":  "\/Date(1775729284136)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260409_134701_prophet_benchmark",
+                              "RunFolder":  "20260409_134701_prophet_benchmark",
+                              "LastWrite":  "\/Date(1775735221704)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260418_185920_feature_family_ablation__prophet_benchmark",
+                              "RunFolder":  "20260418_185920_feature_family_ablation__prophet_benchmark",
+                              "LastWrite":  "\/Date(1776531560296)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260418_185922_prophet_benchmark__ablate_holidays",
+                              "RunFolder":  "20260418_185922_prophet_benchmark__ablate_holidays",
+                              "LastWrite":  "\/Date(1776531562492)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_152823_feature_family_ablation__lear_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "RunFolder":  "20260423_152823_feature_family_ablation__lear_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "LastWrite":  "\/Date(1776950903440)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_152837_lear_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "RunFolder":  "20260423_152837_lear_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "LastWrite":  "\/Date(1776950917914)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_153525_feature_family_ablation__xgboost_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "RunFolder":  "20260423_153525_feature_family_ablation__xgboost_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "LastWrite":  "\/Date(1776951325121)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_153540_xgboost_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "RunFolder":  "20260423_153540_xgboost_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "LastWrite":  "\/Date(1776951340516)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_154454_feature_family_ablation__lear_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "RunFolder":  "20260423_154454_feature_family_ablation__lear_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "LastWrite":  "\/Date(1776951894671)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_154459_lear_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "RunFolder":  "20260423_154459_lear_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "LastWrite":  "\/Date(1776951899591)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_154808_feature_family_ablation__lear_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "RunFolder":  "20260423_154808_feature_family_ablation__lear_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "LastWrite":  "\/Date(1776952088333)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_154808_feature_family_ablation__xgboost_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "RunFolder":  "20260423_154808_feature_family_ablation__xgboost_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "LastWrite":  "\/Date(1776952088354)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_154813_lear_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "RunFolder":  "20260423_154813_lear_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "LastWrite":  "\/Date(1776952093175)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_154814_xgboost_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "RunFolder":  "20260423_154814_xgboost_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "LastWrite":  "\/Date(1776952094301)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_155445_feature_family_ablation__lear_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "RunFolder":  "20260423_155445_feature_family_ablation__lear_fs2_benchmark__layer1_mutually_exclusive_v1",
+                              "LastWrite":  "\/Date(1776952485680)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_155450_lear_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "RunFolder":  "20260423_155450_lear_fs2_benchmark__remove_short_autoregressive_price_lags",
+                              "LastWrite":  "\/Date(1776952490321)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_204915_lear_fs2_pruned_candidate_benchmark__remove_endogenous_core",
+                              "RunFolder":  "20260423_204915_lear_fs2_pruned_candidate_benchmark__remove_endogenous_core",
+                              "LastWrite":  "\/Date(1776970155257)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_204920_feature_family_ablation__lear_fs2_pruned_candidate_benchmark__layer1_mutually_exclusive_v1",
+                              "RunFolder":  "20260423_204920_feature_family_ablation__lear_fs2_pruned_candidate_benchmark__layer1_mutually_exclusive_v1",
+                              "LastWrite":  "\/Date(1776970160472)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_204920_lear_fs2_pruned_candidate_benchmark__remove_calendar_total",
+                              "RunFolder":  "20260423_204920_lear_fs2_pruned_candidate_benchmark__remove_calendar_total",
+                              "LastWrite":  "\/Date(1776970160300)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_204925_lear_fs2_pruned_candidate_benchmark__remove_short_autoregressive_price_lags",
+                              "RunFolder":  "20260423_204925_lear_fs2_pruned_candidate_benchmark__remove_short_autoregressive_price_lags",
+                              "LastWrite":  "\/Date(1776970165642)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_205537_feature_family_ablation__lear_fs2_pruned_candidate_benchmark__stage_a_top_level_v1",
+                              "RunFolder":  "20260423_205537_feature_family_ablation__lear_fs2_pruned_candidate_benchmark__stage_a_top_level_v1",
+                              "LastWrite":  "\/Date(1776970537100)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_210450_lear_fs2_pruned_candidate_benchmark__remove_calendar_total",
+                              "RunFolder":  "20260423_210450_lear_fs2_pruned_candidate_benchmark__remove_calendar_total",
+                              "LastWrite":  "\/Date(1776971090183)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_213808_feature_family_ablation__lear_fs2_pruned_candidate_benchmark__layer1_mutually_exclusive_v1",
+                              "RunFolder":  "20260423_213808_feature_family_ablation__lear_fs2_pruned_candidate_benchmark__layer1_mutually_exclusive_v1",
+                              "LastWrite":  "\/Date(1776973088913)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260423_213824_lear_fs2_pruned_candidate_benchmark__remove_short_autoregressive_price_lags",
+                              "RunFolder":  "20260423_213824_lear_fs2_pruned_candidate_benchmark__remove_short_autoregressive_price_lags",
+                              "LastWrite":  "\/Date(1776973104582)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs\\20260425_102006_lear_fs3_combo_promoted_benchmark",
+                              "RunFolder":  "20260425_102006_lear_fs3_combo_promoted_benchmark",
+                              "LastWrite":  "\/Date(1777105206846)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs_lago_lear",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs_lago_lear\\20260508_120203_dplus4_memsafe_smoke",
+                              "RunFolder":  "20260508_120203_dplus4_memsafe_smoke",
+                              "LastWrite":  "\/Date(1778234523809)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs_lago_lear",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs_lago_lear\\settings_availability_audit_20260507_152254",
+                              "RunFolder":  "settings_availability_audit_20260507_152254",
+                              "LastWrite":  "\/Date(1778160174966)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\finalisation_runs\\qh_fs1_endogenous_ablation",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\finalisation_runs\\qh_fs1_endogenous_ablation\\20260506_093655_qh_fs1_endogenous_ablation",
+                              "RunFolder":  "20260506_093655_qh_fs1_endogenous_ablation",
+                              "LastWrite":  "\/Date(1778060215884)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\finalisation_runs\\qh_fs1_endogenous_ablation",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\finalisation_runs\\qh_fs1_endogenous_ablation\\20260506_094554_qh_fs1_endogenous_ablation",
+                              "RunFolder":  "20260506_094554_qh_fs1_endogenous_ablation",
+                              "LastWrite":  "\/Date(1778061063939)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\finalisation_runs\\qh_fs1_endogenous_ablation",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\finalisation_runs\\qh_fs1_endogenous_ablation\\20260506_110830_qh_fs1_endogenous_ablation",
+                              "RunFolder":  "20260506_110830_qh_fs1_endogenous_ablation",
+                              "LastWrite":  "\/Date(1778065710488)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\finalisation_runs\\qh_model3_lear_strict",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\finalisation_runs\\qh_model3_lear_strict\\20260511_183815_qh_model3_lear_strict",
+                              "RunFolder":  "20260511_183815_qh_model3_lear_strict",
+                              "LastWrite":  "\/Date(1778524695424)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\phase04_runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\phase04_runs\\20260501_103256_phase04_empirical_validation",
+                              "RunFolder":  "20260501_103256_phase04_empirical_validation",
+                              "LastWrite":  "\/Date(1777631576620)\/"
+                          },
+                          {
+                              "Parent":  "data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\runs",
+                              "Path":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\runs\\20260503_184732_canonical_v1_counterfactual_full_year_evaluation",
+                              "RunFolder":  "20260503_184732_canonical_v1_counterfactual_full_year_evaluation",
+                              "LastWrite":  "\/Date(1777826852515)\/"
+                          }
+                      ]
+}

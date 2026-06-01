@@ -1,0 +1,934 @@
+﻿{
+    "cleanup_type":  "medium_tier_run_retention_heavy_file_pruning",
+    "executed_local":  "2026-05-14T17:09:42+02:00",
+    "workspace":  "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis",
+    "project_size_before_gb":  25.538,
+    "project_size_after_gb":  19.919,
+    "bytes_deleted_total":  6032901514,
+    "deleted_total_gb":  5.619,
+    "project_delta_gb":  5.619,
+    "policies":  [
+                     {
+                         "policy":  "hourly_notebook_artifacts_lear_strict",
+                         "root":  "data\\\\02_Forecasting\\\\01_DA_prices\\\\hourly_da\\\\notebook_artifacts\\\\01_da_price_scenario_generation_hourly_with_lear_strict",
+                         "skipped":  false,
+                         "keep_runs":  [
+                                           "20260513_053439",
+                                           "20260513_051041",
+                                           "20260513_045834"
+                                       ],
+                         "run_count":  50,
+                         "complete_count":  47,
+                         "deleted_bytes":  2399571543,
+                         "deleted_gb":  2.235,
+                         "archived_runs":  [
+                                               {
+                                                   "run":  "20260511_201019",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_201338",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.5,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_201548",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.5,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_202233",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_205532",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  1.4,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_212611",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  1.4,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_115947",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_121826",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_134855",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.8,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_172200",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_172426",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.3,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_172616",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_180118",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_184840",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_191644",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_194349",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_201048",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_203807",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_210506",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_213225",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_215945",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_222701",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_225517",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_232245",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_233333",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_235442",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_000813",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_002926",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_004142",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_010302",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_011521",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_013633",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_014828",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_020956",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_022158",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_024412",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_025642",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_031711",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_032918",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_034946",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_040223",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_042344",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_043512",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_054539",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  511.1,
+                                                   "deletedMB":  510.4
+                                               },
+                                               {
+                                                   "run":  "20260513_060902",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260513_062946",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  936.5,
+                                                   "deletedMB":  935.7
+                                               },
+                                               {
+                                                   "run":  "20260513_073251",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  843.1,
+                                                   "deletedMB":  842.3
+                                               }
+                                           ],
+                         "deleted_files":  [
+                                               {
+                                                   "run":  "20260513_054539",
+                                                   "file":  "scenario_prices_long.csv",
+                                                   "bytes":  404077426,
+                                                   "mb":  385.4
+                                               },
+                                               {
+                                                   "run":  "20260513_054539",
+                                                   "file":  "residual_period_table.csv",
+                                                   "bytes":  112121950,
+                                                   "mb":  106.9
+                                               },
+                                               {
+                                                   "run":  "20260513_054539",
+                                                   "file":  "scenario_metadata.csv",
+                                                   "bytes":  13759568,
+                                                   "mb":  13.1
+                                               },
+                                               {
+                                                   "run":  "20260513_054539",
+                                                   "file":  "scenario_period_quantiles.csv",
+                                                   "bytes":  2620280,
+                                                   "mb":  2.5
+                                               },
+                                               {
+                                                   "run":  "20260513_054539",
+                                                   "file":  "raw_scenario_period_quantiles.csv",
+                                                   "bytes":  2620222,
+                                                   "mb":  2.5
+                                               },
+                                               {
+                                                   "run":  "20260513_062946",
+                                                   "file":  "scenario_prices_long.csv",
+                                                   "bytes":  829884864,
+                                                   "mb":  791.4
+                                               },
+                                               {
+                                                   "run":  "20260513_062946",
+                                                   "file":  "residual_period_table.csv",
+                                                   "bytes":  112121950,
+                                                   "mb":  106.9
+                                               },
+                                               {
+                                                   "run":  "20260513_062946",
+                                                   "file":  "scenario_metadata.csv",
+                                                   "bytes":  28405499,
+                                                   "mb":  27.1
+                                               },
+                                               {
+                                                   "run":  "20260513_062946",
+                                                   "file":  "scenario_period_quantiles.csv",
+                                                   "bytes":  5353971,
+                                                   "mb":  5.1
+                                               },
+                                               {
+                                                   "run":  "20260513_062946",
+                                                   "file":  "raw_scenario_period_quantiles.csv",
+                                                   "bytes":  5353805,
+                                                   "mb":  5.1
+                                               },
+                                               {
+                                                   "run":  "20260513_073251",
+                                                   "file":  "scenario_prices_long.csv",
+                                                   "bytes":  829884864,
+                                                   "mb":  791.4
+                                               },
+                                               {
+                                                   "run":  "20260513_073251",
+                                                   "file":  "residual_period_table.csv",
+                                                   "bytes":  14253869,
+                                                   "mb":  13.6
+                                               },
+                                               {
+                                                   "run":  "20260513_073251",
+                                                   "file":  "scenario_metadata.csv",
+                                                   "bytes":  28405499,
+                                                   "mb":  27.1
+                                               },
+                                               {
+                                                   "run":  "20260513_073251",
+                                                   "file":  "scenario_period_quantiles.csv",
+                                                   "bytes":  5353971,
+                                                   "mb":  5.1
+                                               },
+                                               {
+                                                   "run":  "20260513_073251",
+                                                   "file":  "raw_scenario_period_quantiles.csv",
+                                                   "bytes":  5353805,
+                                                   "mb":  5.1
+                                               }
+                                           ]
+                     },
+                     {
+                         "policy":  "scenario_evaluation",
+                         "root":  "data\\\\02_Forecasting\\\\01_DA_prices\\\\scenario_evaluation",
+                         "skipped":  false,
+                         "keep_runs":  [
+                                           "20260513_102807",
+                                           "20260512_145245",
+                                           "20260512_143248"
+                                       ],
+                         "run_count":  18,
+                         "complete_count":  14,
+                         "deleted_bytes":  0,
+                         "deleted_gb":  0,
+                         "archived_runs":  [
+                                               {
+                                                   "run":  "20260512_101051",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  2.7,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_101517",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  7.2,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_102308",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  7.2,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_102546",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  7.2,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_103241",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  9.4,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_103729",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  15.3,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_110554",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  15.5,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_111340",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  15.3,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_120415",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  14.8,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_122118",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  14.5,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123755",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  14.5,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_162238_hourly_tail_diagnostics",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_162411_hourly_tail_diagnostics",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_172558_hourly_donly_calibration_sensitivity",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  3.5,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "dplus4_applicability",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               }
+                                           ],
+                         "deleted_files":  [
+
+                                           ]
+                     },
+                     {
+                         "policy":  "quarterhour_runs",
+                         "root":  "data\\\\02_Forecasting\\\\01_DA_prices\\\\quarterhour_da\\\\runs",
+                         "skipped":  false,
+                         "keep_runs":  [
+                                           "20260503_173016_observed_market_deterministic_forecast",
+                                           "20260503_185055_canonical_v1_counterfactual_full_year_evaluation"
+                                       ],
+                         "run_count":  8,
+                         "complete_count":  4,
+                         "deleted_bytes":  1712358144,
+                         "deleted_gb":  1.595,
+                         "archived_runs":  [
+                                               {
+                                                   "run":  "20260503_163744_observed_market_deterministic_forecast",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  61.1,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260503_165150_observed_market_deterministic_forecast",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  61.1,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260503_170232_observed_market_deterministic_forecast",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  61.1,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260503_171625_observed_market_deterministic_forecast",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  61.1,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260503_174631_observed_market_deterministic_forecast",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  552.4,
+                                                   "deletedMB":  244.3
+                                               },
+                                               {
+                                                   "run":  "20260503_185359_canonical_v1_counterfactual_full_year_evaluation",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  1389.6,
+                                                   "deletedMB":  1388.7
+                                               }
+                                           ],
+                         "deleted_files":  [
+                                               {
+                                                   "run":  "20260503_174631_observed_market_deterministic_forecast",
+                                                   "file":  "predictions_long.csv",
+                                                   "bytes":  256169743,
+                                                   "mb":  244.3
+                                               },
+                                               {
+                                                   "run":  "20260503_185359_canonical_v1_counterfactual_full_year_evaluation",
+                                                   "file":  "predictions_long.csv",
+                                                   "bytes":  934156392,
+                                                   "mb":  890.9
+                                               },
+                                               {
+                                                   "run":  "20260503_185359_canonical_v1_counterfactual_full_year_evaluation",
+                                                   "file":  "hourly_backbone_predictions_test.csv",
+                                                   "bytes":  522032009,
+                                                   "mb":  497.8
+                                               }
+                                           ]
+                     },
+                     {
+                         "policy":  "quarterhour_phase07_runs",
+                         "root":  "data\\\\02_Forecasting\\\\01_DA_prices\\\\quarterhour_da\\\\phase07_runs",
+                         "skipped":  false,
+                         "keep_runs":  [
+                                           "20260502_115807_phase07_realistic_track_a",
+                                           "20260501_200543_phase07_realistic_track_a"
+                                       ],
+                         "run_count":  10,
+                         "complete_count":  7,
+                         "deleted_bytes":  982697819,
+                         "deleted_gb":  0.915,
+                         "archived_runs":  [
+                                               {
+                                                   "run":  "20260501_141431_phase07_realistic_track_a",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  2.3,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260501_170638_phase07_realistic_track_a",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  2.2,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260501_171548_phase07_realistic_track_a",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  2.3,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260501_172520_phase07_realistic_track_a",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  2.3,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260501_173519_phase07_realistic_track_a",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  2.3,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260505_104938_phase07_realistic_track_a",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  156.3,
+                                                   "deletedMB":  154
+                                               },
+                                               {
+                                                   "run":  "20260505_124956_phase07_realistic_track_a",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  2.3,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260505_134716_phase07_realistic_track_a",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  785.5,
+                                                   "deletedMB":  783.2
+                                               }
+                                           ],
+                         "deleted_files":  [
+                                               {
+                                                   "run":  "20260505_104938_phase07_realistic_track_a",
+                                                   "file":  "predictions_long.csv",
+                                                   "bytes":  52792373,
+                                                   "mb":  50.3
+                                               },
+                                               {
+                                                   "run":  "20260505_104938_phase07_realistic_track_a",
+                                                   "file":  "hourly_anchor_predictions_long.csv",
+                                                   "bytes":  55628524,
+                                                   "mb":  53.1
+                                               },
+                                               {
+                                                   "run":  "20260505_104938_phase07_realistic_track_a",
+                                                   "file":  "realistic_modeling_table.csv",
+                                                   "bytes":  39497758,
+                                                   "mb":  37.7
+                                               },
+                                               {
+                                                   "run":  "20260505_104938_phase07_realistic_track_a",
+                                                   "file":  "bridged_hourly_target_input_all_regions.csv",
+                                                   "bytes":  7032242,
+                                                   "mb":  6.7
+                                               },
+                                               {
+                                                   "run":  "20260505_104938_phase07_realistic_track_a",
+                                                   "file":  "hourly_bridge_canonical_frame.csv",
+                                                   "bytes":  6518768,
+                                                   "mb":  6.2
+                                               },
+                                               {
+                                                   "run":  "20260505_134716_phase07_realistic_track_a",
+                                                   "file":  "predictions_long.csv",
+                                                   "bytes":  309824747,
+                                                   "mb":  295.5
+                                               },
+                                               {
+                                                   "run":  "20260505_134716_phase07_realistic_track_a",
+                                                   "file":  "hourly_anchor_predictions_long.csv",
+                                                   "bytes":  279575661,
+                                                   "mb":  266.6
+                                               },
+                                               {
+                                                   "run":  "20260505_134716_phase07_realistic_track_a",
+                                                   "file":  "realistic_modeling_table.csv",
+                                                   "bytes":  218276736,
+                                                   "mb":  208.2
+                                               },
+                                               {
+                                                   "run":  "20260505_134716_phase07_realistic_track_a",
+                                                   "file":  "bridged_hourly_target_input_all_regions.csv",
+                                                   "bytes":  7032242,
+                                                   "mb":  6.7
+                                               },
+                                               {
+                                                   "run":  "20260505_134716_phase07_realistic_track_a",
+                                                   "file":  "hourly_bridge_canonical_frame.csv",
+                                                   "bytes":  6518768,
+                                                   "mb":  6.2
+                                               }
+                                           ]
+                     },
+                     {
+                         "policy":  "quarterhour_phase05_runs",
+                         "root":  "data\\\\02_Forecasting\\\\01_DA_prices\\\\quarterhour_da\\\\phase05_runs",
+                         "skipped":  false,
+                         "keep_runs":  [
+                                           "20260501_132106_phase05_counterfactual_generation"
+                                       ],
+                         "run_count":  6,
+                         "complete_count":  null,
+                         "deleted_bytes":  0,
+                         "deleted_gb":  0,
+                         "archived_runs":  [
+                                               {
+                                                   "run":  "20260501_130059_phase05_counterfactual_generation",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260501_130137_phase05_counterfactual_generation",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260501_130206_phase05_counterfactual_generation",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260501_131344_phase05_counterfactual_generation",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260501_131714_phase05_counterfactual_generation",
+                                                   "complete":  false,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               }
+                                           ],
+                         "deleted_files":  [
+
+                                           ]
+                     },
+                     {
+                         "policy":  "qh_scenario_generation_finalisation",
+                         "root":  "data\\\\02_Forecasting\\\\01_DA_prices\\\\quarterhour_da\\\\finalisation_runs\\\\qh_scenario_generation",
+                         "skipped":  false,
+                         "keep_runs":  [
+                                           "20260511_192858_qh_scenario_generation_full",
+                                           "20260512_123718_qh_scenario_generation_p01_fix_smoke2c",
+                                           "20260512_123522_qh_scenario_generation_p01_fix_smoke_trainval_probe"
+                                       ],
+                         "run_count":  10,
+                         "complete_count":  10,
+                         "deleted_bytes":  938274008,
+                         "deleted_gb":  0.874,
+                         "archived_runs":  [
+                                               {
+                                                   "run":  "20260511_191753_qh_scenario_generation",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_191805_qh_scenario_generation",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_191820_qh_scenario_generation",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  894.8,
+                                                   "deletedMB":  894.8
+                                               },
+                                               {
+                                                   "run":  "20260511_194445_qh_scenario_generation_check_all_three",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_120346_qh_scenario_generation_p01_fix_smoke",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123323_qh_scenario_generation_p01_fix_smoke20",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123456_qh_scenario_generation_p01_fix_smoke2b",
+                                                   "complete":  true,
+                                                   "sizeBeforeMB":  0,
+                                                   "deletedMB":  0
+                                               }
+                                           ],
+                         "deleted_files":  [
+                                               {
+                                                   "run":  "20260511_191805_qh_scenario_generation",
+                                                   "file":  "scenario_prices_long.csv",
+                                                   "bytes":  123,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_191805_qh_scenario_generation",
+                                                   "file":  "scenario_period_quantiles.csv",
+                                                   "bytes":  2,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_191805_qh_scenario_generation",
+                                                   "file":  "scenario_metadata.csv",
+                                                   "bytes":  2,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_191805_qh_scenario_generation",
+                                                   "file":  "scenario_prices_long.parquet",
+                                                   "bytes":  4663,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260511_191820_qh_scenario_generation",
+                                                   "file":  "scenario_prices_long.csv",
+                                                   "bytes":  823160393,
+                                                   "mb":  785
+                                               },
+                                               {
+                                                   "run":  "20260511_191820_qh_scenario_generation",
+                                                   "file":  "scenario_period_quantiles.csv",
+                                                   "bytes":  59121444,
+                                                   "mb":  56.4
+                                               },
+                                               {
+                                                   "run":  "20260511_191820_qh_scenario_generation",
+                                                   "file":  "scenario_metadata.csv",
+                                                   "bytes":  5147111,
+                                                   "mb":  4.9
+                                               },
+                                               {
+                                                   "run":  "20260511_191820_qh_scenario_generation",
+                                                   "file":  "scenario_prices_long.parquet",
+                                                   "bytes":  50825900,
+                                                   "mb":  48.5
+                                               },
+                                               {
+                                                   "run":  "20260512_120346_qh_scenario_generation_p01_fix_smoke",
+                                                   "file":  "scenario_prices_long.csv",
+                                                   "bytes":  123,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_120346_qh_scenario_generation_p01_fix_smoke",
+                                                   "file":  "scenario_period_quantiles.csv",
+                                                   "bytes":  2,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_120346_qh_scenario_generation_p01_fix_smoke",
+                                                   "file":  "scenario_metadata.csv",
+                                                   "bytes":  2,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_120346_qh_scenario_generation_p01_fix_smoke",
+                                                   "file":  "scenario_prices_long.parquet",
+                                                   "bytes":  4663,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123323_qh_scenario_generation_p01_fix_smoke20",
+                                                   "file":  "scenario_prices_long.csv",
+                                                   "bytes":  123,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123323_qh_scenario_generation_p01_fix_smoke20",
+                                                   "file":  "scenario_period_quantiles.csv",
+                                                   "bytes":  2,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123323_qh_scenario_generation_p01_fix_smoke20",
+                                                   "file":  "scenario_metadata.csv",
+                                                   "bytes":  2,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123323_qh_scenario_generation_p01_fix_smoke20",
+                                                   "file":  "scenario_prices_long.parquet",
+                                                   "bytes":  4663,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123456_qh_scenario_generation_p01_fix_smoke2b",
+                                                   "file":  "scenario_prices_long.csv",
+                                                   "bytes":  123,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123456_qh_scenario_generation_p01_fix_smoke2b",
+                                                   "file":  "scenario_period_quantiles.csv",
+                                                   "bytes":  2,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123456_qh_scenario_generation_p01_fix_smoke2b",
+                                                   "file":  "scenario_metadata.csv",
+                                                   "bytes":  2,
+                                                   "mb":  0
+                                               },
+                                               {
+                                                   "run":  "20260512_123456_qh_scenario_generation_p01_fix_smoke2b",
+                                                   "file":  "scenario_prices_long.parquet",
+                                                   "bytes":  4663,
+                                                   "mb":  0
+                                               }
+                                           ]
+                     }
+                 ]
+}
