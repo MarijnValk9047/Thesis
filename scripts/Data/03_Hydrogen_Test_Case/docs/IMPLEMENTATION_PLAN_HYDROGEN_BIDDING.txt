@@ -1,0 +1,2202 @@
+HYDROGEN BIDDING TEST CASE — PHASED IMPLEMENTATION PLAN
+========================================================
+
+Document purpose
+----------------
+This document is the working implementation roadmap for extending the current hydrogen MILP test case from a schedule-and-settle dispatch model into a Badarinath-inspired, but simplified, day-ahead hourly bidding and clearing test case.
+
+It is meant to be kept in the project sources, revisited after each Codex implementation step, and updated when design decisions change.
+
+The plan deliberately splits the implementation into small phases. Do not ask Codex to implement all phases at once. The main risk is not coding speed; the main risk is creating a complex optimisation stack that produces results before we understand whether the bidding, clearing, settlement, physical feasibility, and reporting logic are actually correct.
+
+Active scope
+------------
+Current focus:
+- Green hydrogen test case.
+- Day-ahead only.
+- Hourly first.
+- Fixed bid-price grid with optimised bid quantities.
+- Price-taking clearing against realised historical DA prices.
+- Deterministic redispatch after actual clearing.
+- Risk-neutral and CVaR variants.
+- Comparison of scenario inputs later: XGBoost FS3, LEAR FS3, LEAR Strict.
+- Later comparison of hourly vs quarter-hour and D-only vs D+4 where tractable.
+
+Explicitly out of scope for now:
+- Exclusive group bids.
+- Full EUPHEMIA clearing.
+- Price-maker behaviour.
+- mFRR capacity or activation.
+- Full steel-plant MILP.
+- Endogenous bid-price optimisation.
+
+Core methodological distinction
+-------------------------------
+The existing hydrogen model is useful, but it is not yet a true bidding model.
+
+Current schedule-and-settle logic:
+- The optimiser chooses a dispatch schedule.
+- Scenario prices influence expected cost and CVaR.
+- In realised evaluation, electricity is assumed available and settled against realised prices.
+- Forecast errors mainly affect realised cost.
+
+Target bidding-clearing logic:
+- The optimiser submits demand bid quantities at fixed bid-price levels.
+- A bid block clears only if bid_price >= market_price.
+- Under scenarios, scenario prices determine scenario-specific clearing.
+- After optimisation, submitted bids are cleared against realised historical prices.
+- Only cleared electricity is available for deterministic redispatch.
+- Forecast/scenario errors can affect both realised cost and physical procurement.
+
+This distinction is crucial for the thesis because it tests whether better scenarios lead to better economic and operational outcomes, not only better predicted prices.
+
+Recommended working style
+-------------------------
+Use one Codex prompt per phase, or per subphase when needed. After each phase, require Codex to produce:
+
+1. Implementation summary.
+2. Files changed.
+3. Validation tests run.
+4. Output artifacts created.
+5. Known limitations.
+6. Whether the phase passes the acceptance criteria.
+7. Whether any methodological warnings remain.
+
+Do not proceed to the next phase if:
+- solver status is not clearly reported;
+- units are unclear;
+- energy balance does not close;
+- clearing logic is ambiguous;
+- production fulfilment is not reported;
+- infeasibility is hidden behind penalties without explicit reporting;
+- outputs cannot be traced to their input scenarios and actual prices;
+- plots look plausible but underlying metrics are missing.
+
+Recommended source structure
+----------------------------
+Current project root appears to use:
+
+scripts/Data/03_Hydrogen_Test_Case/
+
+Recommended additions:
+
+scripts/Data/03_Hydrogen_Test_Case/
+  docs/
+    IMPLEMENTATION_PLAN_HYDROGEN_BIDDING.txt
+    hydrogen_baseline_dispatch_model_audit.md
+    bidding_model_equations.md
+    reporting_guide.md
+    known_issues.md
+  hydrogen/
+    bidding.py
+    clearing.py
+    redispatch.py
+    bidding_model.py
+    bidding_metrics.py
+    reporting.py
+    plotting_bidding.py
+  notebooks/
+    05_bidding_clearing_debug.ipynb
+    06_hourly_bid_model_single_day.ipynb
+    07_hourly_bid_model_selected_week.ipynb
+    08_cvar_bidding_sensitivity.ipynb
+    09_forecast_scenario_comparison_report.ipynb
+  tests/
+    test_bidding.py
+    test_clearing.py
+    test_redispatch.py
+    test_bidding_model_small.py
+
+Run outputs should be self-contained under a run folder, preferably:
+
+data/03_Optimisation/runs/<run_id>/
+
+or, if keeping the current hydrogen structure temporarily:
+
+scripts/Data/03_Hydrogen_Test_Case/runs/<run_id>/
+
+Each meaningful run should contain:
+- config_resolved.yaml
+- input_manifest.json
+- scenario_manifest.json
+- model_stats.json
+- solver_log.txt
+- submitted_bids.parquet
+- scenario_clearing.parquet
+- actual_clearing.parquet
+- redispatch_timeseries.parquet
+- settlement_results.parquet
+- metrics_summary.csv
+- metrics_by_day.csv
+- metrics_timeseries.parquet
+- validation_checks.csv
+- figures/
+- README_run.md
+
+Global visual/reporting principles
+----------------------------------
+The user needs plots that make errors and strategy behaviour visible. Every phase after Phase 1 should produce both machine-readable outputs and human-readable plots.
+
+Use these recurring figure types:
+
+A. Price and scenario context
+- realised DA price line;
+- scenario fan or quantile band;
+- point forecast where available;
+- bid-price tiers or submitted bid prices overlaid where relevant.
+
+B. Electricity procurement and use
+- submitted electricity;
+- cleared electricity;
+- used electricity;
+- unused cleared electricity;
+- rejected electricity.
+
+C. Hydrogen operation
+- electrolyser power;
+- compressor power;
+- hydrogen production;
+- hydrogen sold/compressed;
+- buffer level;
+- reserve line;
+- target line.
+
+D. Economic outcome
+- DA settlement cost;
+- hydrogen revenue;
+- shortfall penalty;
+- unused-energy penalty;
+- terminal inventory correction;
+- adjusted profit.
+
+E. Comparison plots
+- bar chart of strategy-level profit/cost;
+- bar chart of hydrogen production and target fulfilment;
+- value captured vs perfect foresight;
+- uplift vs price-insensitive;
+- risk-return plot for CVaR sweeps.
+
+F. Debug plots
+- actual price vs bid grid;
+- bid acceptance heatmap by hour and block;
+- scenario clearing heatmap;
+- energy balance residuals;
+- storage boundary hits.
+
+Use these recurring tables:
+
+1. Run summary table
+- run_id;
+- strategy;
+- forecast/scenario model;
+- granularity;
+- horizon;
+- scenario count;
+- CVaR alpha/gamma;
+- solver status;
+- objective;
+- solve time;
+- MIP gap;
+- variable count;
+- binary count;
+- constraint count.
+
+2. Thesis-body strategy comparison table
+- strategy;
+- scenario input;
+- net profit/cost;
+- hydrogen produced;
+- target fulfilment;
+- average electricity price paid;
+- DA settlement cost;
+- CVaR/worst-case metric;
+- uplift vs price-insensitive;
+- value captured vs perfect foresight.
+
+3. Appendix detailed metrics table
+- metric name;
+- unit;
+- formula or definition;
+- interpretation;
+- why it matters;
+- how it affects model/scenario choice;
+- known caveats.
+
+4. Bidding-specific table
+- submitted energy;
+- cleared energy;
+- clearing ratio;
+- rejected energy;
+- unused cleared energy;
+- hours with zero clearing;
+- hours with partial clearing;
+- average bid price;
+- average cleared price;
+- actual price above highest bid hours.
+
+5. Physical feasibility table
+- target hydrogen;
+- produced/compressed hydrogen;
+- shortfall;
+- reserve violations;
+- minimum/maximum buffer hits;
+- electrolyser ramp hits;
+- starts/stops;
+- unused energy;
+- infeasible periods.
+
+PHASE 0 — Freeze and audit the current schedule-and-settle baseline
+===================================================================
+
+Goal
+----
+Before adding bidding, make sure the existing hydrogen dispatch model is physically and economically coherent. Keep it as a benchmark, but label it correctly as schedule-and-settle rather than bidding.
+
+Why this phase matters
+----------------------
+If the baseline model is wrong, the bidding model will inherit those errors. The baseline must also remain available so later results can show the difference between simple forecast-based scheduling and true bid-clearing market participation.
+
+Files to inspect
+----------------
+- scripts/Data/03_Hydrogen_Test_Case/configs/base_hydrogen.yaml
+- scripts/Data/03_Hydrogen_Test_Case/hydrogen/optimisation_model.py
+- scripts/Data/03_Hydrogen_Test_Case/hydrogen/rolling_horizon.py
+- scripts/Data/03_Hydrogen_Test_Case/hydrogen/benchmarks.py
+- scripts/Data/03_Hydrogen_Test_Case/hydrogen/metrics.py
+- scripts/Data/03_Hydrogen_Test_Case/hydrogen/validation_checks.py
+
+Files to create or update
+-------------------------
+- docs/hydrogen_baseline_dispatch_model_audit.md
+- docs/known_issues.md
+- possibly metrics.py and validation_checks.py if required
+
+Implementation tasks
+--------------------
+1. Document what the current model does.
+2. Rename or label current stochastic strategies as schedule-and-settle strategies where necessary.
+3. Check that all units are explicit:
+   - MW for power;
+   - MWh for energy;
+   - kg for hydrogen;
+   - EUR/MWh for electricity prices;
+   - EUR/kg for hydrogen price.
+4. Confirm energy conversion:
+   - H2 production = electrolyser_power * timestep_hours * kg_per_MWh.
+5. Confirm compressor conversion:
+   - compressor_energy = compressed_hydrogen * MWh_per_kg.
+6. Confirm storage balance:
+   - H_t = H_{t-1} + production_t - compressed_or_sold_t.
+7. Confirm reserve constraint:
+   - H_t >= H_min.
+8. Confirm terminal inventory correction:
+   - adjusted_profit includes value of H_end - H_start.
+9. Confirm production target/shortfall logic.
+10. Confirm solver status and model statistics are saved.
+
+Validation checks
+-----------------
+Run at least:
+- one simple deterministic day;
+- one existing stochastic risk-neutral day;
+- one existing stochastic CVaR day;
+- one price-insensitive benchmark;
+- one perfect-foresight benchmark.
+
+For each run check:
+- solver status is optimal or explicitly acceptable;
+- no negative hydrogen production;
+- storage never violates bounds;
+- electrolyser load respects min/max and ramp limits;
+- compressor load respects max power;
+- energy use is consistent with component loads;
+- target fulfilment and shortfall are reported;
+- terminal inventory correction is nonzero when H_end differs from H_start;
+- objective sign convention is clear.
+
+Required plots
+--------------
+1. Baseline dispatch plot:
+   - actual DA price;
+   - electrolyser load;
+   - compressor load;
+   - storage level.
+
+2. Physical balance plot:
+   - hydrogen produced;
+   - hydrogen compressed/sold;
+   - buffer level.
+
+3. Benchmark comparison bar chart:
+   - price-insensitive;
+   - schedule-and-settle risk-neutral;
+   - schedule-and-settle CVaR;
+   - deterministic point forecast if available;
+   - perfect foresight.
+
+Required tables
+---------------
+1. Baseline model audit table:
+   - constraint group;
+   - implemented yes/no;
+   - units;
+   - validation status;
+   - comments.
+
+2. Strategy summary table:
+   - strategy;
+   - objective value;
+   - realised adjusted profit;
+   - hydrogen produced;
+   - target fulfilment;
+   - average electricity price;
+   - terminal inventory correction;
+   - solver status.
+
+Required markdown explanation
+-----------------------------
+Create docs/hydrogen_baseline_dispatch_model_audit.md with:
+- plain-language explanation of the current model;
+- why it is not a bidding model;
+- which assumptions are acceptable for a benchmark;
+- limitations that the bidding layer must fix.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- the current model can be explained in one page;
+- all core physical balances are validated;
+- the run outputs are reproducible;
+- the model clearly distinguishes expected/stochastic objective from realised settlement results;
+- no major unit ambiguity remains.
+
+Do not move on if:
+- profit improves mainly because inventory is depleted without correction;
+- shortfall penalties hide production failure;
+- storage constraints are violated or not reported;
+- the results do not say how much hydrogen was actually produced.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 0 of the hydrogen bidding roadmap. Audit the current schedule-and-settle hydrogen model before adding bidding. Inspect the existing config, optimisation model, rolling horizon, benchmarks, metrics, and validation checks. Produce docs/hydrogen_baseline_dispatch_model_audit.md explaining what the current model does, why it is not yet a bidding model, which constraints and units are implemented, and which limitations remain. Add or improve validation checks if needed. Run one-day smoke tests for price_insensitive, stochastic_risk_neutral, stochastic_cvar, deterministic_point_forecast if available, and perfect_foresight. Save summary metrics, solver status, model stats, and diagnostic plots. Do not implement bidding in this phase.
+
+Acceptance criteria
+-------------------
+- Audit markdown exists and is understandable.
+- One-day smoke tests run.
+- Physical balance checks pass.
+- Terminal inventory correction is reported.
+- Solver status/model stats are saved.
+- Current stochastic model is clearly labelled schedule-and-settle.
+
+PHASE 1 — Add bidding and clearing primitives only
+==================================================
+
+Goal
+----
+Create the data structures and pure functions needed for hourly bid curves and market clearing, without changing the optimisation model yet.
+
+Why this phase matters
+----------------------
+This isolates the market-clearing logic from the MILP. If clearing is wrong, the optimiser results will be meaningless. This phase should be testable with tiny toy examples.
+
+Files to create
+---------------
+- hydrogen/bidding.py
+- hydrogen/clearing.py
+- tests/test_bidding.py
+- tests/test_clearing.py
+
+Possible files to update
+------------------------
+- config schema or base_hydrogen.yaml to include bid-price grid
+- metrics.py if simple clearing metrics are added
+
+Core concepts
+-------------
+Use a fixed bid-price grid. Example default:
+
+[-500, -100, 0, 50, 100, 125, 144, 158, 175, 200, 250, 500, 1000, 3000]
+
+Interpretation:
+- low bid prices clear only in very cheap hours;
+- 144 EUR/MWh is approximate electricity value of hydrogen revenue at 8 EUR/kg and 18 kg/MWh;
+- 158 EUR/MWh is the earlier reference/opportunity-cost threshold;
+- high bid prices protect supply but expose the plant to expensive clearing.
+
+Bid curve schema
+----------------
+Each submitted bid row should contain:
+- run_id
+- strategy
+- forecast_model or scenario_model
+- granularity
+- horizon
+- forecast_origin_utc
+- delivery_start_utc
+- bid_block
+- bid_price_eur_per_mwh
+- bid_quantity_mw
+- timestep_hours
+
+Actual clearing output schema
+-----------------------------
+Each cleared bid row should contain:
+- all bid curve columns;
+- actual_price_eur_per_mwh;
+- accepted;
+- cleared_quantity_mw;
+- cleared_energy_mwh.
+
+Acceptance rule
+---------------
+For demand bids:
+
+accepted = bid_price_eur_per_mwh >= actual_price_eur_per_mwh
+
+If accepted:
+
+cleared_quantity_mw = bid_quantity_mw
+
+If rejected:
+
+cleared_quantity_mw = 0
+
+Implementation tasks
+--------------------
+1. Add function build_bid_price_grid(config).
+2. Add function validate_bid_price_grid(grid).
+3. Add function build_bid_curve_dataframe(...).
+4. Add function compute_acceptance_matrix(price_frame, bid_price_grid).
+5. Add function clear_hourly_bids(bid_curve, actual_prices).
+6. Add function aggregate_cleared_energy(clearing_result).
+7. Add tests with toy examples.
+8. Add basic clearing metrics.
+
+Validation checks
+-----------------
+Use toy data with three hours and three bid blocks.
+
+Example:
+- prices: [50, 150, 250]
+- bid prices: [100, 200, 300]
+- bid quantities: known fixed values
+
+Expected behaviour:
+- at price 50, all bid blocks clear;
+- at price 150, only 200 and 300 clear;
+- at price 250, only 300 clears.
+
+Check:
+- accepted iff bid_price >= price;
+- rejected bids have zero cleared quantity;
+- no negative bid quantities;
+- submitted quantity per hour <= max system power;
+- total cleared energy = sum accepted quantity * timestep_hours;
+- all timestamps align;
+- duplicate bid rows are detected.
+
+Required plots
+--------------
+1. Toy bid curve plot for one hour:
+   - x-axis: bid price;
+   - y-axis: cumulative submitted demand;
+   - vertical line: actual price;
+   - shaded accepted part.
+
+2. Acceptance heatmap:
+   - rows: hours;
+   - columns: bid blocks;
+   - colour: accepted/rejected.
+
+Required tables
+---------------
+1. Bid grid table:
+   - block id;
+   - bid price;
+   - interpretation.
+
+2. Toy clearing table:
+   - hour;
+   - bid block;
+   - bid price;
+   - actual price;
+   - submitted quantity;
+   - accepted;
+   - cleared quantity.
+
+Required markdown explanation
+-----------------------------
+Create a short markdown section, either in reporting_guide.md or the notebook, explaining:
+- what a demand bid is;
+- why bid_price >= market_price clears;
+- why this is price-taking clearing, not full EUPHEMIA;
+- why fixed bid prices are used for linearity.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- toy clearing works exactly as expected;
+- acceptance matrix is transparent;
+- bid curve schema is stable;
+- output can be understood visually.
+
+Do not move on if:
+- clearing direction is uncertain;
+- bid price units are unclear;
+- bid quantities can exceed plant capacity;
+- actual and forecast/scenario timestamps are not aligned.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 1 of the hydrogen bidding roadmap. Add pure bidding and clearing primitives only. Create hydrogen/bidding.py and hydrogen/clearing.py plus unit tests. Use a fixed configurable bid-price grid and implement demand-bid clearing where a bid block clears if bid_price >= market_price. Add toy tests proving the acceptance rule, energy aggregation, non-negative quantities, capacity limits, and timestamp alignment. Create simple diagnostic plots for a toy bid curve and acceptance heatmap. Do not modify the MILP yet.
+
+Acceptance criteria
+-------------------
+- bidding.py and clearing.py exist.
+- Toy unit tests pass.
+- Acceptance rule is validated.
+- Bid curve and clearing schemas are documented.
+- Diagnostic plots can be generated.
+- No optimisation model changes are made.
+
+PHASE 2 — Add schedule-to-bid bridge
+====================================
+
+Goal
+----
+Convert existing dispatch schedules into simple bids and clear them against realised prices. This is a bridge for debugging and interpretation, not the final bidding optimiser.
+
+Why this phase matters
+----------------------
+It helps answer a simple but powerful question: if the current schedule had been submitted as actual DA demand bids, how much of it would have cleared?
+
+This phase makes the difference between scheduling and bidding visible to a human reader.
+
+Files to create or update
+-------------------------
+- hydrogen/bidding.py
+- hydrogen/clearing.py
+- hydrogen/metrics.py or hydrogen/bidding_metrics.py
+- hydrogen/plotting_bidding.py
+- notebooks/05_bidding_clearing_debug.ipynb
+
+Bridge strategies
+-----------------
+For a dispatch schedule with total load:
+
+load_t = electrolyser_power_t + compressor_power_t
+
+Create at least two simple bid variants:
+
+1. Reference-price one-block bid
+   - quantity = load_t
+   - bid_price = 158 EUR/MWh
+
+2. High-price one-block bid
+   - quantity = load_t
+   - bid_price = 3000 EUR/MWh
+
+Optional later:
+3. Forecast-price bid
+   - quantity = load_t
+   - bid_price = point_forecast_t or forecast plus margin
+
+Expected interpretation
+-----------------------
+Reference-price bid:
+- shows whether the schedule is economically willing to consume at realised prices;
+- may reject expensive hours;
+- can create production problems after clearing.
+
+High-price bid:
+- approximates price-insensitive procurement;
+- should mostly clear;
+- exposes plant to high prices.
+
+Implementation tasks
+--------------------
+1. Take output from existing schedule-and-settle runs.
+2. Convert dispatch schedule into a one-block bid curve.
+3. Clear the bid curve against realised actual DA prices.
+4. Aggregate cleared energy by hour.
+5. Compare scheduled vs cleared electricity.
+6. Compute simple metrics:
+   - scheduled_energy_mwh;
+   - submitted_energy_mwh;
+   - cleared_energy_mwh;
+   - rejected_energy_mwh;
+   - clearing_ratio;
+   - rejected_hours;
+   - hours_with_zero_clearing.
+7. Create a notebook for visual debugging.
+
+Validation checks
+-----------------
+Check:
+- high-price bid clears in all hours unless actual price exceeds high bid;
+- reference-price bid rejects all hours where actual price > 158;
+- cleared energy never exceeds submitted energy;
+- rejected energy = submitted - cleared;
+- clearing ratio is between 0 and 1;
+- timestamps match between dispatch and actual prices.
+
+Required plots
+--------------
+1. Scheduled vs cleared electricity:
+   - line or bar for scheduled load;
+   - line or bar for cleared load;
+   - highlight rejected hours.
+
+2. Actual price vs bid price:
+   - actual DA price line;
+   - horizontal/step line for bid price;
+   - rejected hours marked in red or with vertical shading.
+
+3. Bid-clearing waterfall for one day:
+   - submitted energy;
+   - rejected energy;
+   - cleared energy;
+   - used energy if redispatch is added later.
+
+Required tables
+---------------
+1. Schedule-to-bid comparison table:
+   - strategy;
+   - submitted energy;
+   - cleared energy;
+   - rejected energy;
+   - clearing ratio;
+   - number of rejected hours;
+   - average actual price in rejected hours;
+   - average actual price in cleared hours.
+
+2. Hourly debug table:
+   - hour;
+   - scheduled load;
+   - bid price;
+   - actual price;
+   - accepted;
+   - cleared load.
+
+Required markdown explanation
+-----------------------------
+In the notebook, include a plain-language explanation:
+- the old model assumes electricity is available;
+- this bridge asks whether the same schedule would clear if bid at a fixed willingness-to-pay;
+- rejected electricity means the plant would not receive that DA electricity.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- clearing results match intuition;
+- the plots make rejected hours visually obvious;
+- metrics clearly separate submitted, cleared, rejected, and scheduled electricity;
+- this bridge reveals how bidding changes the interpretation of forecast errors.
+
+Do not move on if:
+- schedule timestamps and price timestamps do not align;
+- the high-price bid unexpectedly rejects normal prices;
+- the reference-price bid clears expensive hours above the threshold;
+- submitted and scheduled quantities are inconsistent.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 2 of the hydrogen bidding roadmap. Add a schedule-to-bid bridge that converts existing schedule-and-settle dispatch outputs into one-block hourly demand bids, then clears them against realised DA prices using the Phase 1 clearing logic. Implement at least two bridge variants: reference-price bid at 158 EUR/MWh and high-price bid at 3000 EUR/MWh. Add metrics and plots comparing scheduled, submitted, cleared, and rejected electricity. Create notebook 05_bidding_clearing_debug.ipynb with explanation markdown and visual checks. Do not yet build the true stochastic bidding MILP.
+
+Acceptance criteria
+-------------------
+- Existing dispatch can be converted to a bid curve.
+- Reference-price and high-price bridge bids can be cleared.
+- Clearing metrics are saved.
+- Debug plots are generated.
+- Notebook explains the scheduling vs bidding distinction.
+
+PHASE 3 — Add deterministic redispatch after actual clearing
+============================================================
+
+Goal
+----
+Given an actually cleared electricity profile, solve the physical hydrogen operation model using only that available electricity.
+
+Why this phase matters
+----------------------
+This is the bridge from market outcome to physical feasibility. Bids do not directly equal production. After clearing, the plant must redispatch within its physical constraints.
+
+This phase should be implemented before the full stochastic bidding optimiser, because it isolates the post-clearing physical feasibility problem.
+
+Files to create or update
+-------------------------
+- hydrogen/redispatch.py
+- tests/test_redispatch.py
+- hydrogen/metrics.py or hydrogen/bidding_metrics.py
+- hydrogen/plotting_bidding.py
+- notebooks/05_bidding_clearing_debug.ipynb or new 06 redispatch section
+
+Redispatch input
+----------------
+For each hour t:
+- delivery_start_utc
+- cleared_energy_mwh
+- actual_price_eur_per_mwh
+- initial hydrogen inventory
+- plant parameters
+
+Redispatch variables
+--------------------
+For each hour t:
+- electrolyser_power_mw
+- electrolyser_on binary if used
+- compressor_power_mw
+- hydrogen_produced_kg
+- hydrogen_compressed_or_sold_kg
+- hydrogen_storage_kg
+- unused_cleared_energy_mwh
+- shortfall_kg for the day
+
+Core equality
+-------------
+Use:
+
+used_energy_mwh_t + unused_cleared_energy_mwh_t = cleared_energy_mwh_t
+
+where:
+
+used_energy_mwh_t = timestep_hours * (electrolyser_power_mw_t + compressor_power_mw_t)
+
+This is preferred over used_energy <= cleared_energy because it explicitly accounts for over-procurement.
+
+Implementation tasks
+--------------------
+1. Implement solve_actual_redispatch_from_cleared_energy(...).
+2. Reuse physical constraints from the current deterministic hydrogen model.
+3. Include unused cleared energy variable.
+4. Include shortfall variable and penalty.
+5. Include terminal inventory correction.
+6. Save redispatch time series and metrics.
+7. Add toy tests:
+   - zero cleared energy should force no electricity use and likely shortfall;
+   - abundant cleared energy should allow production but may create unused energy if too much clears;
+   - storage reserve should not be violated.
+
+Validation checks
+-----------------
+Check:
+- used + unused = cleared energy for every hour;
+- electrolyser and compressor power respect bounds;
+- hydrogen balance closes;
+- storage remains within bounds;
+- shortfall is reported if target cannot be met;
+- unused energy is reported if cleared energy cannot be consumed;
+- realised DA settlement cost uses cleared energy, not used energy;
+- revenue uses hydrogen compressed/sold, not hydrogen merely produced if buffer is not sale-ready.
+
+Required plots
+--------------
+1. Cleared vs used vs unused electricity:
+   - cleared energy;
+   - used energy;
+   - unused energy.
+
+2. Redispatch operation plot:
+   - electrolyser power;
+   - compressor power;
+   - storage level;
+   - reserve line.
+
+3. Feasibility stress plot:
+   - rejected/zero-clearing hours;
+   - storage response;
+   - shortfall occurrence.
+
+Required tables
+---------------
+1. Redispatch feasibility table:
+   - cleared energy;
+   - used energy;
+   - unused energy;
+   - hydrogen produced;
+   - hydrogen sold/compressed;
+   - shortfall;
+   - terminal inventory change;
+   - adjusted profit.
+
+2. Energy balance residual table:
+   - max absolute electricity balance residual;
+   - max hydrogen balance residual;
+   - storage min/max;
+   - number of reserve boundary hits.
+
+Required markdown explanation
+-----------------------------
+Explain:
+- clearing determines electricity availability;
+- redispatch determines whether the plant can physically use cleared electricity;
+- over-clearing can be costly if energy cannot be used;
+- under-clearing can cause production shortfall.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- redispatch is robust for zero, scarce, and abundant cleared energy cases;
+- settlement cost uses cleared energy;
+- operational use is separately reported;
+- unused energy and shortfall are visible in metrics and plots.
+
+Do not move on if:
+- the model silently discards cleared electricity without cost;
+- the model consumes electricity that did not clear;
+- production remains perfect even when cleared energy is too low;
+- shortfall is not clearly reported.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 3 of the hydrogen bidding roadmap. Add deterministic redispatch after actual DA clearing. Given an hourly cleared_energy_mwh profile, solve the physical hydrogen operation model using only cleared electricity. Include electrolyser, compressor, storage, reserve, ramping, daily target, shortfall, unused cleared energy, and terminal inventory correction. Enforce used_energy + unused_energy = cleared_energy. Settlement cost must be based on cleared energy, not used energy. Add tests for zero, scarce, and abundant cleared energy cases. Add plots and metrics for cleared vs used vs unused electricity, storage, production, shortfall, and adjusted profit.
+
+Acceptance criteria
+-------------------
+- Redispatch model solves for toy and real one-day cleared profiles.
+- Electricity and hydrogen balances close.
+- Settlement cost is based on cleared energy.
+- Unused energy and shortfall are explicitly reported.
+- Diagnostic plots are generated.
+
+PHASE 4 — Build first true risk-neutral hourly bid optimiser
+============================================================
+
+Goal
+----
+Implement the first real stochastic hourly bidding model with fixed bid prices and optimised bid quantities.
+
+Why this phase matters
+----------------------
+This is where the model becomes a true bidding test case. The first-stage decision is the bid curve. Scenario-specific prices determine scenario-specific clearing, and scenario-dependent physical operation follows after clearing.
+
+Important modelling choice
+--------------------------
+Do not optimise bid prices yet.
+Use fixed bid prices and optimise quantities.
+
+This keeps acceptance as a parameter:
+
+acceptance_{s,t,b} = 1 if bid_price_b >= scenario_price_{s,t}, else 0
+
+Decision variable:
+
+q_{t,b} >= 0
+
+Scenario-cleared energy:
+
+E_DA_{s,t} = timestep_hours * sum_b acceptance_{s,t,b} * q_{t,b}
+
+This formulation stays linear.
+
+Files to create or update
+-------------------------
+- hydrogen/bidding_model.py
+- hydrogen/bidding_metrics.py
+- hydrogen/model_stats.py if not present
+- tests/test_bidding_model_small.py
+- notebooks/06_hourly_bid_model_single_day.ipynb
+
+Core variables
+--------------
+First-stage variables:
+- q_{t,b}: submitted bid quantity in MW for hour t and bid block b.
+
+Scenario-dependent recourse variables:
+- electrolyser_power_{s,t}
+- electrolyser_on_{s,t} if binary is retained
+- compressor_power_{s,t}
+- hydrogen_produced_{s,t}
+- hydrogen_compressed_or_sold_{s,t}
+- hydrogen_storage_{s,t}
+- unused_cleared_energy_{s,t}
+- shortfall_{s,d}
+
+Core constraints
+----------------
+1. Bid capacity:
+
+sum_b q_{t,b} <= P_el_max + P_comp_max
+
+2. Scenario clearing:
+
+E_DA_{s,t} = timestep_hours * sum_b acceptance_{s,t,b} * q_{t,b}
+
+3. Scenario electricity balance:
+
+used_energy_{s,t} + unused_energy_{s,t} = E_DA_{s,t}
+
+4. Physical constraints:
+- electrolyser bounds;
+- ramping;
+- hydrogen production;
+- compressor bounds;
+- compressor conversion;
+- storage balance;
+- storage bounds;
+- daily target/shortfall.
+
+Objective
+---------
+Risk-neutral objective:
+
+minimise expected scenario net cost
+
+where scenario net cost includes:
+- DA procurement cost based on scenario-cleared energy;
+- unused energy penalty if used;
+- shortfall penalty;
+- minus hydrogen revenue;
+- minus terminal inventory value correction.
+
+Implementation tasks
+--------------------
+1. Build acceptance matrix from scenario prices and bid grid.
+2. Build Pyomo/PuLP model for fixed bid-price quantity optimisation.
+3. Solve one-day with a tiny scenario set first, e.g. 3 scenarios.
+4. Save submitted_bids.parquet.
+5. Save scenario_clearing.parquet.
+6. Save scenario_recourse_timeseries.parquet.
+7. Save model stats and solver log.
+8. Add validation checks.
+
+Validation checks
+-----------------
+Start with artificial scenarios before real scenarios.
+
+Toy scenario tests:
+1. All prices very low:
+   - model should submit more/lower-priced demand;
+   - most energy should clear;
+   - production should be feasible.
+
+2. All prices very high:
+   - model should avoid low-value demand unless shortfall penalty forces high bids;
+   - expensive clearing should be limited.
+
+3. One scenario cheap, one scenario expensive:
+   - bid curve should reflect trade-off;
+   - quantities at high bid prices should only appear if production/shortfall protection is valuable.
+
+Real scenario test:
+- one day;
+- small number of scenarios;
+- compare risk-neutral bid optimiser with schedule-and-settle baseline.
+
+Check:
+- q_{t,b} non-negative;
+- sum_b q_{t,b} <= max power;
+- scenario clearing matches acceptance matrix;
+- used + unused = scenario cleared energy;
+- physical balances close in every scenario;
+- expected cost equals probability-weighted scenario costs;
+- scenario probabilities sum to 1;
+- no scenario-specific first-stage bid quantities.
+
+Required plots
+--------------
+1. Submitted bid curve for selected hours:
+   - cumulative quantity vs bid price;
+   - choose cheap, medium, and expensive hours.
+
+2. Bid quantity heatmap:
+   - rows: hours;
+   - columns: bid-price blocks;
+   - colour: quantity MW.
+
+3. Scenario clearing heatmap:
+   - rows: scenarios;
+   - columns: hours;
+   - colour: cleared energy.
+
+4. Scenario recourse plot:
+   - for a few selected scenarios, show cleared energy, used energy, storage, and production.
+
+5. Expected dispatch comparison:
+   - expected/mean scenario operation compared with schedule-and-settle dispatch.
+
+Required tables
+---------------
+1. Bid summary table:
+   - hour;
+   - total submitted quantity;
+   - weighted average bid price;
+   - max bid block used;
+   - min bid block used.
+
+2. Scenario outcome table:
+   - scenario_id;
+   - probability;
+   - DA cost;
+   - hydrogen revenue;
+   - shortfall;
+   - unused energy;
+   - terminal inventory correction;
+   - net cost/profit.
+
+3. Model statistics table:
+   - number of variables;
+   - binaries;
+   - constraints;
+   - solve time;
+   - MIP gap;
+   - objective.
+
+Required markdown explanation
+-----------------------------
+In notebook 06, include:
+- what the first-stage bid quantity means;
+- why recourse can be scenario-dependent;
+- why bid prices are fixed;
+- why this is not full market clearing;
+- how scenario probabilities enter the objective.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- the model solves tiny artificial cases correctly;
+- bid curves are interpretable;
+- no non-anticipativity violation exists;
+- scenario outcome table makes economic sense;
+- solve time is acceptable for one day.
+
+Do not move on if:
+- q differs by scenario;
+- scenario probabilities are missing or ignored;
+- the model uses electricity that did not clear;
+- high-price bid quantities appear everywhere without a clear reason;
+- production is achieved by depleting storage without terminal correction.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 4 of the hydrogen bidding roadmap. Build the first true risk-neutral hourly bid optimiser using fixed bid prices and optimised bid quantities. First-stage variables q[t,b] must be non-anticipative and common across scenarios. Scenario acceptance must be precomputed from bid_price[b] >= scenario_price[s,t]. Scenario-cleared energy feeds scenario-dependent physical recourse dispatch with electrolyser, compressor, storage, reserve, ramping, target/shortfall, unused energy, and terminal inventory correction. Objective is expected net cost over scenario probabilities. Start with toy scenarios and one real day. Save submitted bids, scenario clearing, recourse timeseries, model stats, solver logs, metrics, and diagnostic plots. Do not add CVaR yet.
+
+Acceptance criteria
+-------------------
+- Toy scenario tests pass.
+- One-day real scenario run solves.
+- First-stage bid quantities are non-anticipative.
+- Scenario clearing and recourse are saved.
+- Physical and economic balances validate.
+- Bid curve plots and scenario outcome tables are generated.
+
+PHASE 5 — Clear optimised bids against actual prices and run realised redispatch
+================================================================================
+
+Goal
+----
+Evaluate the optimised stochastic bid curve against realised historical DA prices and compute realised physical and economic performance.
+
+Why this phase matters
+----------------------
+The stochastic objective is not the final performance metric. The thesis needs realised backtest outcomes: what happened after submitting the bids to the historical market?
+
+Files to create or update
+-------------------------
+- hydrogen/rolling_horizon.py
+- hydrogen/clearing.py
+- hydrogen/redispatch.py
+- hydrogen/settlement.py if useful
+- hydrogen/bidding_metrics.py
+- notebooks/06_hourly_bid_model_single_day.ipynb
+
+Evaluation sequence
+-------------------
+For each optimisation day:
+
+1. Load scenarios available at forecast origin.
+2. Optimise bid quantities q_{t,b}.
+3. Save submitted bid curve.
+4. Clear submitted bid curve against realised actual DA prices.
+5. Aggregate actual cleared energy.
+6. Run deterministic redispatch using actual cleared energy.
+7. Compute realised settlement and operational metrics.
+8. Advance inventory state to next day if rolling horizon.
+
+Realised settlement
+-------------------
+DA settlement cost:
+
+sum_t actual_price_t * actual_cleared_energy_t
+
+Not:
+
+sum_t actual_price_t * used_energy_t
+
+This matters because over-cleared energy is still paid for.
+
+Implementation tasks
+--------------------
+1. Connect Phase 4 bid output to Phase 1 clearing function.
+2. Connect actual cleared energy to Phase 3 redispatch function.
+3. Save actual_clearing.parquet.
+4. Save redispatch_timeseries.parquet.
+5. Save settlement_results.parquet.
+6. Compute realised metrics.
+7. Compare with schedule-and-settle and benchmarks for same day.
+
+Validation checks
+-----------------
+Check:
+- actual clearing uses actual prices only after bids are fixed;
+- actual clearing does not feed back into the bid optimisation;
+- cleared energy is consistent with bid curve and actual prices;
+- redispatch uses only actual cleared energy;
+- settlement cost uses actual cleared energy;
+- realised production and shortfall are reported;
+- inventory carry is correct if multi-day.
+
+Required plots
+--------------
+1. Actual price + submitted bid tiers:
+   - actual DA price;
+   - bid-price grid/tier quantities;
+   - show which blocks clear.
+
+2. Submitted vs actual cleared vs used electricity:
+   - submitted total;
+   - cleared total;
+   - used;
+   - unused.
+
+3. Realised hydrogen operation:
+   - electrolyser;
+   - compressor;
+   - storage;
+   - production/target.
+
+4. Realised economic waterfall:
+   - hydrogen revenue;
+   - DA settlement cost;
+   - unused energy penalty;
+   - shortfall penalty;
+   - terminal inventory value;
+   - adjusted profit.
+
+5. Strategy comparison bar chart:
+   - price-insensitive;
+   - schedule-and-settle risk-neutral;
+   - hourly bid risk-neutral;
+   - perfect foresight.
+
+Required tables
+---------------
+1. Realised backtest table:
+   - strategy;
+   - submitted energy;
+   - cleared energy;
+   - used energy;
+   - unused energy;
+   - hydrogen produced/sold;
+   - shortfall;
+   - DA cost;
+   - adjusted profit;
+   - uplift vs price-insensitive;
+   - value captured vs perfect foresight.
+
+2. Clearing diagnostic table:
+   - hour;
+   - actual price;
+   - total submitted quantity;
+   - cleared quantity;
+   - used energy;
+   - unused energy;
+   - storage;
+   - shortfall contribution if applicable.
+
+Required markdown explanation
+-----------------------------
+Explain:
+- optimisation-time expected performance vs realised backtest performance;
+- why actual prices are only used after bids are fixed;
+- why perfect foresight is an upper bound;
+- how value captured vs perfect foresight is calculated.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- a full one-day bid -> clear -> redispatch -> settlement chain works;
+- the realised results are visually interpretable;
+- the realised metrics differ logically from expected scenario metrics;
+- schedule-and-settle and bid-clearing results are clearly separated.
+
+Do not move on if:
+- actual prices are used inside stochastic bid optimisation;
+- the model reports profit without showing clearing and production;
+- actual settlement uses used energy instead of cleared energy;
+- redispatch consumes more energy than cleared.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 5 of the hydrogen bidding roadmap. Connect the risk-neutral hourly bid optimiser to ex-post actual DA clearing and deterministic redispatch. The sequence must be: optimise bids using scenarios only, save submitted bids, clear bids against realised prices, solve redispatch using only actual cleared energy, compute realised settlement and metrics. Settlement cost must use cleared energy, not used energy. Add plots and tables comparing submitted, cleared, used, unused energy, hydrogen operation, and economic waterfall. Compare hourly_bid_risk_neutral against price_insensitive, schedule_and_settle_risk_neutral, and perfect_foresight for the same day.
+
+Acceptance criteria
+-------------------
+- End-to-end one-day chain works.
+- Actual prices are used only after bid optimisation.
+- Settlement and redispatch outputs are saved.
+- Realised metrics and plots are generated.
+- Strategy comparison table is created.
+
+PHASE 6 — Extend to selected-week rolling backtest
+=================================================
+
+Goal
+----
+Run the hourly bid-clearing model over selected weeks with inventory carry-over and standardised reporting.
+
+Why this phase matters
+----------------------
+Single-day runs are useful for debugging but can be misleading. Storage and production targets create intertemporal effects. A selected-week backtest reveals whether the bidding model remains stable over consecutive days.
+
+Files to create or update
+-------------------------
+- hydrogen/rolling_horizon.py
+- hydrogen/run_registry.py
+- hydrogen/reporting.py
+- notebooks/07_hourly_bid_model_selected_week.ipynb
+- configs/selected_weeks.yaml
+
+Implementation tasks
+--------------------
+1. Select one calm week, one volatile week, and optionally one stress week.
+2. For each day:
+   - load day-specific scenarios;
+   - solve bid optimiser;
+   - submit only next-day bids;
+   - clear against actual prices;
+   - run redispatch;
+   - carry final inventory to next day.
+3. Save per-day and per-week metrics.
+4. Save all bid, clearing, redispatch, and settlement files.
+5. Produce a run-level README.
+
+Validation checks
+-----------------
+Check:
+- inventory carry-over is correct;
+- each day uses only scenarios available at that forecast origin;
+- only next-day bids are implemented;
+- no look-ahead across days;
+- cumulative hydrogen target is reported;
+- failures/infeasibilities are not silently skipped;
+- solver status is tracked per day.
+
+Required plots
+--------------
+1. Full-week price and scenario fan:
+   - actual price;
+   - scenario quantiles;
+   - possibly forecast median.
+
+2. Full-week submitted/cleared/used electricity:
+   - shows market and physical behaviour across time.
+
+3. Full-week storage trajectory:
+   - storage level;
+   - reserve line;
+   - max storage line.
+
+4. Full-week hydrogen production and target:
+   - daily hydrogen sold/compressed;
+   - daily target;
+   - cumulative target fulfilment.
+
+5. Strategy comparison dashboard:
+   - profit/cost;
+   - hydrogen produced;
+   - average price;
+   - clearing ratio;
+   - shortfall;
+   - value captured.
+
+Required tables
+---------------
+1. Daily metrics table:
+   - date;
+   - strategy;
+   - submitted energy;
+   - cleared energy;
+   - clearing ratio;
+   - used energy;
+   - hydrogen sold;
+   - shortfall;
+   - adjusted profit;
+   - ending storage;
+   - solver status.
+
+2. Week summary table:
+   - strategy;
+   - total profit/cost;
+   - total hydrogen;
+   - target fulfilment;
+   - average electricity price;
+   - clearing ratio;
+   - worst day profit;
+   - shortfall days;
+   - value vs benchmarks.
+
+Required markdown explanation
+-----------------------------
+Run-level README should explain:
+- week selected and why;
+- scenario source;
+- strategy list;
+- whether all days solved;
+- main economic result;
+- main physical feasibility result;
+- warnings and limitations.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- selected-week run is reproducible;
+- inventory carry-over works;
+- daily and weekly metrics are coherent;
+- plots reveal behaviour clearly enough for thesis interpretation.
+
+Do not move on if:
+- a failed day is dropped without explanation;
+- ending inventory resets accidentally each day;
+- selected-week results are reported without scenario diagnostics;
+- economic performance is reported without production fulfilment.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 6 of the hydrogen bidding roadmap. Extend the hourly bid-clearing workflow from one day to selected-week rolling backtests. Each day must optimise bids using that day’s scenario information, submit only the next-day bids, clear against realised prices, redispatch physically, and carry final hydrogen inventory into the next day. Produce per-day and per-week metrics, solver status per day, full-week plots, and a run-level README. Compare hourly_bid_risk_neutral with price_insensitive, schedule_and_settle_risk_neutral, and perfect_foresight.
+
+Acceptance criteria
+-------------------
+- Selected-week rolling run works.
+- Inventory carry-over is validated.
+- Daily and weekly metrics are saved.
+- Full-week plots and README are generated.
+- Failed days are explicitly reported.
+
+PHASE 7 — Add CVaR to the hourly bid optimiser
+==============================================
+
+Goal
+----
+Extend the hourly bid optimiser from risk-neutral expected net cost to CVaR-regularised risk-aware bidding.
+
+Why this phase matters
+----------------------
+CVaR is central to the thesis risk-return framing. But it should only be added after the risk-neutral bidding and realised settlement chain is correct.
+
+Files to create or update
+-------------------------
+- hydrogen/bidding_model.py
+- hydrogen/cvar.py if useful
+- hydrogen/bidding_metrics.py
+- notebooks/08_cvar_bidding_sensitivity.ipynb
+
+CVaR formulation
+----------------
+For scenario net cost C_s:
+
+Variables:
+- zeta = VaR threshold;
+- xi_s >= 0 = excess loss above zeta.
+
+Constraints:
+
+xi_s >= C_s - zeta
+xi_s >= 0
+
+CVaR:
+
+CVaR_alpha = zeta + (1 / (1 - alpha)) * sum_s probability_s * xi_s
+
+Objective:
+
+minimise expected_cost + gamma * CVaR_alpha
+
+Default:
+- alpha = 0.95
+- gamma grid = [0, 0.005, 0.01, 0.025, 0.05, 0.10, 0.20, 0.50]
+
+Important rule
+--------------
+Do not select gamma based on final test performance.
+
+Use validation-like weeks for parameter selection. Test-period gamma sweeps may be shown only as ex-post sensitivity, not as tuned model choice.
+
+Implementation tasks
+--------------------
+1. Add CVaR variables and constraints.
+2. Ensure gamma = 0 reproduces risk-neutral behaviour.
+3. Save optimisation-time expected cost, VaR, CVaR, and scenario costs.
+4. Run single-day CVaR smoke test.
+5. Run selected-week CVaR sensitivity on validation-like period.
+6. Add risk-return reporting.
+
+Validation checks
+-----------------
+Check:
+- gamma = 0 equals risk-neutral objective/solution within tolerance;
+- CVaR variables satisfy constraints;
+- probabilities sum to 1;
+- CVaR is worse than or equal to VaR for cost distribution;
+- increasing gamma does not create infeasible hidden behaviour;
+- risk reduction is not achieved by unacceptable production shortfall unless explicitly penalised/reported.
+
+Required plots
+--------------
+1. CVaR sensitivity curve:
+   - x-axis: gamma;
+   - y-axis 1: realised adjusted profit;
+   - y-axis 2 or separate plot: realised downside metric / CVaR.
+
+2. Risk-return frontier:
+   - x-axis: downside risk metric;
+   - y-axis: realised profit;
+   - label gamma values.
+
+3. Scenario cost distribution by gamma:
+   - boxplot or violin-like plot if available;
+   - show worst scenarios.
+
+4. Bid curve change with gamma:
+   - compare risk-neutral and risk-averse bid quantities.
+
+Required tables
+---------------
+1. CVaR sweep table:
+   - gamma;
+   - alpha;
+   - expected cost;
+   - optimisation CVaR;
+   - realised profit;
+   - realised worst-day profit;
+   - realised shortfall;
+   - clearing ratio;
+   - value vs benchmarks.
+
+2. Scenario tail table:
+   - gamma;
+   - worst scenario id;
+   - worst scenario cost;
+   - VaR;
+   - CVaR;
+   - tail scenarios.
+
+Required markdown explanation
+-----------------------------
+Explain:
+- expected cost vs CVaR;
+- why CVaR protects against high-cost tail scenarios;
+- what gamma means;
+- why gamma selection must not use final test performance;
+- how to interpret risk-return trade-offs.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- gamma = 0 reproduces risk-neutral;
+- higher gamma gives understandable changes;
+- risk decreases only with acceptable opportunity cost;
+- production reliability is not sacrificed silently.
+
+Do not move on if:
+- CVaR improves because production collapses;
+- scenario probabilities are missing;
+- scenario undercoverage is ignored in interpretation;
+- gamma is selected based on final test outcomes.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 7 of the hydrogen bidding roadmap. Add a transparent linear CVaR formulation to the hourly bid optimiser using scenario net cost C_s, VaR variable zeta, excess variables xi_s, confidence level alpha, and risk-aversion weight gamma. Ensure gamma=0 reproduces the risk-neutral solution. Add CVaR metrics, scenario cost outputs, and sensitivity plotting. Run a single-day smoke test and a selected-week validation-like CVaR sweep over the configured gamma grid. Do not tune gamma on final test performance.
+
+Acceptance criteria
+-------------------
+- CVaR formulation is implemented and documented.
+- gamma=0 matches risk-neutral.
+- CVaR metrics are saved.
+- CVaR sensitivity plots and tables are generated.
+- No test-set tuning is introduced.
+
+PHASE 8 — Standardise reporting and thesis-ready outputs
+=========================================================
+
+Goal
+----
+Create a standard reporting layer that can be reused for all future experiments.
+
+Why this phase matters
+----------------------
+The thesis cannot rely on ad hoc plots and scattered CSV files. You need standard outputs that make forecast/scenario/model comparisons fair and interpretable.
+
+Files to create or update
+-------------------------
+- hydrogen/reporting.py
+- hydrogen/plotting_bidding.py
+- docs/reporting_guide.md
+- docs/result_table_definitions.md
+- notebooks/09_forecast_scenario_comparison_report.ipynb
+
+Standard outputs
+----------------
+Every run should produce:
+- README_run.md
+- metrics_summary.csv
+- metrics_by_day.csv
+- metrics_timeseries.parquet
+- submitted_bids.parquet
+- actual_clearing.parquet
+- redispatch_timeseries.parquet
+- settlement_results.parquet
+- model_stats.json
+- validation_checks.csv
+- figures/
+
+Required thesis-body figures
+----------------------------
+1. Strategy comparison dashboard
+   Purpose: show main performance differences.
+   Include:
+   - net profit/cost;
+   - hydrogen production;
+   - average price paid;
+   - downside risk;
+   - value captured vs perfect foresight.
+
+2. Bid-clearing example day
+   Purpose: visually explain bidding mechanism.
+   Include:
+   - actual price;
+   - bid curve/tier quantities;
+   - cleared vs rejected demand.
+
+3. Full-week operation plot
+   Purpose: show physical behaviour.
+   Include:
+   - electrolyser/compressor load;
+   - storage level;
+   - production target;
+   - price overlay if readable.
+
+4. CVaR risk-return frontier
+   Purpose: show risk aversion trade-off.
+   Include:
+   - realised profit;
+   - CVaR/downside metric;
+   - gamma labels.
+
+5. Scenario fan vs realised price
+   Purpose: link forecast/scenario quality to optimisation performance.
+   Include:
+   - scenario quantiles;
+   - actual price;
+   - possibly bid threshold.
+
+Required appendix figures
+-------------------------
+1. Bid quantity heatmap by block and hour.
+2. Scenario clearing heatmap.
+3. Storage boundary hit plot.
+4. Energy balance residual plot/table.
+5. Daily metrics over time.
+6. Solver runtime and model-size scaling plot.
+
+Required thesis-body tables
+---------------------------
+1. Compact strategy comparison table.
+2. Scenario input comparison table.
+3. CVaR sensitivity summary table.
+4. Model/computational summary table.
+
+Required appendix tables
+------------------------
+1. Full metric definitions.
+2. Full daily metrics.
+3. Full scenario outcome metrics.
+4. Full solver/model statistics.
+5. Full validation checks.
+
+Implementation tasks
+--------------------
+1. Centralise metric definitions.
+2. Add consistent naming of strategies.
+3. Add plotting functions with stable filenames.
+4. Add run-level README generator.
+5. Add result table generator for thesis body and appendix.
+6. Add reporting guide explaining how to interpret plots.
+
+Validation checks
+-----------------
+Check:
+- every reported profit has matching production fulfilment;
+- every stochastic result has scenario count/probability info;
+- every bid result has clearing metrics;
+- every comparison uses same period and same actual prices;
+- every plot has units and readable labels;
+- figure filenames are stable and descriptive.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- a complete run can be understood from README + tables + figures;
+- thesis-body tables are compact enough to use directly;
+- appendix tables provide enough detail to audit results;
+- visualisations explain behaviour, not just outcomes.
+
+Do not move on if:
+- plots are visually attractive but hide feasibility problems;
+- profit is shown without production or shortfall;
+- scenario diagnostics are disconnected from optimisation results;
+- runs cannot be reproduced from config and manifests.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 8 of the hydrogen bidding roadmap. Standardise the reporting layer for all hydrogen bidding runs. Add reusable reporting and plotting functions that generate a run-level README, compact thesis-body tables, appendix-level detailed tables, and diagnostic figures. Ensure every strategy comparison includes economic, risk, reliability, operational, bidding, and computational metrics. Add docs/reporting_guide.md and docs/result_table_definitions.md. Do not change model logic unless needed to expose missing metrics.
+
+Acceptance criteria
+-------------------
+- Standard run report is generated.
+- Thesis-body and appendix tables are created.
+- Required figures are saved with stable filenames.
+- Metrics include economic, risk, reliability, operational, bidding, and computational layers.
+- Reporting guide explains how to interpret outputs.
+
+PHASE 9 — Compare scenario inputs on selected weeks
+===================================================
+
+Goal
+----
+Use the bidding test case to compare the economic and operational value of different forecast/scenario inputs.
+
+Why this phase matters
+----------------------
+This is the core thesis transition: forecasts are no longer judged only by MAE/RMSE, but by downstream bidding and operational performance.
+
+Scenario inputs to compare
+--------------------------
+Start with available D-only hourly scenarios:
+- XGBoost FS3;
+- LEAR FS3;
+- LEAR Strict.
+
+Later:
+- quarter-hour equivalents;
+- D+4 scenarios where tractable.
+
+Files to create or update
+-------------------------
+- configs/experiment_matrix.yaml
+- configs/scenario_catalog.yaml
+- hydrogen/scenario_loader.py
+- hydrogen/reporting.py
+- notebooks/09_forecast_scenario_comparison_report.ipynb
+
+Implementation tasks
+--------------------
+1. Ensure scenario catalog has all required metadata:
+   - model;
+   - granularity;
+   - horizon;
+   - scenario count;
+   - probabilities;
+   - forecast origin;
+   - delivery timestamps;
+   - lead day.
+2. Run same selected weeks for each scenario input.
+3. Use identical plant parameters and bid-price grid.
+4. Use identical actual price data for settlement.
+5. Compare risk-neutral first.
+6. Compare CVaR with pre-selected validation gamma later.
+7. Save comparison report.
+
+Validation checks
+-----------------
+Check:
+- all scenario sets cover the same delivery period or comparison is explicitly common-support;
+- scenario probabilities sum to 1 per origin/day;
+- forecast origin and delivery timestamps align;
+- no scenario input uses future information;
+- actual prices are identical across strategy/model comparisons;
+- scenario undercoverage diagnostics are recorded.
+
+Required plots
+--------------
+1. Scenario fan vs actual price per model.
+2. Strategy/model profit comparison.
+3. Clearing ratio comparison by scenario model.
+4. Hydrogen target fulfilment comparison.
+5. Value captured vs perfect foresight comparison.
+6. Scenario coverage vs realised economic performance scatter.
+
+Required tables
+---------------
+1. Scenario input metadata table:
+   - model;
+   - granularity;
+   - horizon;
+   - scenario count;
+   - probability convention;
+   - coverage diagnostics;
+   - known warnings.
+
+2. Scenario model comparison table:
+   - model;
+   - strategy;
+   - net profit;
+   - production;
+   - clearing ratio;
+   - average price;
+   - shortfall;
+   - CVaR/downside metric;
+   - uplift vs price-insensitive;
+   - value captured vs perfect foresight.
+
+3. Interpretation table:
+   - model;
+   - apparent strength;
+   - apparent weakness;
+   - whether result is thesis-usable;
+   - caution.
+
+Required markdown explanation
+-----------------------------
+Explain:
+- that scenario undercoverage is a warning, not automatically fatal;
+- whether undercoverage materially harmed bidding/operation;
+- whether a statistically better forecast also produced better economic outcomes;
+- whether differences are large enough to matter operationally.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- comparisons use the same period and actual prices;
+- differences can be traced to bidding, clearing, or operation;
+- scenario quality diagnostics are included;
+- results are not overclaimed.
+
+Do not move on if:
+- scenario sets have different support and are compared naively;
+- one model has missing days that are silently ignored;
+- undercoverage is ignored;
+- a model is declared better based on one profit number.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 9 of the hydrogen bidding roadmap. Compare hourly D-only scenario inputs from XGBoost FS3, LEAR FS3, and LEAR Strict using the same selected-week hydrogen bid-clearing backtest. Use identical plant parameters, bid grid, actual prices, and strategy settings. Validate scenario metadata, probabilities, forecast origins, delivery timestamps, and common support. Produce scenario fan plots, economic/operational comparison tables, clearing metrics, production fulfilment, value captured vs perfect foresight, and scenario coverage diagnostics. Do not overclaim results if support or coverage differs.
+
+Acceptance criteria
+-------------------
+- Scenario inputs are validated.
+- Common-support logic is explicit.
+- Selected-week comparisons run.
+- Scenario diagnostics and optimisation outcomes are reported together.
+- Thesis-ready comparison tables/figures are generated.
+
+PHASE 10 — Scale to broader backtests carefully
+===============================================
+
+Goal
+----
+Scale from selected weeks to larger periods only after the model is stable and reporting is standardised.
+
+Why this phase matters
+----------------------
+Long backtests are valuable, but they can hide errors. Scaling should test robustness and runtime, not replace careful validation.
+
+Implementation tasks
+--------------------
+1. Run one month first.
+2. Then run multiple market regimes.
+3. Then consider full test period if runtime allows.
+4. Track runtime and solver failures.
+5. Create experiment registry entries.
+6. Report computational scaling.
+
+Validation checks
+-----------------
+Check:
+- no silent skipped days;
+- run time acceptable;
+- model stats stable;
+- inventory trajectory plausible;
+- cumulative production fulfilment reported;
+- failed solves diagnosed.
+
+Required plots
+--------------
+1. Monthly cumulative profit.
+2. Daily profit distribution.
+3. Daily production fulfilment.
+4. Storage trajectory over long horizon.
+5. Solver runtime by day.
+6. Model size by scenario count/horizon.
+
+Required tables
+---------------
+1. Long-period summary table.
+2. Failed/infeasible day table.
+3. Runtime and model-size table.
+4. Market-regime comparison table.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- selected-week results are already understood;
+- long-run errors can be diagnosed;
+- runtime does not make experimentation impractical;
+- reporting remains readable.
+
+Do not move on if:
+- long-run output becomes an unmanageable pile of files;
+- failed days are hidden;
+- interpretation relies only on cumulative profit.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 10 of the hydrogen bidding roadmap. Scale the validated selected-week hourly bid-clearing workflow to a one-month backtest, then prepare for broader test-period runs. Preserve the same reporting contract. Track solver status, infeasible days, runtime, model size, daily metrics, cumulative metrics, and warnings. Generate long-period plots for cumulative profit, production fulfilment, storage, daily profit distribution, and solver runtime. Do not silently skip failed days.
+
+Acceptance criteria
+-------------------
+- One-month run completes or failed days are diagnosed.
+- Long-period metrics and plots are generated.
+- Runtime/model-size statistics are saved.
+- Experiment registry is updated.
+
+PHASE 11 — Add quarter-hour and D+4 only after hourly D-only is stable
+=====================================================================
+
+Goal
+----
+Extend the validated framework to quarter-hour and/or D+4 settings without changing multiple assumptions at once.
+
+Why this phase matters
+----------------------
+Hourly vs quarter-hour and D-only vs D+4 are core thesis comparisons, but they are dangerous if introduced before the basic bidding model is stable.
+
+Quarter-hour caution
+--------------------
+Quarter-hour evaluation must distinguish observed-market truth from synthetic/frozen experiment paths. Do not accidentally optimise or score against synthetic data while calling it observed truth.
+
+D+4 caution
+-----------
+Only next-day bids should be implemented in a rolling horizon, even if the planning horizon is D through D+4. Later days may inform storage and planning, but implemented bids must follow the information timeline.
+
+Implementation tasks
+--------------------
+1. Add timestep_hours config support where missing.
+2. Check ramp-rate scaling for quarter-hour intervals.
+3. Check production target aggregation by day.
+4. Check DST handling.
+5. Add QH scenario adapter.
+6. Add D+4 scenario adapter.
+7. Run tiny smoke tests.
+8. Compare only one dimension at a time:
+   - hourly D-only vs quarter-hour D-only;
+   - hourly D-only vs hourly D+4;
+   - not all changes simultaneously.
+
+Validation checks
+-----------------
+Check:
+- timestep conversion is correct;
+- MW to MWh conversion uses timestep_hours;
+- ramping is scaled or justified;
+- daily target aggregation is correct;
+- no hardcoded 24-hour or 96-quarter assumptions break DST days;
+- QH actual prices are observed where required;
+- common support is explicit.
+
+Required plots
+--------------
+1. Hourly vs QH price/dispatch comparison.
+2. QH submitted/cleared/used electricity plot.
+3. QH storage trajectory.
+4. D-only vs D+4 performance comparison.
+5. Runtime scaling plot.
+
+Required tables
+---------------
+1. Granularity comparison table.
+2. Horizon comparison table.
+3. Runtime/model-size comparison table.
+4. Data support/completeness table.
+
+What to look for before moving on
+---------------------------------
+Move on only if:
+- hourly D-only is thesis-reportable;
+- QH/D+4 changes are isolated;
+- data support is clearly documented;
+- runtime remains tractable.
+
+Do not move on if:
+- hourly and QH are compared while also changing scenario model/horizon;
+- synthetic QH paths are treated as observed truth;
+- D+4 accidentally implements future decisions;
+- DST days break time aggregation.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 11 of the hydrogen bidding roadmap. Extend the validated hourly D-only bid-clearing framework to quarter-hour and/or D+4 only in isolated smoke tests. Add timestep_hours support, ramp-rate checks, daily aggregation checks, QH scenario adapter, D+4 scenario adapter, and data-support validation. Compare one dimension at a time and preserve the same reporting contract. Do not change scenario model, granularity, and horizon simultaneously.
+
+Acceptance criteria
+-------------------
+- QH/D+4 smoke tests run or limitations are clearly diagnosed.
+- Timestep conversion is validated.
+- Common support and data completeness are reported.
+- Comparisons isolate one dimension at a time.
+
+PHASE 12 — Prepare for later mFRR and steel-plant extension, but do not implement yet
+====================================================================================
+
+Goal
+----
+Document how the hydrogen bidding framework will later extend to mFRR and the steel-plant MILP, without adding that complexity now.
+
+Why this phase matters
+----------------------
+The hydrogen test case should not become a dead-end toy model. Its architecture should teach the final model how to handle market decisions, physical feasibility, stochastic uncertainty, CVaR, and reporting.
+
+Implementation tasks
+--------------------
+1. Write architecture note:
+   - what transfers to steel MILP;
+   - what must change;
+   - what remains DA-only;
+   - what mFRR requires.
+2. Create mapping table:
+   - hydrogen storage -> industrial material buffers;
+   - electrolyser load -> flexible process units;
+   - compressor/sales -> downstream production/sales;
+   - DA bid curve -> site import bids;
+   - shortfall -> production target violation;
+   - unused energy -> over-procurement/redispatch loss.
+3. List additional mFRR requirements:
+   - capacity bid;
+   - capacity clearing;
+   - activation trajectory;
+   - deliverability constraint;
+   - non-delivery penalty;
+   - baseline definition;
+   - reserve direction convention.
+
+Required markdown output
+------------------------
+- docs/hydrogen_to_steel_extension_note.md
+
+What to look for before moving on
+---------------------------------
+This is a documentation phase only. Do not start implementation unless DA-only hydrogen bidding is stable.
+
+Suggested Codex prompt
+----------------------
+Implement Phase 12 documentation only. Write docs/hydrogen_to_steel_extension_note.md explaining how the validated hydrogen bid-clearing framework can later extend to the steel-plant MILP and mFRR participation. Include a mapping table from hydrogen components to steel-site components, identify which modules should be reused, and list additional modelling requirements for mFRR. Do not implement mFRR or steel constraints.
+
+Acceptance criteria
+-------------------
+- Extension note exists.
+- Reusable architecture is identified.
+- mFRR/steel additions are documented but not implemented.
+
+Minimum metric definitions to keep consistent
+=============================================
+
+Economic metrics
+----------------
+1. Realised DA settlement cost
+   Unit: EUR
+   Definition: sum_t actual_price_t * actual_cleared_energy_t.
+   Why it matters: measures what the plant actually pays for DA electricity.
+
+2. Hydrogen revenue
+   Unit: EUR
+   Definition: hydrogen_sold_kg * hydrogen_price_eur_per_kg.
+   Why it matters: connects production to economic value.
+
+3. Adjusted profit
+   Unit: EUR
+   Definition: revenue - DA settlement cost - penalties + terminal inventory correction.
+   Why it matters: prevents artificial profit from depleting storage.
+
+4. Uplift vs price-insensitive
+   Unit: EUR or %
+   Definition: strategy_profit - price_insensitive_profit.
+   Why it matters: shows value of optimisation relative to naive operation.
+
+5. Value captured vs perfect foresight
+   Unit: %
+   Suggested definition: (strategy_profit - price_insensitive_profit) / (perfect_foresight_profit - price_insensitive_profit).
+   Why it matters: shows how much of the oracle value is captured.
+
+Risk metrics
+------------
+1. Scenario expected cost/profit
+   Optimisation-time probability-weighted scenario result.
+
+2. VaR
+   Threshold for high-cost tail.
+
+3. CVaR
+   Expected cost in the worst tail beyond VaR.
+
+4. Worst-scenario cost/profit
+   Most adverse scenario in the optimisation set.
+
+5. Realised downside metric
+   Empirical downside over days/weeks, e.g. worst-day profit or lower-tail average.
+
+Reliability metrics
+-------------------
+1. Target fulfilment
+   hydrogen_sold_or_compressed / target.
+
+2. Shortfall
+   unmet target in kg.
+
+3. Reserve violations
+   should normally be zero if hard-constrained.
+
+4. Storage boundary hits
+   number of periods at min/max storage.
+
+5. Infeasible days
+   count and list of days where solver failed or model infeasible.
+
+Bidding metrics
+---------------
+1. Submitted energy
+   Energy offered through bids.
+
+2. Cleared energy
+   Energy accepted after market clearing.
+
+3. Used energy
+   Energy physically consumed by plant.
+
+4. Rejected energy
+   Submitted energy that did not clear.
+
+5. Unused cleared energy
+   Cleared energy that could not be physically consumed.
+
+6. Clearing ratio
+   cleared energy / submitted energy.
+
+7. Hours with zero clearing
+   hours where no submitted demand cleared.
+
+8. Actual price above highest bid
+   warning metric for total rejection risk.
+
+Operational metrics
+-------------------
+1. Electrolyser load profile.
+2. Compressor load profile.
+3. Hydrogen production.
+4. Hydrogen sold/compressed.
+5. Storage trajectory.
+6. Ramping behaviour.
+7. Starts/stops if binary on/off is used.
+8. Price responsiveness, e.g. correlation between price and load.
+
+Computational metrics
+---------------------
+1. Solve time.
+2. Solver status.
+3. Objective value.
+4. MIP gap.
+5. Number of variables.
+6. Number of binary variables.
+7. Number of constraints.
+8. Scenario count.
+9. Horizon length.
+
+Recommended decision gates
+==========================
+
+Gate A — after Phase 0
+----------------------
+Question: Is the current schedule-and-settle model physically and economically valid enough to keep as a benchmark?
+
+Pass if:
+- balances close;
+- inventory valuation is correct;
+- production fulfilment is reported;
+- solver diagnostics are saved.
+
+Gate B — after Phase 2
+----------------------
+Question: Can we visually and numerically explain the difference between scheduling and bidding?
+
+Pass if:
+- schedule-to-bid bridge clearly shows accepted/rejected electricity;
+- clearing logic is intuitive;
+- plots are understandable.
+
+Gate C — after Phase 5
+----------------------
+Question: Do we have a complete one-day bid -> clear -> redispatch -> settle workflow?
+
+Pass if:
+- stochastic bids use only scenarios;
+- actual clearing happens after bids are fixed;
+- redispatch uses only cleared energy;
+- realised economics and production are reported.
+
+Gate D — after Phase 7
+----------------------
+Question: Does CVaR behave correctly and meaningfully?
+
+Pass if:
+- gamma=0 equals risk-neutral;
+- higher gamma changes bids logically;
+- downside risk decreases or the lack of improvement is explainable;
+- opportunity cost is reported.
+
+Gate E — after Phase 9
+----------------------
+Question: Can we compare scenario inputs in a thesis-usable way?
+
+Pass if:
+- same period/support;
+- same actual prices;
+- scenario diagnostics included;
+- economic, risk, reliability, bidding, and computational metrics all reported.
+
+Common red flags
+================
+
+Stop and investigate if any of these occur:
+
+1. Profit improves while hydrogen production or target fulfilment collapses.
+2. Storage is depleted to create profit without terminal correction.
+3. The model buys electricity that did not clear.
+4. Settlement cost is based on used energy instead of cleared energy.
+5. Scenario probabilities are missing or ignored.
+6. Bid quantities differ by scenario before uncertainty is revealed.
+7. Actual prices are used inside bid optimisation.
+8. Failed or infeasible days are silently removed.
+9. Hourly and quarter-hour cases are compared while changing other assumptions.
+10. Scenario undercoverage is ignored when interpreting CVaR.
+11. Perfect foresight is described as realistic rather than an oracle upper bound.
+12. Plots show only profit and not production, storage, clearing, or shortfall.
+
+Recommended immediate next action
+=================================
+
+Do not start with the full bidding MILP.
+
+Recommended next Codex prompt:
+- Phase 0 first, if the baseline audit is not yet done.
+- Then Phase 1 and Phase 2.
+- Only after the clearing layer is visually validated should you implement Phase 3 and Phase 4.
+
+Best near-term sequence:
+1. Phase 0: audit current baseline.
+2. Phase 1: bidding/clearing primitives.
+3. Phase 2: schedule-to-bid bridge.
+4. Phase 3: deterministic redispatch after clearing.
+5. Phase 4: risk-neutral hourly bid optimiser.
+6. Phase 5: actual clearing and realised settlement.
+
+This sequence is slower than asking Codex to build everything at once, but it is much more likely to produce a thesis-grade model that can be explained, debugged, and defended.

@@ -1,0 +1,13 @@
+experiments:
+  - name: hourly_selected_weeks_base
+    config: scripts/Data/03_Hydrogen_Test_Case/configs/base_hydrogen.yaml
+    override:
+      experiment:
+        execution_mode: selected_weeks
+  - name: hourly_custom_debug_window
+    config: scripts/Data/03_Hydrogen_Test_Case/configs/base_hydrogen.yaml
+    override:
+      experiment:
+        execution_mode: custom_period
+        custom_start: "2025-01-06"
+        custom_end: "2025-01-12"

@@ -1,0 +1,89 @@
+selected_weeks:
+  - label: test_high_price_week
+    regime_label: high_price
+    start_local_date: "2025-01-20"
+    end_local_date: "2025-01-26"
+    week_id: test_20250120_20250126
+    period_type: test
+    selection_status: selected_dedicated
+    dedicated_regime_candidate: true
+    selection_rule: high_price_score
+    fallback_reason: ""
+    notes: diagnostic_reporting
+  - label: test_high_volatility_week
+    regime_label: high_volatility
+    start_local_date: "2024-12-09"
+    end_local_date: "2024-12-15"
+    week_id: test_20241209_20241215
+    period_type: test
+    selection_status: selected_dedicated
+    dedicated_regime_candidate: true
+    selection_rule: volatility_score
+    fallback_reason: ""
+    notes: diagnostic_reporting
+  - label: test_typical_summer_week
+    regime_label: typical_summer
+    start_local_date: "2025-07-21"
+    end_local_date: "2025-07-27"
+    week_id: test_20250721_20250727
+    period_type: test
+    selection_status: selected_dedicated
+    dedicated_regime_candidate: true
+    selection_rule: typical_summer_score
+    fallback_reason: ""
+    notes: diagnostic_reporting
+  - label: test_typical_winter_week
+    regime_label: typical_winter
+    start_local_date: "2025-01-13"
+    end_local_date: "2025-01-19"
+    week_id: test_20250113_20250119
+    period_type: test
+    selection_status: selected_dedicated
+    dedicated_regime_candidate: true
+    selection_rule: typical_winter_score
+    fallback_reason: ""
+    notes: diagnostic_reporting
+  - label: validation_high_price_week
+    regime_label: high_price
+    start_local_date: "2023-10-16"
+    end_local_date: "2023-10-22"
+    week_id: validation_20231016_20231022
+    period_type: validation
+    selection_status: selected_dedicated
+    dedicated_regime_candidate: true
+    selection_rule: high_price_score
+    fallback_reason: ""
+    notes: cvar_selection
+  - label: validation_high_volatility_week
+    regime_label: high_volatility
+    start_local_date: "2024-06-10"
+    end_local_date: "2024-06-16"
+    week_id: validation_20240610_20240616
+    period_type: validation
+    selection_status: selected_dedicated
+    dedicated_regime_candidate: true
+    selection_rule: volatility_score
+    fallback_reason: ""
+    notes: cvar_selection
+  - label: validation_typical_summer_week
+    regime_label: typical_summer
+    start_local_date: "2024-06-17"
+    end_local_date: "2024-06-23"
+    week_id: validation_20240617_20240623
+    period_type: validation
+    selection_status: selected_dedicated
+    dedicated_regime_candidate: true
+    selection_rule: typical_summer_score
+    fallback_reason: ""
+    notes: cvar_selection
+  - label: validation_winter_proxy_week
+    regime_label: winter_proxy
+    start_local_date: "2024-09-16"
+    end_local_date: "2024-09-22"
+    week_id: validation_20240916_20240922
+    period_type: validation
+    selection_status: selected_backup
+    dedicated_regime_candidate: false
+    selection_rule: typical_overall_score_fallback
+    fallback_reason: "No complete winter validation week exists under exact three-model common support; selected the closest split-wide typical backup week and labelled it winter_proxy because it is not valid for seasonal winter claims."
+    notes: cvar_selection

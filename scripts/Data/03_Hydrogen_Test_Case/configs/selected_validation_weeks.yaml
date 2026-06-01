@@ -1,0 +1,91 @@
+status: active
+split: validation
+allowed_use:
+  - validation-only model, scenario, and CVaR policy selection
+  - validation diagnostics and support-controlled comparison work
+forbidden_use:
+  - final out-of-sample test claims
+  - presenting validation results as test evidence
+selection_policy_version: selected_week_policy_v2_regime_split_20260528
+created_at: "2026-05-28"
+selection_rule: Monday-Sunday calendar weeks selected from exact three-model common support with complete observed hourly actual prices; high_volatility uses the realised volatility score; high_price uses the realised high-price score; typical_summer and typical_winter use seasonal median-closeness. If the validation split has no eligible exact-common-support winter week, the backup is written as winter_proxy rather than being presented as a true validation typical_winter week.
+no_optimisation_results_used: true
+intended_regime_labels:
+  - typical_summer
+  - typical_winter
+  - high_volatility
+  - high_price
+selected_regime_labels:
+  - typical_summer
+  - winter_proxy
+  - high_volatility
+  - high_price
+provenance:
+  source_registry: scripts/Data/03_Hydrogen_Test_Case/docs/selected_week_registry_common_support.csv
+  source_yaml: scripts/Data/03_Hydrogen_Test_Case/configs/selected_weeks_common_support.yaml
+  methodological_use_required: cvar_selection
+selected_weeks:
+  - label: typical_summer
+    week_label: validation_typical_summer_week
+    week_id: validation_20240617_20240623
+    regime_label: typical_summer
+    start_local_date: "2024-06-17"
+    end_local_date: "2024-06-23"
+    selection_status: selected_dedicated
+    dedicated_regime_candidate: true
+    selection_rule: typical_summer_score
+    target_season: summer
+    selection_reason: "summer validation week closest to seasonal median behaviour under exact three-model common support"
+    fallback_reason: ""
+    proxy_for_regime_label: none
+    seasonal_claims_valid: true
+    allowed_use_restriction: none
+    notes: cvar_selection
+  - label: winter_proxy
+    week_label: validation_winter_proxy_week
+    week_id: validation_20240916_20240922
+    regime_label: winter_proxy
+    start_local_date: "2024-09-16"
+    end_local_date: "2024-09-22"
+    selection_status: selected_backup
+    dedicated_regime_candidate: false
+    selection_rule: typical_overall_score_fallback
+    target_season: winter
+    selection_reason: "No complete winter validation week exists under exact three-model common support; selected the closest split-wide typical backup week and labelled it winter_proxy because it is not valid for seasonal winter claims."
+    fallback_reason: "No complete winter validation week exists under exact three-model common support; selected the closest split-wide typical backup week and labelled it winter_proxy because it is not valid for seasonal winter claims."
+    proxy_for_regime_label: typical_winter
+    seasonal_claims_valid: false
+    allowed_use_restriction: runtime_debug_common_support_only_unless_justified
+    notes: cvar_selection
+  - label: high_volatility
+    week_label: validation_high_volatility_week
+    week_id: validation_20240610_20240616
+    regime_label: high_volatility
+    start_local_date: "2024-06-10"
+    end_local_date: "2024-06-16"
+    selection_status: selected_dedicated
+    dedicated_regime_candidate: true
+    selection_rule: volatility_score
+    target_season: none
+    selection_reason: "validation week with the highest realised volatility score under exact three-model common support"
+    fallback_reason: ""
+    proxy_for_regime_label: none
+    seasonal_claims_valid: true
+    allowed_use_restriction: none
+    notes: cvar_selection
+  - label: high_price
+    week_label: validation_high_price_week
+    week_id: validation_20231016_20231022
+    regime_label: high_price
+    start_local_date: "2023-10-16"
+    end_local_date: "2023-10-22"
+    selection_status: selected_dedicated
+    dedicated_regime_candidate: true
+    selection_rule: high_price_score
+    target_season: none
+    selection_reason: "validation week with the strongest realised high-price score under exact three-model common support"
+    fallback_reason: ""
+    proxy_for_regime_label: none
+    seasonal_claims_valid: true
+    allowed_use_restriction: none
+    notes: cvar_selection
