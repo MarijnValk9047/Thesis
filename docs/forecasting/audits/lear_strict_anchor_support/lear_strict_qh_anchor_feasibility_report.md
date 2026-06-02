@@ -1,6 +1,6 @@
 # LEAR_STRICT QH Anchor Feasibility Audit
 
-Date: 2026-05-10  
+Date: 2026-05-10
 Scope: focused feasibility audit only (no QH_MODEL_3 implementation, no scenario generation)
 
 ## Executive conclusion
@@ -183,4 +183,3 @@ Reason:
 ## Recommended next action
 
 **B. First create/export/rerun LEAR_STRICT hourly anchors for the observed-QH grid, then implement QH_MODEL_3.**
-

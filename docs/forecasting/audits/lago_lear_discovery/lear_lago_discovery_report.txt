@@ -397,4 +397,3 @@ To write the final implementation prompt cleanly, I still need:
 
 6) API execution constraints for later heavy run
 - Confirm ENTSOE key availability and whether imports should run in place or into a separate raw-root snapshot.
-
