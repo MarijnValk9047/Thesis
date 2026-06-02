@@ -57,3 +57,38 @@ tmp_phase07_debug/
 
 # Solver and runtime logs
 *.log
+
+# Forecasting generated artifacts and local experiment outputs
+data/02_Forecasting/**/repair_runs/
+data/02_Forecasting/**/frozen_results/
+data/02_Forecasting/**/runs_lago_lear/
+data/02_Forecasting/**/scenario_evaluation/
+data/02_Forecasting/**/finalisation_runs/
+data/02_Forecasting/**/canonical_actual_runs/
+data/02_Forecasting/**/phase04_runs/
+data/02_Forecasting/**/phase05_runs/
+data/02_Forecasting/**/phase06_runs/
+data/02_Forecasting/**/phase07_runs/
+
+# Lago/LEAR six-year local raw and cleaned data artifacts
+data/00_raw_lago_lear_six_year/
+data/01_cleaned_lago_lear_six_year/
+
+# Local accidental data copies / repair diagnostics
+data/01_cleaned/Day_ahead_prices/DA_prices/hourly/* - kopie.csv
+data/01_cleaned/Day_ahead_prices/diagnostics/gap_fix_*.csv
+
+# Additional forecasting generated comparison/export artifacts
+data/02_Forecasting/**/qh_anchor_exports/
+data/02_Forecasting/**/candidate_comparison_new_metrics/
+data/02_Forecasting/**/option_ab_sweeps/
+data/02_Forecasting/**/option_c_sweeps/
+data/02_Forecasting/**/exports/
+
+# Quarter-hour generated phase artifacts
+data/02_Forecasting/**/phase01_runs/
+data/02_Forecasting/**/phase02_runs/
+data/02_Forecasting/**/phase03_runs/
+data/02_Forecasting/**/phase07_upstream_refresh_runs/
+data/02_Forecasting/**/frozen_actual_paths/
+data/02_Forecasting/**/registry/
