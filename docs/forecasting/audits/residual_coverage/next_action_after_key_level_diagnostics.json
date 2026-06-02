@@ -1,0 +1,39 @@
+{
+  "decision": "B",
+  "run_dir": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\qh_anchor_exports\\lear_strict_observed_qh_grid\\20260511_072851_lear_strict_observed_qh_grid_export_key_level_skip_reason_smoke",
+  "top_skip_reasons": [
+    {
+      "skip_reason": "missing_p_base_d_minus_1",
+      "source_stage": "feature_builder",
+      "missing_feature": "missing_p_base_d_minus_1",
+      "rows": 48
+    },
+    {
+      "skip_reason": "missing_p_base_d_minus_7",
+      "source_stage": "feature_builder",
+      "missing_feature": "missing_p_base_d_minus_7",
+      "rows": 47
+    },
+    {
+      "skip_reason": "missing_p_base_d_minus_2",
+      "source_stage": "feature_builder",
+      "missing_feature": "missing_p_base_d_minus_2",
+      "rows": 23
+    },
+    {
+      "skip_reason": "missing_hourly_bridge_price",
+      "source_stage": "feature_builder",
+      "missing_feature": "hourly_bridge_price",
+      "rows": 6
+    }
+  ],
+  "prediction_compatibility_check": {
+    "overlap_rows": 236,
+    "max_abs_diff": 5.684341886080802e-14,
+    "mean_abs_diff": 4.817238886509154e-16,
+    "new_rows": 236,
+    "old_rows": 4455
+  },
+  "model_logic_changed": false,
+  "note": "Instrumentation-only patch; feature/model logic unchanged."
+}

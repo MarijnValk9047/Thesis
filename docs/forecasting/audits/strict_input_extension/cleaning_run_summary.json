@@ -1,0 +1,35 @@
+{
+  "timestamp_utc": "2026-05-10T14:03:46.538540+00:00",
+  "steps": {
+    "run_lago_lear_cleaning": {
+      "status_counts": {
+        "completed": 2,
+        "failed": 1
+      },
+      "tasks": [
+        {
+          "task_name": "day_ahead_prices_pipeline",
+          "status": "completed",
+          "note": "Ran staged DA price cleaning.",
+          "output_path": "data\\01_cleaned_lago_lear_six_year\\Day_ahead_prices"
+        },
+        {
+          "task_name": "entsoe_system_features_pipeline",
+          "status": "failed",
+          "note": "'timestamp_utc'",
+          "output_path": "data\\01_cleaned_lago_lear_six_year"
+        },
+        {
+          "task_name": "a69_res_forecast_by_psr_cleaning",
+          "status": "completed",
+          "note": "Parsed A69 by-PSR and built aggregated RES forecast.",
+          "output_path": "data\\01_cleaned_lago_lear_six_year\\Generation\\da_res_generation_forecast_by_psr\\hourly\\da_res_generation_forecast_by_psr_hourly_long.csv"
+        }
+      ]
+    },
+    "entsoe_system_features_pipeline_direct": {
+      "command": "python scripts/Data/01_cleaning/entsoe_system_features_pipeline.py --raw-root data/00_raw_lago_lear_six_year --output-root data/01_cleaned_lago_lear_six_year --markets NL --families da_total_load_forecast week_ahead_total_load_forecast",
+      "status": "completed"
+    }
+  }
+}

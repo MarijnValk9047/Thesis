@@ -1,0 +1,18 @@
+metric,value,notes
+bridge_raw_rows_total,37943,
+bridge_raw_min_timestamp_utc,2021-12-31T23:00:00+00:00,
+bridge_raw_max_timestamp_utc,2026-04-30T21:00:00+00:00,
+bridge_filtered_rows_total,37654,"price not null, non-interpolated, non-flagged"
+bridge_filtered_min_timestamp_utc,2021-12-31T23:00:00+00:00,
+bridge_filtered_max_timestamp_utc,2026-04-30T20:00:00+00:00,
+anchor_grid_target_min_utc,2025-09-26T22:00:00+00:00,
+anchor_grid_target_max_utc,2026-05-04T21:00:00+00:00,
+anchor_window_expected_hours,5280,hourly points from min to max anchor target
+bridge_raw_hours_in_anchor_window,5184,
+bridge_filtered_hours_in_anchor_window,5089,
+bridge_raw_coverage_pct_anchor_window,98.18181818181819,
+bridge_filtered_coverage_pct_anchor_window,96.38257575757576,
+bridge_post_transition_raw_rows,5086,timestamp >= 2025-10-01T00:00:00Z
+bridge_post_transition_filtered_rows,4992,timestamp >= 2025-10-01T00:00:00Z
+bridge_post_transition_from_observed_15min_rows,4992,in raw bridge
+bridge_post_transition_partial_nonobserved_rows,94,in raw bridge

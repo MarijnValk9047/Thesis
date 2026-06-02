@@ -1,0 +1,5 @@
+skip_reason,source_stage,missing_feature,rows
+missing_p_base_d_minus_1,feature_builder,missing_p_base_d_minus_1,48
+missing_p_base_d_minus_7,feature_builder,missing_p_base_d_minus_7,47
+missing_p_base_d_minus_2,feature_builder,missing_p_base_d_minus_2,23
+missing_hourly_bridge_price,feature_builder,hourly_bridge_price,6

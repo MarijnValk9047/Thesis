@@ -1,0 +1,400 @@
+1. Executive summary
+
+- This repository already has a mature hourly DA forecasting pipeline with fixed split semantics, daily rolling origins, `D..D+4` horizon handling, shared evaluation, and run artifact contracts.
+- Hourly NL DA cleaned data currently covers `2021-12-31 23:00:00+00:00` through `2025-09-30 21:00:00+00:00` at hourly resolution (with interpolation/missing flags present).
+- Exogenous cleaned families exist for load and generation aggregates, plus generation-by-PSR actuals/capacity. Separate NL wind-forecast and solar-forecast families were not found.
+- Import/cleaning scripts can be extended backward by year, but extension is not range-safe by default (same-year reruns overwrite raw files with deterministic filenames).
+- Current strong comparison baselines exist (FS2 and FS3 runs), but “best” depends on objective: LEAR is stronger on some D-only views, XGBoost stronger on most full-horizon views.
+- No implementation was performed; this is read-only discovery.
+
+2. Relevant repo paths and functions
+
+A) Repository structure mapping (requested categories)
+
+- Raw Day-Ahead price data
+  - `data/00_raw/DA_Prices/DA_prices_NL/A01_Day_Ahead_Market/`
+  - also BE/DE siblings under `data/00_raw/DA_Prices/`
+- Cleaned Day-Ahead price data
+  - `data/01_cleaned/Day_ahead_prices/DA_prices/hourly/da_prices_NL_hourly.csv`
+  - `data/01_cleaned/Day_ahead_prices/DA_prices/hourly/da_prices_all_regions_hourly.csv`
+  - `data/01_cleaned/Day_ahead_prices/DA_prices/aggregated/da_prices_NL_all.csv`
+- ENTSO-E/API import scripts
+  - `scripts/Data/00_data_imports/API_GETS.py`
+  - `scripts/Data/00_data_imports/README.md`
+- Raw load forecast data
+  - `data/00_raw/Load/Load_NL/6_1_B_DA_Total_Load_Forecast/`
+  - `data/00_raw/Load/Load_NL/6_1_C_Week_Ahead_Total_Load_Forecast/`
+- Raw wind/solar forecast data
+  - No separate NL wind-forecast or solar-forecast raw family found.
+  - Present generation-forecast family is aggregate: `data/00_raw/RES_Generation_Forecast/NL/14_1_C_DA_Generation_Forecast/`
+- Raw wind/solar actual support (not forecast)
+  - `data/00_raw/RES_Generation_Forecast/NL/16_1_BC_Actual_Generation_per_Production_Type_A74/`
+  - PSR includes `B16` solar, `B18` offshore wind, `B19` onshore wind.
+- Cleaned exogenous feature data
+  - Load:
+    - `data/01_cleaned/Load/actual_total_load/hourly/actual_total_load_hourly_long.csv`
+    - `data/01_cleaned/Load/da_total_load_forecast/hourly/da_total_load_forecast_hourly_long.csv`
+    - `data/01_cleaned/Load/week_ahead_total_load_forecast/hourly/week_ahead_total_load_forecast_hourly_long.csv`
+  - Generation:
+    - `data/01_cleaned/Generation/da_generation_forecast/hourly/da_generation_forecast_hourly_long.csv`
+    - `data/01_cleaned/Generation/actual_generation_by_psr/hourly/actual_generation_by_psr_hourly_long.csv`
+    - `data/01_cleaned/Generation/installed_capacity_by_psr/hourly/installed_capacity_by_psr_hourly_long.csv`
+  - Family manifest:
+    - `data/01_cleaned/entsoe_feature_family_manifest.csv`
+- FS1/FS2/FS3 feature construction
+  - Endogenous FS1 pool: `scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/endogenous_features.py`
+  - Calendar FS2 layer: `.../core/features.py`
+  - FS-level assembly/recursive rows: `.../core/tabular.py`
+  - FS3 external families and known-at masking: `.../core/external_features.py`
+- Split definitions
+  - `scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/config.py` (`HourlyDAPipelineConfig`)
+- Forecast origin/horizon logic
+  - `.../core/schedule.py`
+  - `.../core/time_utils.py`
+  - reporting levels: `.../core/reporting.py`
+- Evaluation utilities
+  - `.../core/metrics.py`
+  - `.../core/forecast_evaluation.py`
+- Selected/objective week definitions
+  - `.../core/visual_weeks.py`
+  - runner scripts: `scripts/Data/02_Forecasting/01_DA_prices/run_case_week_selection.py`, `.../run_visual_case_weeks.py`
+- Plotting utilities
+  - `.../core/plotting.py`
+- Current best model output folders (candidates)
+  - `data/02_Forecasting/01_DA_prices/hourly_da/runs/20260424_111158_model_comparison_fs2_pruned_candidate/`
+  - `.../runs/20260426_151547_lear_fs3_combo_pruned_candidate_benchmark/`
+  - `.../runs/20260426_153605_xgboost_fs3_combo_pruned_candidate_benchmark/`
+- Notebook generation utilities
+  - `scripts/Data/02_Forecasting/01_DA_prices/generate_standardized_notebooks.py`
+  - `scripts/Data/02_Forecasting/01_DA_prices/create_da_prices_cleaning_notebook.py`
+  - `scripts/Data/02_Forecasting/01_DA_prices/create_da_price_scenario_notebook.py`
+  - `scripts/Data/02_Forecasting/01_DA_prices/create_da_15min_extension_notebooks.py`
+
+3. Data coverage tables
+
+B) Current hourly NL DA price coverage
+
+| Item | Value |
+|---|---|
+| Source path used by hourly pipeline | `data/01_cleaned/Day_ahead_prices/DA_prices/hourly/da_prices_all_regions_hourly.csv` filtered to `region=="NL"` |
+| Dedicated NL file | `data/01_cleaned/Day_ahead_prices/DA_prices/hourly/da_prices_NL_hourly.csv` |
+| Earliest timestamp | `2021-12-31 23:00:00+00:00` |
+| Latest timestamp | `2025-09-30 21:00:00+00:00` |
+| Frequency | hourly (`resolution_minutes=60`, 32,855 rows) |
+| Timezone convention | UTC in `timestamp_utc` |
+| Main columns | `timestamp_utc, region, price_eur_per_mwh, resolution, resolution_minutes, ... , price_eur_per_mwh_original, gap_fix_action, is_interpolated_value, is_flagged_missing_value, missing_datapoint_source` |
+| Observed vs processed | Mixed: observed values plus gap-fixed/interpolated rows with explicit flags |
+| Interpolation flags | `is_interpolated_value=True` count `176`; `is_flagged_missing_value=True` count `19` |
+| DST handling | Stored in UTC; local-day schedules are DST-aware (23/25-hour local day possible) in `core/schedule.py` |
+| Loader function | `hourly_da/core/data_loading.py::load_and_validate_da_series` (`load_hourly_price_frame` wrapper) |
+
+C) Current exogenous coverage (NL)
+
+| Dataset | Source path(s) | Earliest | Latest | Resolution | TZ | Actual vs forecast | known_at metadata | Loader |
+|---|---|---|---|---|---|---|---|---|
+| Actual total load | `data/01_cleaned/Load/actual_total_load/hourly/actual_total_load_hourly_long.csv` | `2022-01-01T00:00:00+00:00` | `2026-05-01T16:00:00+00:00` | hourly | UTC | actual | yes (`known_at_utc`,`known_at_rule=actual_interval_end`) | `load_external_feature_store` |
+| DA total load forecast | `data/01_cleaned/Load/da_total_load_forecast/hourly/da_total_load_forecast_hourly_long.csv` | `2022-01-01T00:00:00+00:00` | `2026-05-02T21:00:00+00:00` | hourly | UTC | forecast | yes (`day_ahead_local_08`) | `load_external_feature_store` |
+| Week-ahead total load forecast | `data/01_cleaned/Load/week_ahead_total_load_forecast/hourly/week_ahead_total_load_forecast_hourly_long.csv` | `2021-12-31T23:00:00+00:00` | `2026-05-10T22:00:00+00:00` | hourly | UTC | forecast | yes (`week_ahead_local_08`) | `load_external_feature_store` |
+| DA generation forecast (aggregate) | `data/01_cleaned/Generation/da_generation_forecast/hourly/da_generation_forecast_hourly_long.csv` | `2022-01-01T00:00:00+00:00` | `2026-05-02T21:00:00+00:00` | hourly | UTC | forecast (aggregate) | yes (`day_ahead_local_08`) | `load_external_feature_store` |
+| Actual generation by PSR (solar/wind available as actuals) | `data/01_cleaned/Generation/actual_generation_by_psr/hourly/actual_generation_by_psr_hourly_long.csv` | `2022-01-01T00:00:00+00:00` | `2026-05-01T16:00:00+00:00` | hourly | UTC | actual | yes (`actual_interval_end`) | `load_external_feature_store` |
+| Installed capacity by PSR | `data/01_cleaned/Generation/installed_capacity_by_psr/hourly/installed_capacity_by_psr_hourly_long.csv` | `2021-12-31T23:00:00+00:00` | `2026-12-31T22:00:00+00:00` | hourly-expanded | UTC | structural/capacity | yes (`valid_from_utc`) | `load_external_feature_store` |
+
+Specific checks requested:
+- Dutch load forecast: present (`da_total_load_forecast`, `week_ahead_total_load_forecast`).
+- Dutch wind generation forecast: separate wind forecast family not found.
+- Dutch solar generation forecast: separate solar forecast family not found.
+- Dutch aggregate renewable forecast: explicit “renewable forecast” family not found; aggregate generation forecast and derived aggregates exist.
+- Already-built FS3 feature table: not found as one persisted table; FS3 context is built on-the-fly from long files in `load_external_feature_store()` + `build_feature_context_for_origin()`.
+
+4. Import/API extension feasibility
+
+D) Backward extension feasibility (do not run now)
+
+Shared importer:
+- Script/function: `scripts/Data/00_data_imports/API_GETS.py` (`main()`, `download_dataset()`)
+- Inputs: `--dataset`, `--start-year`, `--end-year`, `--output-root`, `--max-pages-per-year`
+- Date range support: year-based inclusive ranges
+- API key: required env var `ENTSOE_KEY` (`.env`)
+- Raw save root default: `data/00_Raw` (repo currently also uses lowercase `data/00_raw`; Windows is case-insensitive but this is a path-consistency risk)
+- Overwrite behavior: deterministic filename (`..._<year>_offset_####.xml|zip`) written with `target.write_bytes(payload)`; same year/offset reruns overwrite existing files.
+
+NL DA prices:
+- Dataset key: `12_1_d_energy_prices_a01_day_ahead_nl`
+- Existing raw years observed: 2022..2026
+- Likely command:
+  - `.venv\Scripts\python.exe scripts/Data/00_data_imports/API_GETS.py --dataset 12_1_d_energy_prices_a01_day_ahead_nl --start-year <YYYY> --end-year <YYYY>`
+
+NL load forecast:
+- Dataset key: `6_1_b_da_total_load_forecast_nl`
+- Existing raw years observed: 2022..2026
+- Likely command:
+  - `.venv\Scripts\python.exe scripts/Data/00_data_imports/API_GETS.py --dataset 6_1_b_da_total_load_forecast_nl --start-year <YYYY> --end-year <YYYY>`
+
+NL wind forecast:
+- Separate wind forecast dataset key not found in current importer.
+- Related available keys: `14_1_c_da_generation_forecast_nl` (aggregate), `16_1_bc_actual_generation_by_psr_a74_nl` (actual by PSR), `14_1_a_installed_capacity_by_psr_nl` (capacity by PSR).
+
+NL solar forecast:
+- Separate solar forecast dataset key not found in current importer.
+- Same caveat as wind.
+
+Likely extension risks:
+- ENTSO-E retention/completeness for older years may be uneven.
+- Pagination cap (`--max-pages-per-year`) can truncate if too low.
+- Timeouts/HTTP 5xx handled with retries; prolonged failures stop combinations.
+- Year reruns overwrite same-year raw files unless you use alternate `--output-root`.
+
+5. Cleaning extension feasibility
+
+E) Cleaning stages
+
+Stage 1: DA prices cleaning
+- Script: `scripts/Data/01_cleaning/day_ahead_prices_pipeline.py`
+- Inputs: `--raw-root`, `--output-root`, `--cutoff-local-date`, `--local-timezone`, `--regions`, `--quarterly-regions`, `--max-timestamp-utc`
+- Input path expectation: `data/00_Raw/DA_Prices/DA_prices_<REGION>/...`
+- Outputs:
+  - `data/01_cleaned/Day_ahead_prices/DA_prices/hourly/*.csv`
+  - `.../quarterly/*.csv`
+  - `.../aggregated/*.csv`
+  - diagnostics under `data/01_cleaned/Day_ahead_prices/diagnostics/*`
+- Schema highlights: preserves source metadata + adds `price_eur_per_mwh_original`, `gap_fix_action`, `is_interpolated_value`, `is_flagged_missing_value`
+- Date-range support: no direct start-date arg; full available input processed, then clipped by `--max-timestamp-utc` and split by cutoff
+- DST/timezone: source parsed as UTC; local timezone used for cutoff and diagnostics; DST gap policy explicit
+- Missing handling: short internal gaps interpolated (<=2 points), longer/unbounded flagged
+- Likely command:
+  - `.venv\Scripts\python.exe scripts/Data/01_cleaning/day_ahead_prices_pipeline.py --regions NL --quarterly-regions NL`
+
+Stage 2: ENTSO-E system features cleaning (load/generation/capacity)
+- Script: `scripts/Data/01_cleaning/entsoe_system_features_pipeline.py`
+- Inputs: `--raw-root`, `--output-root`, `--markets`, `--families`
+- Input path expectation: `data/00_Raw/Load/...` and `data/00_Raw/RES_Generation_Forecast/...`
+- Outputs per family:
+  - `parsed/<family>_long.csv`
+  - `hourly/<family>_hourly_long.csv`
+  - `hourly/<family>_hourly_wide.csv`
+  - `diagnostics/*.csv`, `diagnostics/metadata.json`
+  - manifest: `data/01_cleaned/entsoe_feature_family_manifest.csv`
+- Date-range support: no explicit date filters; processes all files in raw dirs
+- DST/timezone: canonical UTC timestamps, local date/hour columns derived per market timezone
+- Missing handling: family-specific aggregation/coverage diagnostics; no hidden silent fill in long output
+- known_at metadata: generated as `known_at_utc`, `known_at_rule`
+- Likely command:
+  - `.venv\Scripts\python.exe scripts/Data/01_cleaning/entsoe_system_features_pipeline.py --markets NL`
+
+6. Current split and horizon logic
+
+F) Split logic
+- Official hourly split:
+  - train: `2022-01-01` to `2023-09-30`
+  - validation: `2023-10-01` to `2024-09-30`
+  - test: `2024-10-01` to `2025-09-30`
+- Defined in: `hourly_da/core/config.py::HourlyDAPipelineConfig`
+- Hardcoded vs configurable:
+  - hardcoded defaults in dataclass
+  - configurable only by constructing a different config object in scripts/code (no separate split YAML/JSON mechanism found for hourly)
+- Safe representation for a new six-year Lago split:
+  - use a separate run script/config object with custom `train_*`, `validation_*`, `test_*` dates and a unique run label/output folder.
+  - do not overwrite official cleaned files or canonical runs.
+- Separate experiment mechanism:
+  - run isolation exists via timestamped run folders (`core/storage.py::create_run_directory`), not via a dedicated split registry.
+
+G) Forecast origin/horizon logic
+- Origin representation:
+  - `forecast_origin_local`, `forecast_origin_utc` in `core/schedule.py`
+  - daily origins generated by `generate_forecast_origins()`
+- D-1 08:00 encoding:
+  - yes (`forecast_origin_local_hour=8`, `forecast_origin_local_minute=0`)
+  - `origin_local_day = delivery_start_local_date - 1 day`
+- Delivery timestamp representation:
+  - `target_timestamp_utc`, `target_delivery_local_date`, `target_hour_local`
+- Horizon representation:
+  - `lead_day` (`0..4`), `lead_day_label` (`D`, `D+1`, ...), `horizon_index`
+- D-only vs D..D+4:
+  - reporting levels in `core/reporting.py`: `d_only`, `guidance_only`, `stitched_all_horizon`
+- Compatibility schema (predictions):
+  - `run_id, model, model_family, fs_level, dataset_split, forecast_origin_utc, target_timestamp_utc, target_delivery_local_date, target_hour_local, target_known_at_utc, lead_day, lead_day_label, horizon_index, y_true, y_pred, is_observed_target, fit_time_sec, predict_time_sec, fit_time_warning*`
+
+7. Feature construction compatibility
+
+H) Current feature pipeline fit for Lago-style LEAR
+
+- Daily 24-hour vector features:
+  - not native; pipeline is long hourly tabular + recursive prediction.
+- Historical price lag features:
+  - yes, explicit FS1 pool in `core/endogenous_features.py` (`lag_1,2,24,25,168,169`, diffs, rolling, block stats).
+- Load/wind/solar forecast features:
+  - load forecast: yes (DA + week-ahead)
+  - explicit wind/solar forecast: not found
+  - generation forecast available as aggregate only
+- known_at/no-leakage enforcement:
+  - yes:
+    - historical cut: `history[known_at_utc <= forecast_origin_utc]` in `core/evaluation.py`
+    - exogenous masking: `build_feature_context_for_origin()` in `core/external_features.py`
+- Suggested placement for a new standalone benchmark feature builder:
+  - new module under `scripts/Data/02_Forecasting/01_DA_prices/hourly_da/core/` (for example `lago_benchmark_features.py`) + dedicated run script in `scripts/Data/02_Forecasting/01_DA_prices/`.
+- Reuse candidates:
+  - `core/config.py`, `core/schedule.py`, `core/time_utils.py`, `core/data_loading.py`, `core/endogenous_features.py`, `core/features.py`, `core/metrics.py`, `core/evaluation.py`.
+- Reuse with caution / likely avoid for a clean benchmark:
+  - `core/external_features.py` full FS3 experiment catalog (broad/complex if you only need a narrow LEAR benchmark)
+  - `core/forecast_evaluation.py` if you only need basic benchmark metrics.
+
+8. Existing outputs for comparison
+
+I) Model output paths and schemas
+
+- General benchmark run root:
+  - `data/02_Forecasting/01_DA_prices/hourly_da/runs/<run_id>/`
+- Common files:
+  - `predictions_long.parquet`
+  - `metrics_overall.csv`
+  - `metrics_by_lead_day.csv`
+  - `metrics_by_reporting_level.csv`
+  - `official_naive_reference.json`
+  - `run_summary.json`
+- Metrics schema:
+  - `metrics_overall.csv`: `model,model_family,fs_level,dataset_split,observations_total,observations_scored,coverage_pct,mae,rmse,bias,smape_pct,origins,rmae_vs_official_naive,rmae`
+  - `metrics_by_reporting_level.csv`: above + `reporting_level*` columns
+
+Candidate comparison runs
+- FS2 consolidated comparison:
+  - `.../runs/20260424_111158_model_comparison_fs2_pruned_candidate/`
+  - In this run, LEAR FS2 is best on D-only validation/test MAE; XGBoost FS2 is best on full-horizon validation/test MAE.
+- FS3 pruned candidates:
+  - `.../runs/20260426_151547_lear_fs3_combo_pruned_candidate_benchmark/`
+  - `.../runs/20260426_153605_xgboost_fs3_combo_pruned_candidate_benchmark/`
+  - Full-horizon validation/test MAE is better in the XGBoost FS3 candidate run; D-only validation is better in LEAR FS3 candidate run.
+
+Period overlap with proposed new benchmark
+- Current official hourly test ends `2025-09-30` local-delivery context.
+- A new six-year dataset ending `2025-10-01` likely has overlap but not identical training history/split windows.
+- Direct MAE/rMAE comparisons are valid only when evaluated on aligned target slices.
+
+How to compare later
+- Use existing `predictions_long` schema and `metrics_by_reporting_level.csv` conventions.
+- For fair comparison, align:
+  - split (`validation`/`test`)
+  - reporting level (`d_only` vs `stitched_all_horizon`)
+  - target timestamp set.
+
+9. Evaluation and selected-week integration
+
+J) Metric availability status
+
+- Implemented (directly available):
+  - MAE, RMSE, bias, sMAPE (`core/metrics.py`)
+  - rMAE (`add_rmae_column` in `core/metrics.py`)
+  - Diebold-Mariano (`diebold_mariano_test`, pairwise wrappers in `core/metrics.py`; additional table tooling in `core/forecast_evaluation.py`)
+  - median AE, p90 AE, p95 AE (`_metric_row` and `compute_tail_metrics` in `core/forecast_evaluation.py`)
+  - Spearman rank correlation (`compute_daily_shape_metrics` in `core/forecast_evaluation.py`)
+  - top-k expensive/cheap recall (hit-rate style) (`compute_topk_hour_metrics`)
+  - tail MAE variants (`top10_mae`, `bottom10_mae`, `negative_mae`, `high_volatility_day_mae`)
+  - spread-related proxy (`daily_range_error` in `compute_daily_level_metrics`)
+- Not found as named standard metrics:
+  - MAPE
+  - explicit “high-low spread error” metric name (but range/spread proxies exist)
+
+Input schemas / reuse
+- `core/metrics.py` expects standard prediction columns: `model*, dataset_split, forecast_origin_utc, target_timestamp_utc, lead_day, y_true, y_pred`.
+- `core/forecast_evaluation.py` expects candidate-labeled frames (`candidate_key`, `candidate_label`, etc.) in addition to timestamps/`y_true`/`y_pred`.
+- D-only and D..D+4 compatibility:
+  - yes via `lead_day` filtering and reporting-level composition.
+
+K) Selected/objective weeks
+
+- Definitions location:
+  - `hourly_da/core/visual_weeks.py::select_case_weeks`
+- Selection mode:
+  - dynamic from test actuals (`prepare_test_actuals` + weekly feature table), not fixed constants in code.
+- Categories currently used:
+  - core: `typical_winter`, `typical_summer`, `high_volatility`
+  - additional: `high_price`, `low_price`, `negative_price`
+- Latest stored selected weeks (from `20260404_125748_case_week_selection/selected_weeks.csv`):
+  - `2025-W08` (`typical_winter`)
+  - `2025-W34` (`typical_summer`)
+  - `2024-W50` (`high_volatility`)
+  - plus `high_price`, `low_price`, `negative_price` categories
+- Plot utilities:
+  - `core/plotting.py::plot_week_actual_only`
+  - `core/plotting.py::plot_week_actual_vs_models`
+  - used by `run_visual_case_weeks.py`
+- Plot input schema:
+  - selected weeks table with week boundaries/categories
+  - stitched prediction frame with `model`, `target_timestamp_local`, `y_true`, `y_pred`.
+
+10. Notebook/artifact recommendations
+
+L) Notebook generation status and recommendation
+
+- Notebooks are both generated and manually maintained.
+- Main standardized workflow notebooks are generated by:
+  - `scripts/Data/02_Forecasting/01_DA_prices/generate_standardized_notebooks.py`
+  - output root: `notebooks/Data/02_Forecasting/01_DA_prices/`
+  - naming convention: numbered sequence, e.g., `00_...ipynb` through `24_...ipynb`, plus `90+` references.
+- Dedicated generator scripts also exist (cleaning/scenario/quarter-hour suites).
+
+Recommended future benchmark notebook path
+- `notebooks/Data/02_Forecasting/01_DA_prices/25_lago_lear_six_year_benchmark.ipynb`
+
+Recommended notebook sections
+- data scope and provenance checks
+- extended raw import audit
+- cleaning consistency checks
+- split construction for six-year window
+- LEAR benchmark run blocks (D-only and D..D+4)
+- objective-week comparison and plots
+- comparison vs current best saved model
+- risk/limitations appendix.
+
+11. Blockers, assumptions, and risks
+
+M) Hard blockers
+- No separate NL wind forecast / solar forecast family found in current importer/cleaner stack.
+- Current hourly cleaned NL DA file stops at 2025-09-30 21:00 UTC; new target horizon ending 2025-10-01 may require refresh/extension decisions.
+
+Soft blockers
+- Import and cleaning defaults use `data/00_Raw` while existing tree is `data/00_raw` (Windows masks this; cross-platform risk).
+- Some FS3 candidate run labels and contained model names are inconsistent (pruned runs still contain model names with `...promoted`), which can confuse comparison automation.
+
+Leakage/timing risks
+- known-at policy is internally consistent but based on simplified publication assumptions (`day_ahead_local_08`, `week_ahead_local_08`), not an externally audited publication-timing model.
+- Using forecast families without strict publication metadata would risk leakage; current cleaned exogenous files include known-at columns, which should be preserved.
+
+Timezone/DST risks
+- UTC storage is strong; risk is primarily at local-day boundary logic.
+- DA cleaning default timezone is `Europe/Brussels`; NL business timezone is `Europe/Amsterdam` (currently same DST rules, but keep explicit alignment).
+
+API extension risks
+- Older historical availability may be incomplete.
+- Year reruns can overwrite same-year raw files.
+- Pagination caps/timeouts can truncate imports if not monitored.
+
+Comparison risks
+- Comparing new benchmark vs existing FS3 outputs over mismatched periods/splits will produce misleading conclusions.
+- rMAE denominators must be aligned to comparable benchmark contexts.
+
+12. Exact information still needed from me
+
+To write the final implementation prompt cleanly, I still need:
+
+1) Exact six-year window definition
+- Confirm exact start date for “six years ending 2025-10-01” (for example `2019-10-01` to `2025-10-01` delivery coverage).
+
+2) Exogenous policy decision
+- If separate wind/solar forecasts are mandatory, specify approved source or acceptable proxy (current stack has aggregate DA generation forecast plus wind/solar actuals/capacity, but no separate wind/solar forecasts found).
+
+3) Comparison target definition
+- Confirm whether “current best model” should mean:
+  - best D-only validation model,
+  - best full-horizon validation model,
+  - best test model,
+  - or one fixed canonical benchmark run id.
+
+4) Split policy for the new six-year benchmark
+- Keep existing official train/validation/test boundaries fixed and only expand history, or define a new split regime for Lago benchmark experiments.
+
+5) Output isolation policy
+- Confirm whether all new artifacts should go to a separate namespace (recommended) to avoid touching official outputs.
+
+6) API execution constraints for later heavy run
+- Confirm ENTSOE key availability and whether imports should run in place or into a separate raw-root snapshot.
+

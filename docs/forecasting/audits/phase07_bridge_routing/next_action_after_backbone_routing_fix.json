@@ -1,0 +1,15 @@
+{
+  "decision": "C",
+  "current_overlap_rows": 4455,
+  "current_overlap_pct": 17.1875,
+  "hypothetical_phase07_bridge_overlap_rows": 24642,
+  "hypothetical_phase07_bridge_overlap_pct": 95.06944444444444,
+  "estimated_improvement_pct_points": 77.88194444444444,
+  "recommendation": "Backbone source mismatch is material; improvement likely if routing LEAR_STRICT to phase07-style bridge, but this is a method choice and should be approved before patching.",
+  "requires_substantive_backbone_method_change": true,
+  "safe_tiny_fix_applied": false,
+  "next_commands_after_approval": [
+    "python scripts/Data/02_Forecasting/01_DA_prices/run_lago_lear_export_for_qh.py --check-only",
+    "python scripts/Data/02_Forecasting/01_DA_prices/run_lago_lear_export_for_qh.py --max-origins 3 --output-tag backbone_routing_fix_smoke"
+  ]
+}

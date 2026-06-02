@@ -1,0 +1,26 @@
+{
+  "decision": "A",
+  "bridge_source_used": "phase07_nl",
+  "bridge_path": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\phase07_runs\\20260505_134716_phase07_realistic_track_a\\bridged_hourly_target_input_all_regions.csv",
+  "nl_filter_applied": true,
+  "model_logic_changed": false,
+  "resume_behavior_change": "--resume no longer auto-attaches to latest run unless --run-dir or --resume-dir provided",
+  "check_only": {
+    "run_dir": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\qh_anchor_exports\\lear_strict_observed_qh_grid\\20260511_091740_lear_strict_observed_qh_grid_export",
+    "target_grid_rows": 25920,
+    "price_rows_after_observed_filter": 37922,
+    "bridge_covers_anchor_max_timestamp": false,
+    "support_estimate_full_grid_pct": 95.06944444444444,
+    "support_estimate_full_grid_rows": 24642
+  },
+  "smoke": {
+    "run_dir": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\qh_anchor_exports\\lear_strict_observed_qh_grid\\20260511_094206_lear_strict_observed_qh_grid_export_backbone_routing_fix_smoke",
+    "expected_rows": 360,
+    "predicted_rows": 360,
+    "coverage_pct": 100.0,
+    "validation_checks_passed": true
+  },
+  "remaining_limitation": "Phase07 bridge max timestamp is 2026-04-30T20:00:00Z, so final observed-QH tail beyond that remains uncovered unless bridge is extended.",
+  "recommended_next_step": "Rerun full LEAR_STRICT anchor export with --bridge-source phase07_nl to materialize actual coverage profile, then reassess tail gap.",
+  "recommended_command": "python scripts/Data/02_Forecasting/01_DA_prices/run_lago_lear_export_for_qh.py --bridge-source phase07_nl --output-tag backbone_routing_fix_full_run"
+}

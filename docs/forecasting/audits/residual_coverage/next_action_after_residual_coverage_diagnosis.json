@@ -1,0 +1,49 @@
+{
+  "decision": "B",
+  "current_expected_rows": 25920,
+  "current_generated_rows": 4455,
+  "current_coverage_pct": 17.1875,
+  "current_missing_rows": 21465,
+  "dominant_missing_reasons_top10": [
+    {
+      "missing_reason": "feature_builder_drop::missing_p_base_d_minus_1",
+      "missing_rows": 7276,
+      "missing_pct_of_expected": 28.070987654320987
+    },
+    {
+      "missing_reason": "feature_builder_drop::missing_p_base_d_minus_2",
+      "missing_rows": 4669,
+      "missing_pct_of_expected": 18.013117283950617
+    },
+    {
+      "missing_reason": "feature_builder_drop::missing_p_base_d_minus_3",
+      "missing_rows": 3122,
+      "missing_pct_of_expected": 12.044753086419753
+    },
+    {
+      "missing_reason": "feature_builder_drop::missing_p_base_d_minus_7",
+      "missing_rows": 3120,
+      "missing_pct_of_expected": 12.037037037037036
+    },
+    {
+      "missing_reason": "feature_builder_drop::missing_p_target_d_minus_7",
+      "missing_rows": 2701,
+      "missing_pct_of_expected": 10.420524691358024
+    },
+    {
+      "missing_reason": "feature_builder_drop::unknown",
+      "missing_rows": 462,
+      "missing_pct_of_expected": 1.7824074074074074
+    },
+    {
+      "missing_reason": "feature_builder_drop::missing_x1_load_base_d",
+      "missing_rows": 115,
+      "missing_pct_of_expected": 0.4436728395061728
+    }
+  ],
+  "min_training_days_required": 365,
+  "estimated_achievable_total_rows_without_method_change": 17334,
+  "estimated_achievable_coverage_pct_without_method_change": 66.875,
+  "recommended_next_step": "Instrument strict builder to emit key-level skip reasons and run check-only/smoke before any full rerun.",
+  "recommended_command": "python scripts/Data/02_Forecasting/01_DA_prices/run_lago_lear_export_for_qh.py --check-only"
+}

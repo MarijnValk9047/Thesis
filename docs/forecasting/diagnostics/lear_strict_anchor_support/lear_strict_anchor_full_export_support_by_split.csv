@@ -1,0 +1,5 @@
+dataset_split,expected_anchor_rows,generated_anchor_rows,coverage_pct,expected_origins,generated_origins
+test,5275,909,17.232227488151658,44,9
+train,15485,2561,16.53858572812399,129,28
+validation,5160,985,19.089147286821706,43,10
+ALL,25920,4455,17.1875,216,47

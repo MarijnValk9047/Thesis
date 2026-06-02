@@ -1,0 +1,8 @@
+missing_reason,missing_rows,missing_pct_of_expected
+feature_builder_drop::missing_p_base_d_minus_1,7276,28.070987654320987
+feature_builder_drop::missing_p_base_d_minus_2,4669,18.013117283950617
+feature_builder_drop::missing_p_base_d_minus_3,3122,12.044753086419753
+feature_builder_drop::missing_p_base_d_minus_7,3120,12.037037037037036
+feature_builder_drop::missing_p_target_d_minus_7,2701,10.420524691358024
+feature_builder_drop::unknown,462,1.7824074074074074
+feature_builder_drop::missing_x1_load_base_d,115,0.4436728395061728

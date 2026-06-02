@@ -1,0 +1,8 @@
+missing_reason,fixability,recommended_action
+feature_builder_drop::missing_p_base_d_minus_1,Potentially fixable,Backbone hourly completeness / lag lookup / DST handling in strict builder inputs
+feature_builder_drop::missing_p_base_d_minus_2,Potentially fixable,Backbone hourly completeness / lag lookup / DST handling in strict builder inputs
+feature_builder_drop::missing_p_base_d_minus_3,Potentially fixable,Backbone hourly completeness / lag lookup / DST handling in strict builder inputs
+feature_builder_drop::missing_p_base_d_minus_7,Potentially fixable,Backbone hourly completeness / lag lookup / DST handling in strict builder inputs
+feature_builder_drop::missing_p_target_d_minus_7,Needs targeted check,Inspect rows with debug tracing
+feature_builder_drop::unknown,Needs instrumentation,Add row-level key-based skip tracing in strict builder
+feature_builder_drop::missing_x1_load_base_d,Potentially fixable,Exogenous forecast availability/known_at alignment for required local day vectors

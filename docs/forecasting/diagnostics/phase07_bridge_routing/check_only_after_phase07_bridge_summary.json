@@ -1,0 +1,30 @@
+{
+  "completed_successfully": true,
+  "mode": "check_only",
+  "run_dir": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\qh_anchor_exports\\lear_strict_observed_qh_grid\\20260511_091740_lear_strict_observed_qh_grid_export",
+  "target_grid_rows": 25920,
+  "target_grid_origins": 216,
+  "lead_day_values": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "bridge_path": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\quarterhour_da\\phase07_runs\\20260505_134716_phase07_realistic_track_a\\bridged_hourly_target_input_all_regions.csv",
+  "bridge_source": "phase07_nl",
+  "bridge_market_area": "NL",
+  "bridge_validation_report_path": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\qh_anchor_exports\\lear_strict_observed_qh_grid\\20260511_091740_lear_strict_observed_qh_grid_export\\phase07_bridge_validation_report.csv",
+  "horizon_policy_csv": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\runs_lago_lear\\settings_availability_audit_20260507_152307\\horizon_allowed_feature_policy.csv",
+  "price_rows_after_observed_filter": 37922,
+  "exogenous_rows": {
+    "da_total_load_forecast": 73270,
+    "week_ahead_total_load_forecast": 64656,
+    "da_generation_forecast": 0,
+    "da_res_generation_forecast": 64500,
+    "da_res_generation_forecast_by_psr": 193530,
+    "actual_generation_by_psr": 0,
+    "installed_capacity_by_psr": 0
+  },
+  "elapsed_seconds": 6.117047899984755
+}

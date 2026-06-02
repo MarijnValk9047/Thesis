@@ -1,0 +1,21 @@
+{
+  "decision": "A",
+  "decision_label": "Inputs extended successfully; rerun full LEAR_STRICT anchor export next.",
+  "evidence": {
+    "da_total_load_forecast_after_max": "2026-05-11T21:00:00+00:00",
+    "da_res_generation_forecast_after_max": "2026-05-11T21:00:00+00:00",
+    "bridge_after_max": "2026-05-11T21:00:00+00:00",
+    "required_anchor_max_utc": "2026-05-04T21:00:00+00:00",
+    "strict_overlap_origins_after_extension": 47,
+    "strict_overlap_split_origins_after_extension": {
+      "train": 28,
+      "validation": 10,
+      "test": 9
+    }
+  },
+  "notes": [
+    "Validation/test overlap is now non-zero in strict builder merge grid.",
+    "Bridge now extends beyond required anchor max.",
+    "Phase-1c check and smoke completed; full rerun can proceed next."
+  ]
+}

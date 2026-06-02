@@ -1,0 +1,10 @@
+skip_reason,source_stage,missing_feature,rows,pct_of_expected,is_tail_or_bridge_limit
+target_beyond_bridge_max,feature_builder,hourly_bridge_price,245,0.945216049382716,True
+missing_p_target_d_minus_7,feature_builder,missing_p_target_d_minus_7,216,0.8333333333333334,False
+missing_p_base_d_minus_3,feature_builder,missing_p_base_d_minus_3,192,0.7407407407407408,False
+missing_p_base_d_minus_2,feature_builder,missing_p_base_d_minus_2,168,0.6481481481481481,False
+missing_p_base_d_minus_1,feature_builder,missing_p_base_d_minus_1,144,0.5555555555555556,False
+missing_p_base_d_minus_7,feature_builder,missing_p_base_d_minus_7,120,0.4629629629629629,False
+,feature_builder,,96,0.3703703703703704,False
+missing_x1_load_base_d,feature_builder,missing_x1_load_base_d,92,0.3549382716049383,False
+missing_hourly_bridge_price,feature_builder,hourly_bridge_price,5,0.0192901234567901,True
