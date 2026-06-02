@@ -671,6 +671,21 @@ The optimiser may prefer a forecast with slightly worse MAE if it better identif
 - Use clear constraint names to help infeasibility diagnosis.
 - Avoid unused imports.
 
+## Repository Output Governance
+
+Before creating generated files or running pipelines, follow:
+
+- `docs/repository/CODEX_OUTPUT_CONTRACT.md`
+
+Default rules:
+
+- `output_policy = minimal`
+- no root-level generated outputs
+- no full diagnostics without explicit approval
+- no generated data or run outputs in Git unless explicitly classified as small thesis-critical provenance
+- before large runs, report expected file count, expected approximate size, output root, `output_policy`, `run_class`, and `lineage_role`
+- preserve the distinctions in `docs/RESEARCH_LINEAGE.md` between canonical path, historical branches, diagnostics, and generated artifacts
+
 ## Command-centre maintenance contract
 
 Whenever an agent adds or changes any of the following:
