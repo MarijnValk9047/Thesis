@@ -58,6 +58,11 @@ Prefer:
 
 Do not default to committing bulky generated artifacts.
 
+## Commit-Time Validation Rule
+Before committing source or docs after Codex-generated edits, run `python scripts/dev/check_portable_paths.py` or use the configured pre-commit hook.
+
+This guard blocks personal absolute paths and obvious secrets. It complements the output contract, but does not replace it.
+
 ## Run-Folder Rule
 If Codex creates a meaningful run folder, it must include or explicitly plan for:
 - `resolved_config.yaml`

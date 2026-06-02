@@ -1,6 +1,6 @@
 # Residual Coverage Loss Diagnosis
 
-- Run path analysed: `C:/Users/marijnvalk/PycharmProjects/Thesis/data/02_Forecasting/01_DA_prices/hourly_da/qh_anchor_exports/lear_strict_observed_qh_grid/20260510_135238_lear_strict_observed_qh_grid_export_post_input_extension_smoke`
+- Run path analysed: `data/02_Forecasting/01_DA_prices/hourly_da/qh_anchor_exports/lear_strict_observed_qh_grid/20260510_135238_lear_strict_observed_qh_grid_export_post_input_extension_smoke`
 - Expected rows: 25920
 - Generated rows: 4455
 - Coverage: 17.19%

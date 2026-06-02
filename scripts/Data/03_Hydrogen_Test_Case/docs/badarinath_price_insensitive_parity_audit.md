@@ -14,7 +14,7 @@ This note checks whether the current `price_insensitive` benchmark matches the i
 
 ## What the current `price_insensitive` benchmark does
 
-Now, `price_insensitive` in [benchmarks.py](</C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/03_Hydrogen_Test_Case/hydrogen/benchmarks.py>) is:
+Now, `price_insensitive` in [benchmarks.py](</scripts/Data/03_Hydrogen_Test_Case/hydrogen/benchmarks.py>) is:
 
 - a deterministic **optimisation-based physical plan**;
 - built without using actual DA prices or scenario prices in the planning objective;

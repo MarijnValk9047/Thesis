@@ -30,8 +30,8 @@ Shortlisting and tuning:
 - future ablation runs should inherit their `rMAE` denominator from the parent benchmark stage's `official_naive_reference.json`
 
 Archived local-origin scaffold:
-- [legacy_local_origin_scaffold](C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/02_Forecasting/01_DA_prices/archive/legacy_local_origin_scaffold)
-- Retired classical benchmark artifacts are stored under [archive/retired_models](C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/02_Forecasting/01_DA_prices/archive/retired_models)
+- [legacy_local_origin_scaffold](scripts/Data/02_Forecasting/01_DA_prices/archive/legacy_local_origin_scaffold)
+- Retired classical benchmark artifacts are stored under [archive/retired_models](scripts/Data/02_Forecasting/01_DA_prices/archive/retired_models)
 
 Main runners:
 - `run_data_overview.py`

@@ -1,6 +1,6 @@
 DA Forecast Pipeline - Detailed Engineering Description
 Generated on: 2026-05-06
-Project root: C:/Users/marijnvalk/PycharmProjects/Thesis
+Project root: <repo-root>
 
 1) Scope and source files reviewed
 
@@ -370,4 +370,3 @@ Reviewed files (quarter-hour canonical observed deterministic path and reporting
 - Quarter-hour observed deterministic path already implements most required guardrails and rich diagnostics.
 - Main remaining gap for full parity is structural unification:
   - one canonical quarter-hour benchmark-suite orchestration with exactly the same governance contract as hourly parent/aggregate/ablation stages.
-

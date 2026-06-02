@@ -11,11 +11,11 @@ This phase does not run real stochastic optimisation. It only audits artifact di
 Support and readiness map update:
 
 - a new machine-readable inventory now exists at:
-  - [forecast_scenario_support_inventory.csv](/C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/03_Hydrogen_Test_Case/docs/forecast_scenario_support_inventory.csv)
+  - [forecast_scenario_support_inventory.csv](/scripts/Data/03_Hydrogen_Test_Case/docs/forecast_scenario_support_inventory.csv)
 - experiment-level readiness is now tracked at:
-  - [optimisation_experiment_readiness_matrix.csv](/C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/03_Hydrogen_Test_Case/docs/optimisation_experiment_readiness_matrix.csv)
+  - [optimisation_experiment_readiness_matrix.csv](/scripts/Data/03_Hydrogen_Test_Case/docs/optimisation_experiment_readiness_matrix.csv)
 - the human-readable support separation is now documented at:
-  - [optimisation_data_support_map.md](/C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/03_Hydrogen_Test_Case/docs/optimisation_data_support_map.md)
+  - [optimisation_data_support_map.md](/scripts/Data/03_Hydrogen_Test_Case/docs/optimisation_data_support_map.md)
 
 New readiness finding:
 
@@ -135,8 +135,8 @@ The audit inspected:
 
 Machine-readable outputs:
 
-- [scenario_artifact_inventory.csv](/C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/03_Hydrogen_Test_Case/docs/scenario_artifact_inventory.csv)
-- [probability_mass_by_origin.csv](/C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/03_Hydrogen_Test_Case/docs/probability_mass_by_origin.csv)
+- [scenario_artifact_inventory.csv](/scripts/Data/03_Hydrogen_Test_Case/docs/scenario_artifact_inventory.csv)
+- [probability_mass_by_origin.csv](/scripts/Data/03_Hydrogen_Test_Case/docs/probability_mass_by_origin.csv)
 
 ## Hourly D-only target findings
 
