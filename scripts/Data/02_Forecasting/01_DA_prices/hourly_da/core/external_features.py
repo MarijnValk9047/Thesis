@@ -828,6 +828,16 @@ def build_feature_context_for_origin(
     values = _ensure_datetime_index(store.values)
     known_at = _ensure_datetime_index(store.known_at)
     masked = values.where(known_at.le(forecast_origin_utc))
+    direct_columns = sorted(
+        {
+            column
+            for experiment in store.experiments
+            for column in experiment.direct_columns
+            if column in masked.columns
+        }
+    )
+    for column in direct_columns:
+        masked[column] = _gap_fill_within_observed_support(masked[column])
     lagged_columns = sorted({column for experiment in store.experiments for column in experiment.lagged_columns if column in masked.columns})
     for column in lagged_columns:
         masked[lag_source_column_name(column)] = _gap_fill_within_observed_support(masked[column])

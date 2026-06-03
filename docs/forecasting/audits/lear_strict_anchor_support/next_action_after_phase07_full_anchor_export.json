@@ -1,0 +1,94 @@
+{
+  "decision": "A",
+  "run_dir": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\qh_anchor_exports\\lear_strict_observed_qh_grid\\20260511_100740_lear_strict_observed_qh_grid_export_phase07_bridge_full_run",
+  "expected_anchor_rows": 25920,
+  "generated_anchor_rows": 24642,
+  "coverage_pct": 95.06944444444444,
+  "origins_generated": 208,
+  "origins_expected": 216,
+  "validation_origins": 43,
+  "test_origins": 36,
+  "validation_complete_local_days": 47,
+  "test_complete_local_days": 27,
+  "validation_qh_rows_after_expansion": 20640,
+  "test_qh_rows_after_expansion": 15988,
+  "strict_three_model_qh_overlap_rows_estimate": 98568,
+  "tail_limit_missing_rows": 250,
+  "tail_limit_share_of_missing_pct": 19.561815336463223,
+  "top_skip_reasons": [
+    {
+      "skip_reason": "target_beyond_bridge_max",
+      "source_stage": "feature_builder",
+      "missing_feature": "hourly_bridge_price",
+      "rows": 245,
+      "pct_of_expected": 0.945216049382716,
+      "is_tail_or_bridge_limit": true
+    },
+    {
+      "skip_reason": "missing_p_target_d_minus_7",
+      "source_stage": "feature_builder",
+      "missing_feature": "missing_p_target_d_minus_7",
+      "rows": 216,
+      "pct_of_expected": 0.8333333333333334,
+      "is_tail_or_bridge_limit": false
+    },
+    {
+      "skip_reason": "missing_p_base_d_minus_3",
+      "source_stage": "feature_builder",
+      "missing_feature": "missing_p_base_d_minus_3",
+      "rows": 192,
+      "pct_of_expected": 0.7407407407407408,
+      "is_tail_or_bridge_limit": false
+    },
+    {
+      "skip_reason": "missing_p_base_d_minus_2",
+      "source_stage": "feature_builder",
+      "missing_feature": "missing_p_base_d_minus_2",
+      "rows": 168,
+      "pct_of_expected": 0.6481481481481481,
+      "is_tail_or_bridge_limit": false
+    },
+    {
+      "skip_reason": "missing_p_base_d_minus_1",
+      "source_stage": "feature_builder",
+      "missing_feature": "missing_p_base_d_minus_1",
+      "rows": 144,
+      "pct_of_expected": 0.5555555555555556,
+      "is_tail_or_bridge_limit": false
+    },
+    {
+      "skip_reason": "missing_p_base_d_minus_7",
+      "source_stage": "feature_builder",
+      "missing_feature": "missing_p_base_d_minus_7",
+      "rows": 120,
+      "pct_of_expected": 0.4629629629629629,
+      "is_tail_or_bridge_limit": false
+    },
+    {
+      "skip_reason": NaN,
+      "source_stage": "feature_builder",
+      "missing_feature": NaN,
+      "rows": 96,
+      "pct_of_expected": 0.3703703703703704,
+      "is_tail_or_bridge_limit": false
+    },
+    {
+      "skip_reason": "missing_x1_load_base_d",
+      "source_stage": "feature_builder",
+      "missing_feature": "missing_x1_load_base_d",
+      "rows": 92,
+      "pct_of_expected": 0.3549382716049383,
+      "is_tail_or_bridge_limit": false
+    },
+    {
+      "skip_reason": "missing_hourly_bridge_price",
+      "source_stage": "feature_builder",
+      "missing_feature": "hourly_bridge_price",
+      "rows": 5,
+      "pct_of_expected": 0.0192901234567901,
+      "is_tail_or_bridge_limit": true
+    }
+  ],
+  "recommended_next_step": "Proceed to QH_MODEL_3 implementation and three-model observed-QH comparison on strict overlap support.",
+  "recommended_command": "Implement Phase 2: QH_MODEL_3 = LEAR_STRICT hourly anchor + zero-mean QH deviation and run three-model comparison."
+}

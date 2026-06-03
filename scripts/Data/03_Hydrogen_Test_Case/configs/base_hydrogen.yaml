@@ -1,0 +1,75 @@
+experiment:
+  name: hydrogen_donly_hourly_selected_weeks
+  granularity: hourly
+  horizon_mode: D_only
+  execution_mode: selected_weeks
+  selected_weeks_source: scripts/Data/03_Hydrogen_Test_Case/configs/selected_validation_weeks.yaml
+  selected_week_labels:
+    - high_volatility
+    - high_price
+    - typical_summer
+    - winter_proxy
+  custom_start: null
+  custom_end: null
+  dataset_split: validation
+  random_seed: 42
+
+models:
+  include:
+    - hourly_lear_strict
+  scenario_catalog: scripts/Data/03_Hydrogen_Test_Case/configs/scenario_catalog.yaml
+
+strategies:
+  - price_insensitive
+  - stochastic_risk_neutral
+  - stochastic_cvar
+  - perfect_foresight
+
+risk:
+  alpha: 0.95
+  gamma_grid: [0, 0.005, 0.01, 0.025, 0.05, 0.10, 0.20, 0.50]
+  gamma: 0.05
+  gamma_selection: validation_selected_weeks_only
+  frozen_gamma_path: null
+
+bidding:
+  bid_price_grid_eur_per_mwh: [-500, -100, 0, 50, 100, 125, 144, 158, 175, 200, 250, 500, 1000, 3000]
+  price_insensitive_bid_price_eur_per_mwh: 3000
+
+production:
+  target_semantics: lower_bound_reference
+  allow_above_target_production: true
+  allow_above_target_sales: true
+
+hydrogen_system:
+  electrolyser_nominal_mw: 55.0
+  electrolyser_min_mw: 5.5
+  electrolyser_ramp_mw_per_h: 52.25
+  h2_efficiency_kg_per_mwh: 18.0
+  compressor_max_mw: 3.0
+  compressor_specific_mwh_per_kg: 0.002
+  storage_capacity_kg: 10000.0
+  storage_initial_kg: 5000.0
+  reserve_fraction: 0.10
+  reserve_sensitivity: [0.0, 0.10, 0.25, 0.50]
+
+economics:
+  h2_sale_price_eur_per_kg: 8.0
+  daily_target_kg: 19000.0
+  p_ref_eur_per_mwh: 158.0
+  terminal_inventory_location: before_compression
+  shortfall_penalty_eur_per_kg: 20.0
+  unused_energy_penalty_eur_per_mwh: 4000.0
+
+solver:
+  package_preference: pyomo
+  solver_name: gurobi
+  mip_gap: 0.001
+  time_limit_seconds: 300
+  grb_license_file: null
+
+outputs:
+  root: scripts/Data/03_Hydrogen_Test_Case/runs
+  save_figures: true
+  save_timeseries: true
+  save_solver_log: true

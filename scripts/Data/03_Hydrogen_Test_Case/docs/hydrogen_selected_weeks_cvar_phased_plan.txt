@@ -1,0 +1,631 @@
+HYDROGEN MILP — COMMON-SUPPORT SELECTED-WEEK AND CVaR IMPLEMENTATION PLAN
+=======================================================================
+
+Document purpose
+----------------
+This plan defines the next implementation sequence for the hydrogen stochastic bidding test case now that all three hourly model scenario artifacts are valid, but LEAR Strict is only available on partial test-year support.
+
+The goal is to move from validated scenario artifacts to a defensible three-model comparison of hourly D-only stochastic bidding performance, followed by a controlled CVaR extension. The plan prioritises common support, traceable selected weeks, reporting discipline, and avoidance of test-set tuning.
+
+Current status
+--------------
+Hourly D-only scenario artifacts available:
+
+1. LEAR Strict partial-support thesis artifact
+   Artifact key:
+     hourly_lear_strict_donly_1092_tail_stress_v1_partial_test_support
+   Run folder:
+     20260517_104259
+   Scenario file:
+     data/02_Forecasting/01_DA_prices/hourly_da/notebook_artifacts/01_da_price_scenario_generation_hourly_with_lear_strict/20260517_104259/scenario_prices_long.csv
+   Scenario regime:
+     D_ONLY, tail_stress_v1, n_raw=400, n_final=75, residual_scale_factor=1.3, protected_tail_share=0.2
+   Validation:
+     pass; 75 scenarios per origin
+   Support:
+     delivery support 2023-10-12 to 2025-09-18
+   Limitation:
+     partial test-year support only; does not reach 2025-09-30.
+
+2. LEAR FS3 pruned thesis candidate
+   Artifact key:
+     hourly_lear_fs3_pruned_tail_stress_v1_thesis_candidate
+   Support:
+     intended hourly test period to approximately 2025-09-26.
+   Validation:
+     pass.
+
+3. XGBoost FS3 pruned thesis candidate
+   Artifact key:
+     hourly_xgboost_fs3_pruned_tail_stress_v1_thesis_candidate
+   Support:
+     intended hourly test period to approximately 2025-09-26.
+   Validation:
+     pass.
+
+Common-support implication:
+  The clean full-year hourly three-model comparison remains blocked because LEAR Strict ends early.
+  A fair selected-week three-model comparison is now possible if all selected weeks are inside the complete common support of all three models.
+
+Likely hourly test common support for selected-week comparison:
+  approximately 2024-10-02 to 2025-09-18, subject to complete-day/origin checks.
+
+Important methodological rules
+------------------------------
+1. Do not compare models on different weeks.
+2. Do not silently use different delivery support per model.
+3. Do not tune CVaR gamma on the final test weeks.
+4. Validation weeks may be used for CVaR gamma selection or narrowing.
+5. Test weeks may be used for final selected-week reporting and ex-post sensitivity only.
+6. Keep hourly and quarter-hour tracks separate.
+7. Do not add mFRR, quarter-hour, D+4, or exclusive group bids in this sequence.
+8. Default model scope is hourly D-only DA-only stochastic hourly bidding with pay-as-cleared settlement and deterministic redispatch.
+
+Target comparison structure
+---------------------------
+The selected-week framework should produce two linked but separate experiment layers:
+
+A. Validation-layer CVaR analysis
+   Purpose:
+     choose or narrow CVaR gamma settings without using test performance.
+   Period:
+     common validation support across all three models.
+   Output:
+     risk-return frontier and recommended gamma policy.
+
+B. Test-layer selected-week model comparison
+   Purpose:
+     compare scenario/model inputs on diagnostic market regimes.
+   Period:
+     common test support across all three models.
+   Output:
+     risk-neutral and fixed-risk-averse results by model and week.
+
+PHASE 0 — Freeze readiness and common-support gate
+==================================================
+
+Goal
+----
+Before running more optimisation, confirm that all three artifacts are valid and determine exact common support for validation and test.
+
+Tasks
+-----
+1. Validate these artifacts through validate_scenario_catalog.py:
+   - hourly_lear_strict_donly_1092_tail_stress_v1_partial_test_support
+   - hourly_lear_fs3_pruned_tail_stress_v1_thesis_candidate
+   - hourly_xgboost_fs3_pruned_tail_stress_v1_thesis_candidate
+
+2. Build exact common-support tables:
+   - common delivery days across all three artifacts;
+   - common validation days;
+   - common test days;
+   - complete 7-day week candidates;
+   - missing days by artifact.
+
+3. Update or create:
+   - docs/common_support_three_model_hourly.csv
+   - docs/common_support_three_model_hourly.md
+
+Required checks
+---------------
+- Each artifact has validation_mode = thesis_grade.
+- forecast_origin_utc is explicit.
+- scenario count per origin = 75.
+- scenario probabilities sum to 1 per origin.
+- all selected support days have complete 24h hourly scenario paths.
+- actual prices are complete for all candidate delivery days.
+
+Acceptance criteria
+-------------------
+- Exact common validation support is known.
+- Exact common test support is known.
+- It is clear which full weeks are eligible.
+- No optimisation runs are performed in this phase.
+
+PHASE 1 — Reselect common-support diagnostic weeks
+==================================================
+
+Goal
+----
+Select a new set of diagnostic weeks using only common support across all three hourly models.
+
+Recommended week categories
+---------------------------
+Validation weeks for CVaR selection:
+1. validation_high_volatility_week
+2. validation_stable_week
+3. validation_tail_week, if available
+
+Test weeks for reporting:
+1. test_high_volatility_week
+2. test_stable_winter_week
+3. test_stable_summer_week
+4. test_low_price_week
+5. test_tail_or_peak_week
+
+Selection rules
+---------------
+1. All selected test weeks must lie inside the common test support.
+2. All selected validation weeks must lie inside common validation support.
+3. Same weeks must be used for all three models.
+4. Avoid weeks with missing days in any artifact.
+5. Avoid DST weeks unless explicitly supported and reported.
+6. Selection may use realised prices because these are diagnostic regime labels, but this must be documented.
+7. Test week selection should not be used to choose gamma or tune model settings.
+
+Required output
+---------------
+selected_week_registry_common_support.csv with columns:
+- week_id
+- period_type: validation/test
+- week_label
+- delivery_start_date
+- delivery_end_date
+- number_of_delivery_days
+- selection_reason
+- actual_price_mean
+- actual_price_std
+- actual_price_min
+- actual_price_max
+- actual_price_spread
+- negative_price_hours
+- peak_price
+- complete_for_lear_strict
+- complete_for_lear_fs3
+- complete_for_xgboost_fs3
+- support_status
+- methodological_use: cvar_selection / diagnostic_reporting / excluded
+- notes
+
+Acceptance criteria
+-------------------
+- A common-support selected-week registry exists.
+- Test weeks are inside 2024-10-02 to 2025-09-18 or the exact audited common support.
+- Validation weeks are separated from test weeks.
+- Same weeks are available for all three models.
+
+PHASE 2 — One-week risk-neutral smoke run
+=========================================
+
+Goal
+----
+Run the full stochastic bidding + clearing + redispatch pipeline for one selected test week and all three models, risk-neutral only.
+
+Recommended first week
+----------------------
+Use the test_high_volatility_week or test_tail_or_peak_week because it is most likely to expose meaningful bidding behaviour.
+
+Run scope
+---------
+Models:
+- LEAR Strict partial-support artifact
+- LEAR FS3 pruned thesis candidate
+- XGBoost FS3 pruned thesis candidate
+
+Strategies:
+- stochastic_bid_risk_neutral
+- price_insensitive_plan_first_market_cap benchmark
+
+Do not include CVaR yet.
+
+Required outputs
+----------------
+- per-day run folders
+- submitted_bids.parquet
+- scenario_clearing.parquet
+- actual_clearing.parquet
+- actual_redispatch_timeseries.parquet
+- scenario_settlement_results.csv
+- actual_settlement_results.csv
+- daily_metrics.csv
+- weekly_metrics.csv
+- validation_checks_all_runs.csv
+- model_stats_daily.csv
+- README_selected_week_smoke.md
+
+Required plots
+--------------
+For the selected week:
+1. Scenario fan vs realised price by model.
+2. Submitted bid curve with actual price overlay.
+3. Submitted, cleared, rejected electricity.
+4. Cleared, used, unused electricity.
+5. Hydrogen sold/produced and shortfall.
+6. Storage trajectory.
+7. Realised profit vs price-insensitive benchmark.
+8. Solver runtime/model size table.
+
+Acceptance criteria
+-------------------
+- 3 models x 7 days run successfully, or failures are explicit.
+- All hard validations pass:
+  - non-anticipative bids;
+  - pay-as-cleared settlement;
+  - used + unused = cleared;
+  - benchmark same actual prices;
+  - no scenario probability failures;
+  - no hidden production cap.
+- Notebook/report can explain why models differ.
+
+PHASE 3 — Notebook/reporting inspection for one week
+====================================================
+
+Goal
+----
+Before scaling, make sure the one-week result is human-interpretable and follows the visual/reporting policy.
+
+Notebook
+--------
+Create or update:
+  scripts/Data/03_Hydrogen_Test_Case/notebooks/10_selected_week_model_comparison.ipynb
+
+The notebook must load saved run outputs only. It must not recompute MILPs.
+
+Required notebook sections
+--------------------------
+1. Scope and support
+   - hourly D-only;
+   - DA-only;
+   - common partial test support;
+   - three thesis-grade artifacts;
+   - risk-neutral only in this phase.
+
+2. Method overview
+   - scenario optimisation;
+   - bid submission;
+   - pay-as-cleared acceptance;
+   - deterministic redispatch;
+   - price-insensitive benchmark.
+
+3. Selected week explanation
+   - why the week was chosen;
+   - realised price statistics;
+   - common-support confirmation.
+
+4. Metric guide
+   Explain in plain language:
+   - realised adjusted profit;
+   - stochastic-minus-benchmark profit;
+   - submitted/cleared/rejected energy;
+   - clearing ratio;
+   - average actual price paid;
+   - hydrogen sold;
+   - shortfall;
+   - unused cleared energy;
+   - terminal inventory correction;
+   - worst-scenario profit;
+   - expected-vs-realised delta.
+
+5. Results overview table
+   Include model, realised profit, benchmark profit, delta, clearing ratio, rejected energy, hydrogen sold, shortfall, average price paid, solve time.
+
+6. Diagnostic plots
+   Include the plots listed in Phase 2.
+
+7. Interpretation
+   Explain whether differences are driven by:
+   - scenario price level/spread;
+   - bid firmness;
+   - rejected energy;
+   - paid electricity price;
+   - shortfall or overproduction;
+   - unused cleared energy;
+   - terminal inventory.
+
+8. Validation and limitations
+   - selected-week diagnostic only;
+   - partial test support;
+   - no CVaR yet;
+   - no quarter-hour;
+   - no mFRR.
+
+Acceptance criteria
+-------------------
+- Notebook runs top-to-bottom from saved outputs.
+- Every figure has a clear analytical purpose.
+- Metrics are explained for a non-expert reader.
+- No profit-only reporting.
+
+PHASE 4 — Validation-week CVaR smoke/sweep
+==========================================
+
+Goal
+----
+Test risk-averse stochastic bidding on real scenarios without tuning on test data.
+
+Scope
+-----
+Use validation weeks only.
+Start with one validation stress week. Then optionally add a stable validation week.
+
+Models
+------
+Start with all three models if computationally feasible. If not, start with LEAR Strict + one FS3 model, then extend to all three.
+
+CVaR settings
+-------------
+Default alpha:
+  0.95
+
+Initial gamma grid:
+  [0, 0.01, 0.05, 0.10, 0.25, 0.50]
+
+If runtime is high, reduce to:
+  [0, 0.05, 0.25]
+
+Required outputs
+----------------
+- cvar_sweep_daily.csv
+- cvar_sweep_weekly.csv
+- cvar_frontier_by_model.csv
+- cvar_bid_firmness_metrics.csv
+- cvar_validation_checks.csv
+- model_stats_by_gamma.csv
+- README_cvar_validation_sweep.md
+
+Required metrics
+----------------
+Economic:
+- expected adjusted profit;
+- realised adjusted profit;
+- benchmark profit;
+- stochastic-minus-benchmark;
+- DA settlement cost;
+- hydrogen revenue.
+
+Risk:
+- VaR threshold;
+- CVaR loss;
+- worst-scenario profit;
+- downside tail mean;
+- expected-vs-realised profit delta;
+- realised outcome percentile within scenario distribution if feasible.
+
+Bidding:
+- submitted energy;
+- cleared energy;
+- rejected energy;
+- clearing ratio;
+- weighted average bid price;
+- share of energy at high bid tiers;
+- share at market cap;
+- bid headroom over actual price for accepted blocks.
+
+Physical:
+- hydrogen sold;
+- shortfall;
+- unused cleared energy;
+- storage min/max;
+- reserve boundary hits;
+- terminal inventory change.
+
+Required plots
+--------------
+1. Risk-return frontier: realised/expected profit vs CVaR loss.
+2. Gamma vs worst-scenario profit.
+3. Gamma vs clearing ratio/rejected energy.
+4. Gamma vs hydrogen sold/shortfall.
+5. Gamma vs high-bid share and average bid price.
+6. Scenario profit distribution by gamma.
+
+Gamma selection rule
+--------------------
+Do not select gamma on test-week profit.
+Use validation results to define either:
+- one preferred gamma; or
+- a small fixed set of gamma values for test reporting, e.g. gamma=0 and gamma=0.10/0.25.
+
+Acceptance criteria
+-------------------
+- CVaR runs solve for selected validation week(s).
+- CVaR loss reconstruction validates.
+- Gamma changes are interpretable or explicitly reported as weak/no effect.
+- No test-period tuning occurs.
+
+PHASE 5 — Apply fixed CVaR settings to one test week
+====================================================
+
+Goal
+----
+Apply the chosen validation-based CVaR setting to the same single test week from Phase 2.
+
+Scope
+-----
+Models:
+- all three hourly artifacts
+
+Risk settings:
+- risk-neutral gamma=0
+- selected risk-averse gamma from validation
+- optionally one stronger gamma as sensitivity, pre-declared
+
+Required comparison
+-------------------
+For each model, compare:
+- risk-neutral stochastic bidding;
+- risk-averse stochastic bidding;
+- price-insensitive benchmark.
+
+Acceptance criteria
+-------------------
+- Risk-averse behaviour is explainable.
+- Any gain/loss is decomposed into clearing, price paid, hydrogen production, shortfall, unused energy, and tail-risk metrics.
+- Test results are not used to change gamma after the fact.
+
+PHASE 6 — Run all selected common-support test weeks
+====================================================
+
+Goal
+----
+Scale from one week to all selected test weeks.
+
+Scope
+-----
+Use selected_week_registry_common_support.csv.
+
+Models:
+- LEAR Strict partial-support
+- LEAR FS3 pruned thesis candidate
+- XGBoost FS3 pruned thesis candidate
+
+Risk settings:
+- gamma=0 risk-neutral
+- selected gamma risk-averse
+- optional fixed sensitivity gamma
+
+Expected run count
+------------------
+If 5 weeks, 7 days, 3 models, 2 risk settings:
+  5 x 7 x 3 x 2 = 210 stochastic MILP solves
+plus redispatch and benchmarks.
+
+This is manageable only after Phase 2-5 pass.
+
+Required suite outputs
+----------------------
+- selected_week_registry_common_support.csv
+- daily_metrics.csv
+- weekly_metrics.csv
+- weekly_metrics_by_model.csv
+- cvar_metrics_weekly.csv if CVaR included
+- benchmark_comparison_daily.csv
+- benchmark_comparison_weekly.csv
+- validation_checks_all_runs.csv
+- model_stats_daily.csv
+- run_manifest.json
+- README_selected_week_suite.md
+- figures/
+- notebook_inputs/
+
+Required thesis-style tables
+----------------------------
+1. Compact weekly model comparison table:
+   - week;
+   - model;
+   - risk setting;
+   - realised adjusted profit;
+   - benchmark profit;
+   - stochastic-minus-benchmark;
+   - hydrogen sold;
+   - shortfall;
+   - clearing ratio;
+   - average actual price paid;
+   - worst-scenario profit/CVaR.
+
+2. Appendix metric definition table:
+   - metric;
+   - unit;
+   - formula/definition;
+   - interpretation;
+   - why it matters;
+   - caveat.
+
+Required figures
+----------------
+1. Profit by model/week/risk setting.
+2. Stochastic-minus-benchmark heatmap.
+3. Clearing ratio and rejected energy by week/model.
+4. Hydrogen sold and shortfall by week/model.
+5. Average price paid by week/model.
+6. Risk-return plot by model.
+7. Price spread vs stochastic-minus-benchmark scatter.
+8. Representative week scenario fan and bid curve plots.
+
+Acceptance criteria
+-------------------
+- All selected weeks are common-support weeks.
+- All models use same weeks.
+- Benchmark included for every run.
+- Hard validations pass or failures are isolated and explained.
+- Notebook/report clearly states partial-support limitation.
+
+PHASE 7 — Consider full common-overlap period
+=============================================
+
+Goal
+----
+After selected weeks pass, evaluate whether to scale to the full common overlapping test period.
+
+Common support
+--------------
+Likely from around 2024-10-02 to 2025-09-18, but exact support must come from Phase 0.
+
+Recommended progression
+-----------------------
+1. One selected week.
+2. All selected weeks.
+3. One complete common-support month.
+4. Full common-overlap period.
+
+Do not jump directly to the full period before selected weeks are understood.
+
+Required additional outputs
+---------------------------
+- cumulative profit time series;
+- cumulative hydrogen sold;
+- failed/infeasible day table;
+- monthly summaries;
+- runtime scaling statistics;
+- comparison against price-insensitive benchmark over same support.
+
+Acceptance criteria
+-------------------
+- Daily state carryover is correct if using multi-day rolling state.
+- Failed days are explicit, not dropped silently.
+- Runtime is acceptable.
+- Results are not interpreted as full test-year results if support ends early.
+
+PHASE 8 — Quarter-hour tracks remain separate
+=============================================
+
+Goal
+----
+Prevent accidental mixing of hourly selected-week results with quarter-hour observed or counterfactual tracks.
+
+Rules
+-----
+1. Quarter-hour observed-market track uses observed targets only and later 2026 support.
+2. Quarter-hour counterfactual track uses synthetic/frozen paths and must be labelled counterfactual.
+3. Hourly vs quarter-hour comparison is blocked unless support and assumptions are matched or differences are explicitly framed.
+4. Do not use quarter-hour observed 2026 results to fill hourly 2024/2025 gaps.
+
+Acceptance criteria
+-------------------
+- Reporting clearly separates hourly, QH observed, and QH counterfactual.
+- No mixed-support plot is presented as a clean granularity comparison.
+
+Recommended immediate Codex task
+================================
+
+Use this prompt after saving this plan:
+
+Implement Phase 0 and Phase 1 of the common-support selected-week/CVaR plan.
+
+Context:
+- Three hourly D-only scenario artifacts now validate:
+  1. hourly_lear_strict_donly_1092_tail_stress_v1_partial_test_support
+  2. hourly_lear_fs3_pruned_tail_stress_v1_thesis_candidate
+  3. hourly_xgboost_fs3_pruned_tail_stress_v1_thesis_candidate
+- LEAR Strict is partial test-year support only, delivery support 2023-10-12 to 2025-09-18.
+- We need selected diagnostic weeks common to all three models before running more MILP comparisons.
+- Do not run optimisation yet.
+- Do not run CVaR yet.
+- Do not modify the MILP.
+
+Goal:
+Validate exact common support and select common-support validation/test weeks.
+
+Tasks:
+1. Validate the three scenario artifacts.
+2. Build exact common-support tables for validation and test periods.
+3. Create selected_week_registry_common_support.csv with validation and test weeks.
+4. Ensure all selected weeks are complete for all three artifacts and actual prices.
+5. Update notebook/reporting docs only with support/selection findings.
+6. Do not run stochastic bidding MILPs.
+
+Acceptance criteria:
+- common_support_three_model_hourly.csv exists.
+- selected_week_registry_common_support.csv exists.
+- selected test weeks lie inside common test support.
+- selected validation weeks are separated for CVaR tuning.
+- no optimisation runs are performed.

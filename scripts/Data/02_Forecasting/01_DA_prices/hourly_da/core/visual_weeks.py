@@ -25,6 +25,7 @@ WEEKLY_FEATURE_COLUMNS = [
 
 def prepare_test_actuals(canonical_frame: pd.DataFrame, config: HourlyDAPipelineConfig) -> pd.DataFrame:
     actuals = canonical_frame[[config.timestamp_col, config.target_col, "is_observed_target"]].copy()
+    actuals.loc[~actuals["is_observed_target"].fillna(False).astype(bool), config.target_col] = np.nan
     actuals[config.timestamp_col] = pd.to_datetime(actuals[config.timestamp_col], utc=True)
     actuals["timestamp_local"] = actuals[config.timestamp_col].dt.tz_convert(config.resolved_business_timezone())
     actuals["local_delivery_date"] = actuals["timestamp_local"].dt.date

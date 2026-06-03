@@ -115,7 +115,9 @@ def run_walk_forward_for_split(
             model_predictions["fs_level"] = model.fs_level
             model_predictions["dataset_split"] = split_name
             model_predictions["forecast_origin_utc"] = forecast_origin_utc
-            model_predictions["y_true"] = model_predictions[config.target_col]
+            model_predictions["y_true"] = model_predictions[config.target_col].where(
+                model_predictions["is_observed_target"].fillna(False).astype(bool)
+            )
             model_predictions["y_pred"] = preds.to_numpy(dtype=float)
             model_predictions["fit_time_sec"] = fit_time_sec
             model_predictions["predict_time_sec"] = predict_time_sec

@@ -1,0 +1,38 @@
+{
+  "classification": "C",
+  "classification_label": "Adjust strict feature-builder input construction while preserving LEAR_STRICT methodology",
+  "diagnosis_summary": {
+    "coverage_pct_full_grid": 7.125771604938272,
+    "expected_anchor_rows": 25920,
+    "generated_anchor_rows": 1847,
+    "generated_origins": 20,
+    "total_origins": 216,
+    "validation_test_coverage_pct": 0.0
+  },
+  "primary_blockers": [
+    {
+      "blocker": "Strict feature-matrix drop before prediction loop",
+      "evidence": "prediction loop skipped_rows=0; overlap grid only 1847 rows from 20 origins"
+    },
+    {
+      "blocker": "Missing strict lagged hourly price features for many origins",
+      "evidence": "top skipped reasons include missing_p_base_d_minus_1/_2/_3/_7"
+    },
+    {
+      "blocker": "Strict exogenous coverage ends at 2025-12-31",
+      "evidence": "da_total_load_forecast max=2025-12-31T23:00:00Z and da_res_generation_forecast max=2025-12-31T23:00:00Z"
+    },
+    {
+      "blocker": "Bridge input does not reach full anchor target max",
+      "evidence": "bridge max=2026-04-30T21:00:00Z vs anchor target max=2026-05-04T21:00:00Z"
+    }
+  ],
+  "recommended_actions": [
+    "Extend/refresh strict exogenous inputs (da_total_load_forecast, da_res_generation_forecast) through the observed-QH evaluation end.",
+    "Regenerate hourly_backbone_bridge_input.csv so hourly targets cover the full anchor target window through 2026-05-04T21:00:00Z.",
+    "Keep strict no-future LEAR_STRICT builder/model unchanged; rerun export only after input extension.",
+    "Add runner preflight checks for bridge/exogenous max timestamp coverage against anchor target max."
+  ],
+  "safe_next_step": "Run check-only and 3-origin smoke after data/input repair, then decide on full rerun.",
+  "full_rerun_now_recommended": false
+}

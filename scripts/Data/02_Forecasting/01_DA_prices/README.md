@@ -1,6 +1,9 @@
-# Hourly DA Forecasting Pipeline
+# DA Forecasting Pipeline
 
-This folder contains the thesis-aligned implementation for hourly day-ahead electricity price forecasting only.
+This folder contains the thesis-aligned implementation for:
+
+- audited hourly day-ahead electricity price forecasting; and
+- the canonical observed-market quarter-hour / 15-minute deterministic DA forecast extension built on top of the audited hourly framework.
 
 Current implemented scope:
 - Hourly DA prices for `NL`
@@ -8,6 +11,8 @@ Current implemented scope:
 - Forecast horizon `D` through `D+4`
 - Daily rolling-origin evaluation
 - Seasonal naive baselines, LEAR, XGBoost, and Prophet
+- Quarter-hour deterministic DA forecasting for the observed post-transition Dutch 15-minute market period
+- DA scenario-generation preparation through compatible deterministic hourly and quarter-hour artifacts
 
 Active DAM ladder:
 - `FS0`: seasonal naive previous-week, previous-year
@@ -25,8 +30,8 @@ Shortlisting and tuning:
 - future ablation runs should inherit their `rMAE` denominator from the parent benchmark stage's `official_naive_reference.json`
 
 Archived local-origin scaffold:
-- [legacy_local_origin_scaffold](C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/02_Forecasting/01_DA_prices/archive/legacy_local_origin_scaffold)
-- Retired classical benchmark artifacts are stored under [archive/retired_models](C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/02_Forecasting/01_DA_prices/archive/retired_models)
+- [legacy_local_origin_scaffold](scripts/Data/02_Forecasting/01_DA_prices/archive/legacy_local_origin_scaffold)
+- Retired classical benchmark artifacts are stored under [archive/retired_models](scripts/Data/02_Forecasting/01_DA_prices/archive/retired_models)
 
 Main runners:
 - `run_data_overview.py`
@@ -38,6 +43,20 @@ Main runners:
 - `run_model_comparison.py --fs-level {FS1,FS2}`
 - `run_feature_family_ablation.py --fs-level {FS1,FS2} --model-family {...}`
 - `run_fs3_ordered_benchmarks.py --execution-mode {ordered,feature_value,all}`
+- `run_15min_observed_deterministic_forecast.py`
+- `run_15min_observed_deterministic_smoke_checks.py`
+- `run_15min_canonical_v1_counterfactual_evaluation.py`
+- `run_15min_canonical_v1_counterfactual_smoke_checks.py`
+
+Quarter-hour deterministic path:
+- package root: `scripts/Data/02_Forecasting/01_DA_prices/quarterhour_da`
+- canonical observed-market runner: `quarterhour_da.observed_deterministic.run_observed_market_deterministic_forecast`
+- canonical counterfactual full-year runner: `quarterhour_da.counterfactual_canonical.run_canonical_v1_counterfactual_evaluation`
+- official output root: `data/02_Forecasting/01_DA_prices/quarterhour_da/runs/<run_id>/`
+- keep the existing `phase02/03/04/07` workflow as legacy/staging/diagnostic/downstream-support logic
+- do not reuse `hourly_da.core.scenario_generation` test-preferred slice selection for quarter-hour model or benchmark selection
+- score quarter-hour evaluation on observed targets only; interpolated or flagged target rows keep `y_true = NaN`
+- keep the canonical_v1 full-year benchmark clearly separated from observed-market 15-minute accuracy claims
 
 Active execution shape:
 - each model and feature-set layer runs in its own dedicated benchmark artifact
@@ -66,6 +85,7 @@ Latest-run selection:
 
 Outputs are written under:
 - `data/02_Forecasting/01_DA_prices/hourly_da/runs/<run_id>/`
+- `data/02_Forecasting/01_DA_prices/quarterhour_da/runs/<run_id>/`
 - full retained benchmark runs keep `predictions_long.parquet`; `predictions_scored` is no longer persisted
 - benchmark and aggregate comparison runs also write `model_settings_summary.csv` so the frozen settings used by each model are visible at run level
 - benchmark and aggregate comparison `run_summary.json` files now also expose the effective policy snapshot and the parent-benchmark `rMAE` reference metadata contract for later ablation work
@@ -79,7 +99,6 @@ Phase 2 planning artifacts:
 - the current FS3 code-defined bundle inventory and live availability status can be regenerated with `run_fs3_taxonomy_inventory.py`
 
 Not yet implemented in this workstream:
-- quarter-hourly DA forecasting
 - mFRR forecasting
 - probabilistic forecasting
 - optimizer integration

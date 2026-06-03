@@ -1,0 +1,3 @@
+series,start_utc,end_utc,rows,local_days_total,local_days_complete24,post_days_total,post_days_complete24
+observed_run_bridge_filtered_for_exporter,2021-12-31T23:00:00+00:00,2026-05-04T21:00:00+00:00,37747,2688,2255,223,149
+phase07_bridge_nl,2021-12-31T23:00:00+00:00,2026-04-30T20:00:00+00:00,37922,1581,1566,212,208

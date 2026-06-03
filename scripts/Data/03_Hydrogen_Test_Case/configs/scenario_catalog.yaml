@@ -1,0 +1,98 @@
+default_artifact: hourly_lear_strict
+
+artifacts:
+  hourly_lear_strict:
+    path: data/02_Forecasting/01_DA_prices/hourly_da/notebook_artifacts/01_da_price_scenario_generation_hourly_with_lear_strict/20260516_002902/scenario_prices_long.csv
+    model_id: lear_strict_hourly_anchor_export
+    dataset_split: null
+    granularity: hourly
+    horizon: D_ONLY
+    scenario_variant: tail_stress_v1
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: 20260511_100740_lear_strict_observed_qh_grid_export_phase07_bridge_full_run
+    derived_from_run: 20260516_002902
+  hourly_lear_fs3_pruned_tail_stress_v1_thesis_candidate:
+    path: data/02_Forecasting/01_DA_prices/hourly_da/notebook_artifacts/01_da_price_scenario_generation_hourly_with_lear_strict/20260516_002902/scenario_prices_long.csv
+    model_id: lear_fs3_combo_pruned_candidate
+    dataset_split: null
+    granularity: hourly
+    horizon: D_ONLY
+    scenario_variant: tail_stress_v1
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: 20260426_151547_lear_fs3_combo_pruned_candidate_benchmark
+    derived_from_run: 20260516_002902
+  hourly_lear_fs3_promoted_legacy_available:
+    path: data/02_Forecasting/01_DA_prices/hourly_da/notebook_artifacts/01_da_price_scenario_generation_hourly/20260429_193206/scenario_prices_long.csv
+    model_id: lear_fs3_combo_promoted
+    dataset_split: test
+    granularity: hourly
+    validation_mode: smoke_test
+    allow_forecast_origin_reconstruction: true
+  hourly_lear_fs3_promoted_base_plus_b_integration_candidate:
+    path: data/02_Forecasting/01_DA_prices/hourly_da/notebook_artifacts/legacy_variant_integration_candidates/hourly_lear_fs3_promoted_base_plus_b_integration_candidate/scenario_prices_long.csv
+    model_id: lear_fs3_combo_promoted
+    dataset_split: test
+    granularity: hourly
+    validation_mode: smoke_test
+    allow_forecast_origin_reconstruction: true
+    thesis_grade: false
+    validation_status: integration_candidate
+    scenario_variant: base_plus_b
+    derived_from: hourly_legacy_20260429_193206
+    horizon: D_ONLY
+  hourly_xgboost_fs3_pruned_base_plus_b_integration_candidate:
+    path: data/02_Forecasting/01_DA_prices/hourly_da/notebook_artifacts/legacy_variant_integration_candidates/hourly_xgboost_fs3_pruned_base_plus_b_integration_candidate/scenario_prices_long.csv
+    model_id: xgboost_fs3_combo_pruned_candidate
+    dataset_split: test
+    granularity: hourly
+    validation_mode: smoke_test
+    allow_forecast_origin_reconstruction: true
+    thesis_grade: false
+    validation_status: integration_candidate
+    scenario_variant: base_plus_b
+    derived_from: hourly_legacy_20260429_193206
+    horizon: D_ONLY
+  hourly_xgboost_fs3_pruned_tail_stress_v1_thesis_candidate:
+    path: data/02_Forecasting/01_DA_prices/hourly_da/notebook_artifacts/01_da_price_scenario_generation_hourly_with_lear_strict/20260516_084412/scenario_prices_long.csv
+    model_id: xgboost_fs3_combo_pruned_candidate
+    dataset_split: null
+    granularity: hourly
+    horizon: D_ONLY
+    scenario_variant: tail_stress_v1
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: 20260426_153605_xgboost_fs3_combo_pruned_candidate_benchmark
+    derived_from_run: 20260516_084412
+  hourly_lear_strict_donly_1092_tail_stress_v1_partial_test_support:
+    path: data/02_Forecasting/01_DA_prices/hourly_da/notebook_artifacts/01_da_price_scenario_generation_hourly_with_lear_strict/20260517_104259/scenario_prices_long.csv
+    model_id: lear_strict_hourly_anchor_export
+    dataset_split: null
+    granularity: hourly
+    horizon: D_ONLY
+    scenario_variant: tail_stress_v1
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: lear_strict_donly_1092_test_year_dense
+    derived_from_run: 20260517_104259
+    support_status: partial_test_year
+  hourly_lear_strict_donly_1092_repaired_support_tail_calibrated_v1:
+    path: data/02_Forecasting/01_DA_prices/hourly_da/repair_runs/20260522_210021_lear_strict_donly_support_repair/hourly_lear_strict_donly_1092_repaired_support_tail_calibrated_v1/scenario_prices_long.csv
+    model_id: lear_strict_donly_1092_repaired_anchor
+    dataset_split: null
+    granularity: hourly
+    horizon: D_ONLY
+    scenario_variant: option_a_plus_c_plus_asym_l12_u14_c11
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: 20260522_210021_lear_strict_donly_support_repair
+    derived_from_run: 20260522_210021_lear_strict_donly_support_repair
+    support_status: full_24h_days_dst_excluded
+    probability_convention: empirical_cluster_mass_post_reduction
+    scenario_count: 75

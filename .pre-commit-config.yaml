@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: check-portable-paths
+        name: check portable paths and obvious secrets
+        entry: python scripts/dev/check_portable_paths.py
+        language: system
+        pass_filenames: false

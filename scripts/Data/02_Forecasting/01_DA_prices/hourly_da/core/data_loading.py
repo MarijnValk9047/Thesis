@@ -315,7 +315,12 @@ def handle_missing_da_prices(frame: pd.DataFrame, config: HourlyDAPipelineConfig
         & ~merged["_original_value_present"].fillna(False).astype(bool)
     )
     merged["is_missing_observation"] = merged[config.target_col].isna()
-    merged["is_observed_target"] = ~merged["is_missing_observation"]
+    observed_target_mask = ~merged["is_missing_observation"]
+    if "is_interpolated_value" in merged.columns:
+        observed_target_mask &= ~merged["is_interpolated_value"].fillna(False).astype(bool)
+    if "is_flagged_missing_value" in merged.columns:
+        observed_target_mask &= ~merged["is_flagged_missing_value"].fillna(False).astype(bool)
+    merged["is_observed_target"] = observed_target_mask
 
     timezone = config.resolved_business_timezone()
     target_timestamps_local = merged[config.timestamp_col].dt.tz_convert(timezone)

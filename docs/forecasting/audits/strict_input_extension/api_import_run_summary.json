@@ -1,0 +1,18 @@
+{
+  "timestamp_utc": "2026-05-10T14:04:56.008810+00:00",
+  "entsoe_key_env_var": "ENTSOE_KEY",
+  "entsoe_key_present": true,
+  "imports_executed": [
+    "run_lago_lear_data_import.py --run-import --start-year 2026 --end-year 2026 --datasets load_da load_week_ahead --output-root data/00_raw_lago_lear_six_year --skip-existing",
+    "run_lago_lear_res_forecast_import.py --run-import --start-year 2026 --end-year 2026 --output-root data/00_raw_lago_lear_six_year --skip-existing",
+    "run_lago_lear_data_import.py --run-import --start-year 2026 --end-year 2026 --datasets da_price --output-root data/00_raw_lago_lear_six_year --skip-existing"
+  ],
+  "raw_file_presence": {
+    "load_da_2026_files": 1,
+    "load_week_ahead_2026_files": 1,
+    "res_a69_b16_2026_files": 2,
+    "res_a69_b18_2026_files": 2,
+    "res_a69_b19_2026_files": 2,
+    "da_price_2026_files": 2
+  }
+}

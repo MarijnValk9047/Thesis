@@ -1,0 +1,276 @@
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+from pathlib import Path
+
+
+def markdown_cell(source: str) -> dict:
+    return {
+        "cell_type": "markdown",
+        "metadata": {},
+        "source": [line + ("\n" if not line.endswith("\n") else "") for line in source.splitlines()],
+    }
+
+
+def code_cell(source: str) -> dict:
+    return {
+        "cell_type": "code",
+        "execution_count": None,
+        "metadata": {},
+        "outputs": [],
+        "source": [line + ("\n" if not line.endswith("\n") else "") for line in source.splitlines()],
+    }
+
+
+def _relative_run_dir_string(run_dir: Path) -> str:
+    try:
+        return str(run_dir.resolve().relative_to(Path.cwd().resolve())).replace("\\", "/")
+    except Exception:  # noqa: BLE001
+        return str(run_dir.resolve()).replace("\\", "/")
+
+
+def build_notebook_payload(run_dir: Path) -> dict:
+    run_dir_str = _relative_run_dir_string(run_dir)
+    cells = [
+        markdown_cell(
+            "# How to use this notebook\n\n"
+            "1. Change the `RUN_DIR` value in the first code cell only.\n"
+            "2. Run all cells from top to bottom.\n"
+            "3. The notebook validates that the standard output files exist before reading them.\n"
+            "4. The notebook loads saved outputs only. It does **not** rerun MILPs, benchmarks, or backtests.\n"
+            "5. Gamma values here are fixed risk-preference policies, not test-week tuning candidates."
+        ),
+        code_cell(
+            "# Input cell: change RUN_DIR only\n"
+            f"RUN_DIR = r\"{run_dir_str}\""
+        ),
+        code_cell(
+            "from pathlib import Path\n"
+            "import pandas as pd\n"
+            "from IPython.display import display, Markdown, Image\n\n"
+            "run_dir_input = Path(RUN_DIR)\n"
+            "if run_dir_input.is_absolute() and run_dir_input.exists():\n"
+            "    run_dir = run_dir_input.resolve()\n"
+            "else:\n"
+            "    run_dir = None\n"
+            "    for base_dir in [Path.cwd(), *Path.cwd().parents]:\n"
+            "        candidate = (base_dir / run_dir_input).resolve()\n"
+            "        if candidate.exists():\n"
+            "            run_dir = candidate\n"
+            "            break\n"
+            "    if run_dir is None:\n"
+            "        run_dir = (Path.cwd() / run_dir_input).resolve()\n"
+            "NOTEBOOK_INPUTS = run_dir / 'notebook_inputs'\n"
+            "FIGURES_DIR = run_dir / 'figures'\n"
+            "required_files = [\n"
+            "    NOTEBOOK_INPUTS / 'support_days.csv',\n"
+            "    NOTEBOOK_INPUTS / 'daily_metrics.csv',\n"
+            "    NOTEBOOK_INPUTS / 'weekly_metrics.csv',\n"
+            "    NOTEBOOK_INPUTS / 'benchmark_metrics.csv',\n"
+            "    NOTEBOOK_INPUTS / 'perfect_foresight_metrics.csv',\n"
+            "    NOTEBOOK_INPUTS / 'cvar_bid_firmness_metrics.csv',\n"
+            "    NOTEBOOK_INPUTS / 'cvar_validation_checks.csv',\n"
+            "    NOTEBOOK_INPUTS / 'validation_checks_all_runs.csv',\n"
+            "    FIGURES_DIR / 'fig_economic_decomposition_by_model_gamma.png',\n"
+            "]\n"
+            "missing_files = [str(path) for path in required_files if not path.exists()]\n"
+            "if missing_files:\n"
+            "    raise FileNotFoundError('Missing required run outputs:\\n' + '\\n'.join(missing_files))\n"
+            "selected_weeks_path = NOTEBOOK_INPUTS / 'selected_weeks_manifest_table.csv'\n"
+            "selected_week_path = NOTEBOOK_INPUTS / 'selected_week_manifest_table.csv'\n"
+            "if selected_weeks_path.exists():\n"
+            "    selected_weeks = pd.read_csv(selected_weeks_path)\n"
+            "elif selected_week_path.exists():\n"
+            "    selected_weeks = pd.read_csv(selected_week_path)\n"
+            "else:\n"
+            "    raise FileNotFoundError('Expected selected_weeks_manifest_table.csv or selected_week_manifest_table.csv in notebook_inputs.')\n"
+            "frontier_path = NOTEBOOK_INPUTS / 'cvar_frontier_aggregated.csv'\n"
+            "frontier_week_path = NOTEBOOK_INPUTS / 'cvar_frontier_by_model_week.csv'\n"
+            "frontier_model_path = NOTEBOOK_INPUTS / 'cvar_frontier_by_model.csv'\n"
+            "if frontier_path.exists():\n"
+            "    frontier_aggregated = pd.read_csv(frontier_path)\n"
+            "else:\n"
+            "    frontier_aggregated = pd.DataFrame()\n"
+            "if frontier_week_path.exists():\n"
+            "    frontier_weekly = pd.read_csv(frontier_week_path)\n"
+            "elif frontier_model_path.exists():\n"
+            "    frontier_weekly = pd.read_csv(frontier_model_path)\n"
+            "else:\n"
+            "    frontier_weekly = pd.DataFrame()\n"
+            "daily_metrics = pd.read_csv(NOTEBOOK_INPUTS / 'daily_metrics.csv')\n"
+            "weekly_metrics = pd.read_csv(NOTEBOOK_INPUTS / 'weekly_metrics.csv')\n"
+            "benchmark_metrics = pd.read_csv(NOTEBOOK_INPUTS / 'benchmark_metrics.csv')\n"
+            "perfect_foresight_metrics = pd.read_csv(NOTEBOOK_INPUTS / 'perfect_foresight_metrics.csv')\n"
+            "bid_firmness = pd.read_csv(NOTEBOOK_INPUTS / 'cvar_bid_firmness_metrics.csv')\n"
+            "cvar_checks = pd.read_csv(NOTEBOOK_INPUTS / 'cvar_validation_checks.csv')\n"
+            "validation_checks = pd.read_csv(NOTEBOOK_INPUTS / 'validation_checks_all_runs.csv')\n"
+            "model_selection_path = NOTEBOOK_INPUTS / 'model_selection_evidence_summary.csv'\n"
+            "model_selection = pd.read_csv(model_selection_path) if model_selection_path.exists() else pd.DataFrame()\n"
+            "support_days = pd.read_csv(NOTEBOOK_INPUTS / 'support_days.csv')\n"
+            "is_multi_week = int(selected_weeks['week_label'].astype(str).nunique()) > 1\n"
+        ),
+        markdown_cell("## Run scope and validation"),
+        code_cell(
+            "hard_fail_count = int(validation_checks.loc[(validation_checks['severity'].astype(str) == 'hard_fail') & (validation_checks['status'].astype(str) == 'fail')].shape[0])\n"
+            "cvar_fail_count = int(cvar_checks.loc[cvar_checks['status'].astype(str) == 'fail'].shape[0])\n"
+            "summary = pd.DataFrame([{\n"
+            "    'week_count': int(selected_weeks['week_label'].astype(str).nunique()),\n"
+            "    'weeks': ', '.join(selected_weeks['week_label'].astype(str).tolist()),\n"
+            "    'models': ', '.join(weekly_metrics['model_label'].astype(str).drop_duplicates().tolist()),\n"
+            "    'gamma_values': ', '.join([f'{value:.2f}' for value in sorted(weekly_metrics['cvar_gamma'].astype(float).unique().tolist())]),\n"
+            "    'alpha': ', '.join([f'{value:.2f}' for value in sorted(weekly_metrics['cvar_alpha'].astype(float).unique().tolist())]),\n"
+            "    'price_insensitive_benchmark': not benchmark_metrics.empty,\n"
+            "    'perfect_foresight_benchmark': not perfect_foresight_metrics.empty,\n"
+            "    'hard_validation_failures': hard_fail_count,\n"
+            "    'cvar_failures': cvar_fail_count,\n"
+            "}])\n"
+            "display(summary)\n"
+            "display(selected_weeks[['week_label', 'delivery_start_date', 'delivery_end_date', 'selection_reason']])"
+        ),
+        markdown_cell("## Headline aggregated performance table"),
+        code_cell(
+            "if not frontier_aggregated.empty:\n"
+            "    display(frontier_aggregated.round(3))\n"
+            "elif not model_selection.empty:\n"
+            "    display(model_selection.loc[model_selection['row_type'].astype(str).eq('model_gamma')].round(3))\n"
+            "else:\n"
+            "    agg = weekly_metrics.groupby(['model_label', 'cvar_gamma'], as_index=False).agg(realised_adjusted_profit=('realised_adjusted_profit','mean'), cvar_tail_profit=('cvar_tail_profit','mean'), value_captured_vs_perfect_foresight=('value_captured_vs_perfect_foresight','mean'))\n"
+            "    display(agg.round(3))"
+        ),
+        markdown_cell("## Weekly performance table"),
+        code_cell(
+            "display(weekly_metrics[['week_label','model_label','cvar_gamma','realised_adjusted_profit','stochastic_minus_benchmark_profit','perfect_foresight_profit','value_captured_vs_perfect_foresight','cvar_tail_profit','worst_scenario_profit','clearing_ratio','rejected_energy_mwh','unused_cleared_energy_mwh','hydrogen_sold_or_compressed_kg','shortfall_kg','average_actual_price_paid','solve_time_seconds']].sort_values(['week_label','model_label','cvar_gamma']).round(3))"
+        ),
+        markdown_cell("## Risk-return figures"),
+        code_cell(
+            "for figure_name in [\n"
+            "    'fig_aggregated_risk_return_profit_vs_cvar_tail_profit.png',\n"
+            "    'fig_aggregated_value_captured_vs_profit.png',\n"
+            "    'fig_gamma_vs_realised_profit_by_model.png',\n"
+            "    'fig_gamma_vs_cvar_tail_profit_by_model.png',\n"
+            "    'fig_gamma_vs_worst_scenario_profit_by_model.png',\n"
+            "]:\n"
+            "    path = FIGURES_DIR / figure_name\n"
+            "    if path.exists():\n"
+            "        display(Markdown(f'### {figure_name}'))\n"
+            "        display(Image(filename=str(path)))"
+        ),
+        markdown_cell("## Benchmark comparison"),
+        code_cell(
+            "display(benchmark_metrics.round(3))\n"
+            "display(perfect_foresight_metrics.round(3))"
+        ),
+        code_cell(
+            "for figure_name in [\n"
+            "    'fig_weekly_profit_vs_benchmarks.png',\n"
+            "    'fig_value_captured_vs_perfect_foresight.png',\n"
+            "]:\n"
+            "    path = FIGURES_DIR / figure_name\n"
+            "    if path.exists():\n"
+            "        display(Markdown(f'### {figure_name}'))\n"
+            "        display(Image(filename=str(path)))"
+        ),
+        markdown_cell("## Bidding and clearing behaviour"),
+        code_cell(
+            "display(bid_firmness.round(3))\n"
+            "for figure_name in [\n"
+            "    'fig_clearing_ratio_by_model_gamma_week.png',\n"
+            "    'fig_rejected_energy_by_model_gamma_week.png',\n"
+            "    'fig_unused_energy_by_model_gamma_week.png',\n"
+            "    'fig_bid_firmness_by_model_gamma.png',\n"
+            "]:\n"
+            "    path = FIGURES_DIR / figure_name\n"
+            "    if path.exists():\n"
+            "        display(Markdown(f'### {figure_name}'))\n"
+            "        display(Image(filename=str(path)))"
+        ),
+        markdown_cell("## Scenario and price context"),
+        code_cell(
+            "scenario_figures = sorted(FIGURES_DIR.glob('fig_scenario_fan_*.png'))\n"
+            "for path in scenario_figures:\n"
+            "    display(Markdown(f'### {path.name}'))\n"
+            "    display(Image(filename=str(path)))"
+        ),
+        markdown_cell("## Operational asset behaviour"),
+        code_cell(
+            "example_figures = sorted(FIGURES_DIR.glob('fig_example_day_operation_*.png'))\n"
+            "for path in example_figures:\n"
+            "    display(Markdown(f'### {path.name}'))\n"
+            "    display(Image(filename=str(path)))"
+        ),
+        markdown_cell("## Economic decomposition"),
+        code_cell(
+            "path = FIGURES_DIR / 'fig_economic_decomposition_by_model_gamma.png'\n"
+            "if path.exists():\n"
+            "    display(Image(filename=str(path)))"
+        ),
+        markdown_cell("## Model-selection evidence"),
+        code_cell(
+            "if not model_selection.empty:\n"
+            "    display(model_selection.round(3))\n"
+            "path = FIGURES_DIR / 'fig_model_selection_summary.png'\n"
+            "if path.exists():\n"
+            "    display(Image(filename=str(path)))"
+        ),
+        markdown_cell("## Interpretation helper"),
+        code_cell(
+            "best_realised = weekly_metrics.loc[pd.to_numeric(weekly_metrics['realised_adjusted_profit'], errors='coerce').idxmax()]\n"
+            "best_capture = weekly_metrics.loc[pd.to_numeric(weekly_metrics['value_captured_vs_perfect_foresight'], errors='coerce').idxmax()]\n"
+            "lowest_shortfall = weekly_metrics.loc[pd.to_numeric(weekly_metrics['shortfall_kg'], errors='coerce').idxmin()]\n"
+            "lowest_rejected = weekly_metrics.loc[pd.to_numeric(weekly_metrics['rejected_energy_mwh'], errors='coerce').idxmin()]\n"
+            "best_tail = weekly_metrics.loc[pd.to_numeric(weekly_metrics['cvar_tail_profit'], errors='coerce').idxmax()]\n"
+            "bullet_lines = [\n"
+            "    f\"- best realised profit: {best_realised['model_label']} gamma={float(best_realised['cvar_gamma']):.2f} {best_realised['week_label']} ({float(best_realised['realised_adjusted_profit']):,.0f} EUR)\",\n"
+            "    f\"- best value captured vs perfect foresight: {best_capture['model_label']} gamma={float(best_capture['cvar_gamma']):.2f} {best_capture['week_label']} ({float(best_capture['value_captured_vs_perfect_foresight']):.3f})\",\n"
+            "    f\"- lowest shortfall: {lowest_shortfall['model_label']} gamma={float(lowest_shortfall['cvar_gamma']):.2f} ({float(lowest_shortfall['shortfall_kg']):,.1f} kg)\",\n"
+            "    f\"- lowest rejected energy: {lowest_rejected['model_label']} gamma={float(lowest_rejected['cvar_gamma']):.2f} ({float(lowest_rejected['rejected_energy_mwh']):,.1f} MWh)\",\n"
+            "    f\"- best CVaR tail profit: {best_tail['model_label']} gamma={float(best_tail['cvar_gamma']):.2f} {best_tail['week_label']} ({float(best_tail['cvar_tail_profit']):,.0f} EUR)\",\n"
+            "    f\"- hard validation failures: {hard_fail_count}\",\n"
+            "    f\"- CVaR check failures: {cvar_fail_count}\",\n"
+            "]\n"
+            "display(Markdown('\\n'.join(bullet_lines)))"
+        ),
+    ]
+    return {
+        "cells": cells,
+        "metadata": {
+            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+            "language_info": {"name": "python", "version": "3.x"},
+        },
+        "nbformat": 4,
+        "nbformat_minor": 5,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Create the reusable standard CVaR policy test report notebook.")
+    parser.add_argument("--run-dir", required=True, help="Path to the completed Phase E1 or Phase E2 run folder.")
+    parser.add_argument(
+        "--output-path",
+        default="scripts/Data/03_Hydrogen_Test_Case/notebooks/13_standard_cvar_policy_test_report.ipynb",
+        help="Notebook path to write.",
+    )
+    parser.add_argument(
+        "--copy-to-run-dir",
+        action="store_true",
+        help="Also copy the notebook into <run-dir>/notebook_exports/.",
+    )
+    args = parser.parse_args()
+    run_dir = Path(args.run_dir).resolve()
+    if not run_dir.exists():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+    output_path = Path(args.output_path).resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = build_notebook_payload(run_dir)
+    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    if args.copy_to_run_dir:
+        export_dir = run_dir / "notebook_exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(output_path, export_dir / output_path.name)
+    print(output_path)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,10 @@
+dataset_split,lead_day,skip_reason,source_stage,rows
+train,0,missing_hourly_bridge_price,feature_builder,1
+train,1,missing_p_base_d_minus_1,feature_builder,24
+train,1,missing_p_base_d_minus_7,feature_builder,23
+train,1,missing_hourly_bridge_price,feature_builder,1
+train,2,missing_p_base_d_minus_1,feature_builder,24
+train,2,missing_p_base_d_minus_2,feature_builder,23
+train,2,missing_hourly_bridge_price,feature_builder,1
+train,3,missing_p_base_d_minus_7,feature_builder,24
+train,3,missing_hourly_bridge_price,feature_builder,3

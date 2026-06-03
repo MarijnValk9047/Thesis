@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+gurobi.lic
+*.lic
 
 # Virtual environments
 .venv/
@@ -28,6 +30,7 @@ data/01_cleaned/Balancing/
 data/01_cleaned/**/parsed/
 data/01_cleaned/**/quarterhour/
 data/01_cleaned/Day_ahead_prices/DA_prices/quarterly/
+data/01_cleaned/Day_ahead_prices_quarterly/
 data/01_cleaned/Day_ahead_prices/plots/
 data/01_cleaned/Generation/actual_generation_by_psr/hourly/actual_generation_by_psr_hourly_long.csv
 data/01_cleaned/Generation/installed_capacity_by_psr/hourly/installed_capacity_by_psr_hourly_long.csv
@@ -37,3 +40,55 @@ data/02_Forecasting/**/runs/
 data/02_Forecasting/**/notebook_artifacts/
 data/02_Forecasting/**/archived_post_phase_b/
 data/02_Forecasting/01_DA_prices/archive/
+
+# Workspace triage and local cleanup reports
+workspace_triage/
+
+# Hydrogen optimisation run artifacts
+scripts/Data/03_Hydrogen_Test_Case/runs/
+
+# Documentation export bundles
+docs/optimisation/exports/
+docs/optimisation/*.zip
+
+# Temporary debug folders and accidental local files
+tmp_phase07_debug/
+--config
+
+# Solver and runtime logs
+*.log
+
+# Forecasting generated artifacts and local experiment outputs
+data/02_Forecasting/**/repair_runs/
+data/02_Forecasting/**/frozen_results/
+data/02_Forecasting/**/runs_lago_lear/
+data/02_Forecasting/**/scenario_evaluation/
+data/02_Forecasting/**/finalisation_runs/
+data/02_Forecasting/**/canonical_actual_runs/
+data/02_Forecasting/**/phase04_runs/
+data/02_Forecasting/**/phase05_runs/
+data/02_Forecasting/**/phase06_runs/
+data/02_Forecasting/**/phase07_runs/
+
+# Lago/LEAR six-year local raw and cleaned data artifacts
+data/00_raw_lago_lear_six_year/
+data/01_cleaned_lago_lear_six_year/
+
+# Local accidental data copies / repair diagnostics
+data/01_cleaned/Day_ahead_prices/DA_prices/hourly/* - kopie.csv
+data/01_cleaned/Day_ahead_prices/diagnostics/gap_fix_*.csv
+
+# Additional forecasting generated comparison/export artifacts
+data/02_Forecasting/**/qh_anchor_exports/
+data/02_Forecasting/**/candidate_comparison_new_metrics/
+data/02_Forecasting/**/option_ab_sweeps/
+data/02_Forecasting/**/option_c_sweeps/
+data/02_Forecasting/**/exports/
+
+# Quarter-hour generated phase artifacts
+data/02_Forecasting/**/phase01_runs/
+data/02_Forecasting/**/phase02_runs/
+data/02_Forecasting/**/phase03_runs/
+data/02_Forecasting/**/phase07_upstream_refresh_runs/
+data/02_Forecasting/**/frozen_actual_paths/
+data/02_Forecasting/**/registry/

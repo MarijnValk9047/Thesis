@@ -539,6 +539,16 @@ def load_candidate_predictions(
         return pd.DataFrame()
 
     frames: list[pd.DataFrame] = []
+    needed_columns = {
+        "model",
+        "dataset_split",
+        "forecast_origin_utc",
+        "target_timestamp_utc",
+        "lead_day",
+        "lead_day_label",
+        "y_true",
+        "y_pred",
+    }
     for row in candidate_frame.to_dict(orient="records"):
         if not bool(row.get("prediction_available")):
             continue
@@ -548,10 +558,23 @@ def load_candidate_predictions(
             continue
 
         prediction_path = resolve_tabular_path(Path(run_dir), "predictions_long.csv")
-        prediction_frame = load_csv(Path(run_dir), prediction_path.name)
+        if prediction_path.suffix.lower() == ".parquet":
+            try:
+                prediction_frame = pd.read_parquet(prediction_path, columns=list(needed_columns))
+            except Exception:
+                prediction_frame = pd.read_parquet(prediction_path)
+        else:
+            prediction_frame = pd.read_csv(
+                prediction_path,
+                usecols=lambda name: str(name) in needed_columns,
+                low_memory=False,
+            )
         if prediction_frame.empty:
             continue
-        prediction_frame = prediction_frame[prediction_frame["model"].astype(str) == str(model_name)].copy()
+        if "model" not in prediction_frame.columns:
+            continue
+        mask = prediction_frame["model"].astype(str).to_numpy(dtype=str) == str(model_name)
+        prediction_frame = prediction_frame.loc[mask].copy()
         if prediction_frame.empty:
             continue
 

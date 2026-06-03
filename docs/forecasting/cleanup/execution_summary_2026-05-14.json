@@ -1,0 +1,11 @@
+﻿{
+    "execution_date":  "2026-05-14",
+    "pre_execution_project_size_gb":  51.109,
+    "post_execution_project_size_gb":  19.919,
+    "total_reduction_gb":  31.19,
+    "notes":  [
+                  "Includes low-risk empty run folder cleanup, medium-tier heavy-file pruning, and one-off script relocation.",
+                  "Primary detailed manifests: low_risk_empty_run_cleanup_2026-05-14.json, medium_tier_run_retention_2026-05-14.json, script_move_one_off_2026-05-14.json.",
+                  "A first retention attempt failed while composing keep-list for finalisation runs; deletions from earlier policy blocks in that attempt are reflected in final project size."
+              ]
+}

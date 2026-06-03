@@ -1,0 +1,120 @@
+# Optimisation Command Centre
+#
+# Edit this file to launch optimisation runs through the stable command-centre interface.
+# The current implemented backend is the selected-week hydrogen fast path.
+# Planned options are listed here for future use, but unsupported combinations must refuse clearly.
+
+# CHANGE HERE: method version for the command-centre interface
+method_version: optimisation_command_centre_v1
+
+# CHANGE HERE: short purpose label. Avoid test-split tuning language unless governance explicitly allows it.
+run_purpose: validation performance baseline
+
+# CHANGE HERE: run label used in generated run folder names
+run_label: phase_c_command_centre_validation_high_price_smoke
+
+# CHANGE HERE: free-form notes for the run manifest and snapshot
+notes: direct selected-week hydrogen command-centre smoke
+
+# Scope
+# CHANGE HERE: choose hydrogen | steel_future
+asset_case: hydrogen
+
+# CHANGE HERE: choose DA_only | DA_mFRR
+market_scope: DA_only
+
+# CHANGE HERE: choose hourly | quarter_hour
+granularity: hourly
+
+# CHANGE HERE: choose D_only | D_plus_4
+horizon: D_only
+
+# CHANGE HERE: choose validation | test | custom
+split: validation
+
+# CHANGE HERE: choose selected_regimes | custom_dates | full_split | full_year
+period_mode: selected_regimes
+
+# CHANGE HERE: choose selected regimes or leave empty for all only after an all-regimes backend is implemented
+selected_regimes:
+  - high_price
+
+# CHANGE HERE: custom period start when period_mode=custom_dates
+custom_start_date: null
+
+# CHANGE HERE: custom period end when period_mode=custom_dates
+custom_end_date: null
+
+# Inputs
+# CHANGE HERE: choose scenario models
+scenario_models:
+  - lear_strict
+  - lear_fs3
+
+# CHANGE HERE: choose scenario models/artifact IDs
+# Leave empty to derive from scenario_models through optimisation_supported_options.yaml
+artifact_ids:
+  - hourly_lear_strict_donly_1092_tail_stress_v1_partial_test_support
+  - hourly_lear_fs3_pruned_tail_stress_v1_thesis_candidate
+
+# CHANGE HERE: choose scenario-count policy
+scenario_count_policy: exact_75_required
+
+# CHANGE HERE: choose actual-price source
+actual_price_source: artifact_embedded_actual_da
+
+# CHANGE HERE: official validation selected-week config path
+selected_week_config_validation: scripts/Data/03_Hydrogen_Test_Case/configs/selected_validation_weeks.yaml
+
+# CHANGE HERE: official test selected-week config path
+selected_week_config_test: scripts/Data/03_Hydrogen_Test_Case/configs/selected_test_weeks.yaml
+
+# Risk
+# CHANGE HERE: choose risk_neutral | cvar
+risk_mode: risk_neutral
+
+# CHANGE HERE: gamma values
+gamma_values: [0.0]
+
+# CHANGE HERE: CVaR alpha if risk_mode=cvar later
+cvar_alpha: 0.95
+
+# Execution
+# CHANGE HERE: choose output mode: speed | minimal | audit | full
+output_mode: speed
+
+# CHANGE HERE: optional audit days when an audit-days backend exists
+audit_days: []
+
+# CHANGE HERE: whether to request routine figures
+run_figures: false
+
+# CHANGE HERE: whether to request routine solver logs
+write_solver_logs: false
+
+# CHANGE HERE: use cached selected input slices when available
+use_cache: true
+
+# CHANGE HERE: reuse benchmark results when supported
+use_benchmark_cache: true
+
+# CHANGE HERE: print progress and write progress files
+progress_reporting: true
+
+# CHANGE HERE: parallel workers once a parallel backend exists
+max_workers: 1
+
+# CHANGE HERE: solver threads once a thread-control backend exists
+gurobi_threads: 1
+
+# Governance
+allow_test_for_tuning: false
+
+# CHANGE HERE: keep false unless a labelled approximation mode is explicitly implemented
+methodological_approximation: false
+
+# CHANGE HERE: choose none | scenario_reduction | solver_relaxation
+methodological_approximation_type: none
+
+require_common_support: true
+require_doctor_pass: true

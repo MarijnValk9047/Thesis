@@ -40,15 +40,15 @@ Historical lagged-only candidates:
 - `neighbor_price_weekly`
 
 Machine-readable inventory:
-- [fs3_taxonomy_inventory.csv](C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/02_Forecasting/01_DA_prices/docs/fs3_taxonomy_inventory.csv)
-- [fs3_taxonomy_inventory.json](C:/Users/marijnvalk/PycharmProjects/Thesis/scripts/Data/02_Forecasting/01_DA_prices/docs/fs3_taxonomy_inventory.json)
+- [fs3_taxonomy_inventory.csv](scripts/Data/02_Forecasting/01_DA_prices/docs/fs3_taxonomy_inventory.csv)
+- [fs3_taxonomy_inventory.json](scripts/Data/02_Forecasting/01_DA_prices/docs/fs3_taxonomy_inventory.json)
 
 Important naming rule:
 - keep these code-level bundle names as the repo truth for now
 - do not relabel them into generic literature families until a later phase introduces an explicit mapping layer
 
 The cleaned feature manifest remains:
-- [entsoe_feature_family_manifest.csv](C:/Users/marijnvalk/PycharmProjects/Thesis/data/01_cleaned/entsoe_feature_family_manifest.csv)
+- [entsoe_feature_family_manifest.csv](data/01_cleaned/entsoe_feature_family_manifest.csv)
 
 ## Availability Rules
 Each cleaned family stores `known_at_utc` explicitly.

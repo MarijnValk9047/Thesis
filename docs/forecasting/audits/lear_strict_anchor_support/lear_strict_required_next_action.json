@@ -1,0 +1,44 @@
+{
+  "audit_date_utc": "2026-05-10T00:00:00Z",
+  "decision_code": "B",
+  "decision_label": "First create/export/rerun LEAR_STRICT hourly anchors for the observed-QH grid, then implement QH_MODEL_3.",
+  "warning_classification": "b_real_but_solvable_issue",
+  "blocking_facts": [
+    "Current LEAR_STRICT artifacts have 0% overlap with the observed-QH hourly-anchor grid.",
+    "Observed-QH canonical grid spans forecast_origin_utc 2025-09-26 06:00:00+00:00 to 2026-04-29 06:00:00+00:00.",
+    "Existing parity QH models cover observed validation/test support, but LEAR_STRICT does not."
+  ],
+  "required_next_step": {
+    "type": "rerun_or_regenerate_hourly_anchors",
+    "model_id": "lear_lago_direct_dplus4_strict_no_future_1092",
+    "target_grid_source": "data/02_Forecasting/01_DA_prices/quarterhour_da/runs/20260503_174631_observed_market_deterministic_forecast/targets_by_origin.csv",
+    "target_grid_rule": "hourly anchor grid derived from quarter_in_hour == 1, preserving forecast_origin_utc and lead_day",
+    "expected_output_contract": [
+      "forecast_origin_utc",
+      "target_timestamp_utc",
+      "lead_day",
+      "y_pred",
+      "model",
+      "model_family",
+      "dataset_split"
+    ]
+  },
+  "runtime_risk_estimate": {
+    "reference_run_elapsed_seconds": 19626.17,
+    "reference_run_origins": 654,
+    "observed_qh_origins": 216,
+    "rough_seconds_per_origin": 30.01,
+    "estimated_elapsed_seconds": 6482,
+    "estimated_elapsed_hours": 1.8,
+    "practical_band_hours": [
+      2.0,
+      4.0
+    ],
+    "memory_risk": "low_to_moderate_with_checkpointing"
+  },
+  "artifacts_written": [
+    "lear_strict_qh_anchor_feasibility_report.md",
+    "qh_anchor_coverage_by_model.csv",
+    "lear_strict_required_next_action.json"
+  ]
+}

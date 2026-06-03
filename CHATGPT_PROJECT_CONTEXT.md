@@ -4,13 +4,29 @@
 
 This repository is a thesis workspace for electricity-market forecasting, but the active implementation scope is intentionally narrow:
 
-- Only hourly day-ahead (DA) electricity price forecasting is in current scope.
+- Hourly day-ahead (DA) electricity price forecasting is in active scope.
+- The observed-market quarter-hour / 15-minute deterministic DA forecast extension is now also in active scope.
 - The active market focus is `NL`.
-- Quarter-hourly DA, mFRR, probabilistic forecasting, optimizer integration, and economic backtesting are out of scope for the current workstream.
+- mFRR, probabilistic forecasting, optimizer integration, and economic backtesting are still out of scope for the current workstream.
 
 The standardized forecasting code lives under:
 
 - `scripts/Data/02_Forecasting/01_DA_prices/hourly_da`
+- `scripts/Data/02_Forecasting/01_DA_prices/quarterhour_da`
+
+## Repo Discipline And Prompting
+
+When helping on this project, prioritize repository discipline and bounded scope before broad implementation work.
+
+- Do not scan or summarize the whole repository unless explicitly requested.
+- Start from the smallest relevant subtree, entry script, config, or doc.
+- Treat the repository as a pipeline with stages: import, cleaning, model selection, forecast improvements, forecasting variants, scenarios, and economic testing.
+- When planning work, classify touched files or folders as `core`, `reference`, `archive`, or `unknown`.
+- Prefer moving obsolete or one-off material to an archive location instead of deleting it immediately.
+- Before proposing new scripts, check whether an existing script, module, config, or run folder already fills that role.
+- Prefer canonical entrypoints and shared modules over duplicate notebooks or ad hoc helper scripts.
+- When a task may expand, first propose a narrow working scope, the files to inspect, the files to avoid, and the expected outputs.
+- If repository cleanup is part of the task, produce keep/archive recommendations and a small repo map before larger refactors.
 
 ## Top-Level Directory Map
 
@@ -52,6 +68,14 @@ The standardized forecasting code lives under:
     - Notebook-generated exports.
   - `archived_post_phase_b/`
     - Archived historical outputs.
+- `data/02_Forecasting/01_DA_prices/quarterhour_da/`
+  - Forecasting outputs from the quarter-hour extension.
+  - `runs/`
+    - Canonical observed-market deterministic quarter-hour forecast artifacts.
+  - `phase01_runs/` ... `phase07_runs/`
+    - legacy/staging/diagnostic/downstream-support quarter-hour artifacts.
+  - `frozen_actual_paths/`
+    - frozen synthetic quarter-hour realized paths for downstream bidding experiments, not observed-market scoring truth.
 
 ## Notebook Structure
 
@@ -128,12 +152,17 @@ Important runners:
   - Produces stitched D-only operational plots for selected weeks.
 - `run_gap_audit.py`
   - Gap diagnostics.
+- `run_15min_observed_deterministic_forecast.py`
+  - Canonical observed-market quarter-hour deterministic DA forecast runner.
+- `run_15min_observed_deterministic_smoke_checks.py`
+  - Post-run artifact and scoring-policy smoke checks.
 
 ## Standardized Forecasting Package
 
 Package root:
 
 - `scripts/Data/02_Forecasting/01_DA_prices/hourly_da/`
+- `scripts/Data/02_Forecasting/01_DA_prices/quarterhour_da/`
 
 ### Core Modules
 
@@ -246,6 +275,11 @@ Important rule:
 
 - Gap-filled values are used only for features.
 - Evaluation always uses the observed target column, not the imputed feature-source column.
+
+Quarter-hour extension rule:
+
+- Interpolated, synthetic, gap-filled, or flagged 15-minute target rows are retained for provenance but are not scored as observed truth.
+- The canonical quarter-hour pipeline writes `is_observed_target` and keeps `y_true = NaN` on non-observed target rows.
 
 ### Feature-Set Policy
 

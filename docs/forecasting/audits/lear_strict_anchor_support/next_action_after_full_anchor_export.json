@@ -1,0 +1,19 @@
+{
+  "decision": "B",
+  "decision_text": "Full export works but support is small; QH_MODEL_3 should be built as diagnostic only, not as main final comparison.",
+  "run_dir": "C:\\Users\\marijnvalk\\PycharmProjects\\Thesis\\data\\02_Forecasting\\01_DA_prices\\hourly_da\\qh_anchor_exports\\lear_strict_observed_qh_grid\\20260510_135238_lear_strict_observed_qh_grid_export_post_input_extension_smoke",
+  "expected_anchor_rows": 25920,
+  "generated_anchor_rows": 4455,
+  "coverage_pct": 17.1875,
+  "generated_origins": 47,
+  "total_origins": 216,
+  "validation_origins": 10,
+  "test_origins": 9,
+  "validation_complete_local_days": 29,
+  "test_complete_local_days": 26,
+  "validation_qh_rows_after_expansion": 3940,
+  "test_qh_rows_after_expansion": 3636,
+  "validation_qh_observed_rows_after_expansion": 3940,
+  "test_qh_observed_rows_after_expansion": 3636,
+  "likely_meaningful_strict_three_model_overlap": false
+}

@@ -1,0 +1,3 @@
+assessment_scope,bridge_source,expected_rows,predicted_or_overlap_rows,coverage_pct,notes
+full_grid_estimate_from_phase1f,phase07_nl,25920,24642,95.06944444444444,Estimated strict-matrix overlap from Phase 1f diagnostic with phase07 NL bridge routing.
+smoke_run_realised,phase07_nl,360,360,100.0,Realised smoke coverage after approved bridge routing implementation.

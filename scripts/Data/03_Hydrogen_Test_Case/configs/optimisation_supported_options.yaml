@@ -1,0 +1,284 @@
+registry_version: optimisation_supported_options_v1_20260529
+
+method_versions:
+  optimisation_command_centre_v1:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Stable command-centre interface for optimisation runs with the selected-week hydrogen fast path as the first backend.
+    restrictions: Future backends must update this registry, the guide, doctor checks, and tests before use.
+
+backends:
+  selected_week_hydrogen_fastpath_v1:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Current backend for hourly D_only hydrogen DA_only selected-regime runs through the hardened selected-week runner.
+    restrictions: Risk-neutral only. Uses the selected-week hydrogen backend. No custom dates, full split, full year, quarter-hour, D_plus_4, DA+mFRR, or steel.
+    required_files:
+      - scripts/Data/03_Hydrogen_Test_Case/hydrogen/selected_week_smoke.py
+      - scripts/Data/03_Hydrogen_Test_Case/hydrogen/selected_week_suite.py
+
+asset_cases:
+  hydrogen:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Current hydrogen test case optimisation stack.
+    restrictions: Command-centre backend currently targets the hydrogen selected-week path only.
+  steel_future:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned steel asset configuration family.
+    restrictions: Must refuse execution until a steel backend exists.
+
+market_scopes:
+  DA_only:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Day-ahead only optimisation scope.
+    restrictions: Current backend supports only DA_only.
+  DA_mFRR:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned combined DA plus mFRR optimisation scope.
+    restrictions: Must refuse execution until mFRR backend and reserve deliverability checks exist.
+
+granularities:
+  hourly:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Hourly DA optimisation.
+    restrictions: Current backend supports only hourly.
+  quarter_hour:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned quarter-hour DA optimisation.
+    restrictions: Must refuse execution until quarter-hour backend and observed-target caveats are implemented.
+
+horizons:
+  D_only:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Day-only scenario horizon.
+    restrictions: Current backend supports only D_only.
+  D_plus_4:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned D through D+4 optimisation horizon.
+    restrictions: Must refuse execution until a D_plus_4 backend exists.
+
+splits:
+  validation:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Validation split for model, scenario, and CVaR policy selection.
+    restrictions: Allowed for development and tuning.
+  test:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Test split for frozen-policy out-of-sample evaluation.
+    restrictions: Must refuse tuning/development/CVaR-selection uses when allow_test_for_tuning=false.
+  custom:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned custom split selector for bespoke periods.
+    restrictions: Must refuse execution until custom split support is implemented.
+
+period_modes:
+  selected_regimes:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Selected regime execution using official selected-week config files.
+    restrictions: Current backend supports only selected_regimes.
+  custom_dates:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned custom start/end date execution.
+    restrictions: Must refuse execution until custom-date backend exists.
+  full_split:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned full validation or full test split execution.
+    restrictions: Must refuse execution until full-split backend exists.
+  full_year:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned full-year execution mode.
+    restrictions: Must refuse execution until full-year backend exists.
+
+selected_regimes:
+  typical_summer:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Seasonal median-like summer validation/test regime under official selected-week policy.
+    restrictions: Uses official split config files only.
+    required_files:
+      - scripts/Data/03_Hydrogen_Test_Case/configs/selected_validation_weeks.yaml
+      - scripts/Data/03_Hydrogen_Test_Case/configs/selected_test_weeks.yaml
+  typical_winter:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Seasonal median-like winter regime where available.
+    restrictions: Validation currently has no dedicated exact-common-support winter week.
+  winter_proxy:
+    allowed: true
+    implemented: true
+    thesis_usable: false
+    description: Validation-only proxy replacing a missing exact-common-support typical_winter week.
+    restrictions: Not valid for winter seasonal claims. Allowed only for runtime/debug/common-support checks unless otherwise justified.
+    required_files:
+      - scripts/Data/03_Hydrogen_Test_Case/configs/selected_validation_weeks.yaml
+  high_volatility:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: High realised-volatility selected week.
+    restrictions: Uses official split config files only.
+  high_price:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: High realised-price selected week.
+    restrictions: Uses official split config files only.
+
+scenario_models:
+  lear_strict:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: LEAR Strict hourly D_only scenario family.
+    restrictions: Current backend supports the partial-test-support selected-week artifact only.
+    default_artifact_id: hourly_lear_strict_donly_1092_tail_stress_v1_partial_test_support
+  lear_fs3:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: LEAR FS3 hourly D_only scenario family.
+    restrictions: Current backend supports the thesis-candidate selected-week artifact only.
+    default_artifact_id: hourly_lear_fs3_pruned_tail_stress_v1_thesis_candidate
+  xgboost_fs3:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: XGBoost FS3 hourly D_only scenario family.
+    restrictions: Artifact exists in the catalog but is not yet wired into the current two-model command-centre smoke default.
+    default_artifact_id: hourly_xgboost_fs3_pruned_tail_stress_v1_thesis_candidate
+
+artifact_ids:
+  hourly_lear_strict_donly_1092_tail_stress_v1_partial_test_support:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Official LEAR Strict selected-week comparison artifact.
+    restrictions: Use for official selected-week LEAR Strict runs.
+    required_files:
+      - scripts/Data/03_Hydrogen_Test_Case/configs/scenario_catalog.yaml
+  hourly_lear_fs3_pruned_tail_stress_v1_thesis_candidate:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Official LEAR FS3 selected-week comparison artifact.
+    restrictions: Use for official selected-week LEAR FS3 runs.
+    required_files:
+      - scripts/Data/03_Hydrogen_Test_Case/configs/scenario_catalog.yaml
+  hourly_xgboost_fs3_pruned_tail_stress_v1_thesis_candidate:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Official XGBoost FS3 thesis-candidate artifact.
+    restrictions: Available in catalog. Not part of the current two-model command-centre smoke default.
+    required_files:
+      - scripts/Data/03_Hydrogen_Test_Case/configs/scenario_catalog.yaml
+
+risk_modes:
+  risk_neutral:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Gamma 0 risk-neutral stochastic optimisation.
+    restrictions: Current backend supports only risk_neutral.
+  cvar:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned CVaR risk-averse optimisation.
+    restrictions: Must refuse execution until the command-centre CVaR backend exists.
+
+output_modes:
+  speed:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Fast path with no routine figures, no successful per-day debug folders, and no routine solver logs.
+    restrictions: Maps to the minimal output policy for the current backend.
+  minimal:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Compact machine-readable outputs.
+    restrictions: Maps to the minimal output policy for the current backend.
+  audit:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Audit-focused output policy.
+    restrictions: Current backend supports audit policy but not audit_days filtering.
+  full:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Full debug/reporting output policy.
+    restrictions: Current backend supports full policy for selected-week hydrogen runs.
+
+scenario_count_policies:
+  exact_75_required:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Require exactly 75 scenarios per forecast origin on the selected-week support set.
+    restrictions: Current selected-week backend enforces exact 75-scenario support.
+
+actual_price_sources:
+  artifact_embedded_actual_da:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: Use historical realised DA prices embedded in the selected scenario artifacts.
+    restrictions: Current backend supports only artifact_embedded_actual_da.
+
+methodological_approximation_types:
+  none:
+    allowed: true
+    implemented: true
+    thesis_usable: true
+    description: No methodological approximation.
+    restrictions: Required for the current backend.
+  scenario_reduction:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned explicit scenario reduction mode.
+    restrictions: Must refuse execution until implemented and labelled in manifests.
+  solver_relaxation:
+    allowed: true
+    implemented: false
+    thesis_usable: false
+    description: Planned looser solver-approximation mode.
+    restrictions: Must refuse execution until implemented and labelled in manifests.
