@@ -16,17 +16,17 @@ Staged roots only:
 
 Base ENTSO-E import:
 ```bash
-.venv\Scripts\python.exe scripts/Data/02_Forecasting/01_DA_prices/run_lago_lear_data_import.py --dry-run --start-year 2019 --end-year 2025
+.venv\Scripts\python.exe scripts/Data/02_Forecasting/01_DA_prices/one_off/2026-05_campaign/run_lago_lear_data_import.py --dry-run --start-year 2019 --end-year 2025
 ```
 
 A69 RES-by-PSR import:
 ```bash
-.venv\Scripts\python.exe scripts/Data/02_Forecasting/01_DA_prices/run_lago_lear_res_forecast_import.py --dry-run --start-year 2019 --end-year 2025 --psr-types B16 B18 B19
+.venv\Scripts\python.exe scripts/Data/02_Forecasting/01_DA_prices/one_off/2026-05_campaign/run_lago_lear_res_forecast_import.py --dry-run --start-year 2019 --end-year 2025 --psr-types B16 B18 B19
 ```
 
 Cleaning:
 ```bash
-.venv\Scripts\python.exe scripts/Data/02_Forecasting/01_DA_prices/run_lago_lear_cleaning.py --run-cleaning --raw-root data/00_raw_lago_lear_six_year --output-root data/01_cleaned_lago_lear_six_year
+.venv\Scripts\python.exe scripts/Data/02_Forecasting/01_DA_prices/one_off/2026-05_campaign/run_lago_lear_cleaning.py --run-cleaning --raw-root data/00_raw_lago_lear_six_year --output-root data/01_cleaned_lago_lear_six_year
 ```
 
 ## Feature Definitions
@@ -51,7 +51,7 @@ Direct lead-day/hour models with strict known-at checks (`known_at_utc <= foreca
 
 ## Runner
 ```bash
-.venv\Scripts\python.exe scripts/Data/02_Forecasting/01_DA_prices/run_lago_lear_six_year_benchmark.py --smoke-test --max-origins 3 --allow-official-cleaned-fallback
+.venv\Scripts\python.exe scripts/Data/02_Forecasting/01_DA_prices/one_off/2026-05_campaign/run_lago_lear_six_year_benchmark.py --smoke-test --max-origins 3 --allow-official-cleaned-fallback
 ```
 
 Heavy runs require explicit flags:
@@ -80,3 +80,12 @@ Key artifacts include:
 
 ## Thesis Usage
 Use this benchmark as a transparent reference model and clearly separate it from official FS-stage outputs and official split reporting.
+
+## Lineage And Retention
+The Lago six-year branch is a historical benchmark extension with local raw and cleaned dataset roots. It is not the canonical thesis pipeline input store, but it remains methodologically relevant benchmark lineage.
+
+Retention notes:
+- the raw Lago root must stay associated with its import and A69 sidecar provenance files
+- the cleaned Lago root contains compact provenance that must be preserved before any future bulk archive
+- the cleaned Lago bulk is not yet proven to be a clean one-command rebuild surface
+- the Lago roots are not canonical thesis pipeline inputs and not disposable temp storage
