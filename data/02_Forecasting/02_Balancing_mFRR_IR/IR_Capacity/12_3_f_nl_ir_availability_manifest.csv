@@ -1,0 +1,49 @@
+year,month,period_start_utc,period_end_utc,status,response_type,offset_count,raw_file_count,raw_total_size_bytes,parsed_row_count,daily_direction_count,first_delivery_start_utc,last_delivery_end_utc,error_message_short,notes
+2022,1,202201010000,202202010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,2,202202010000,202203010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,3,202203010000,202204010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,4,202204010000,202205010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,5,202205010000,202206010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,6,202206010000,202207010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,7,202207010000,202208010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,8,202208010000,202209010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,9,202209010000,202210010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,10,202210010000,202211010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,11,202211010000,202212010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2022,12,202212010000,202301010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,1,202301010000,202302010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,2,202302010000,202303010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,3,202303010000,202304010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,4,202304010000,202305010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,5,202305010000,202306010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,6,202306010000,202307010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,7,202307010000,202308010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,8,202308010000,202309010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,9,202309010000,202310010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,10,202310010000,202311010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,11,202311010000,202312010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2023,12,202312010000,202401010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,1,202401010000,202402010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,2,202402010000,202403010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,3,202403010000,202404010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,4,202404010000,202405010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,5,202405010000,202406010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,6,202406010000,202407010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,7,202407010000,202408010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,8,202408010000,202409010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,9,202409010000,202410010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,10,202410010000,202411010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,11,202411010000,202412010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2024,12,202412010000,202501010000,empty_no_matching_data,xml_reason,0,0,0,0,0,,,,no matching data
+2025,1,202501010000,202502010000,available_downloaded,zip,18,18,42102,1891,52,2025-01-06T23:00:00+00:00,2025-02-01T23:00:00+00:00,,
+2025,2,202502010000,202503010000,available_downloaded,zip,22,22,50478,2095,56,2025-02-01T23:00:00+00:00,2025-03-01T23:00:00+00:00,,
+2025,3,202503010000,202504010000,available_downloaded,zip,22,22,51938,2173,62,2025-03-01T23:00:00+00:00,2025-04-01T22:00:00+00:00,,
+2025,4,202504010000,202505010000,available_downloaded,zip,23,23,53731,2299,60,2025-04-01T22:00:00+00:00,2025-05-01T22:00:00+00:00,,
+2025,5,202505010000,202506010000,available_downloaded,zip,20,20,46518,1950,62,2025-05-01T22:00:00+00:00,2025-06-01T22:00:00+00:00,,
+2025,6,202506010000,202507010000,available_downloaded,zip,21,21,47836,1954,60,2025-06-01T22:00:00+00:00,2025-07-01T22:00:00+00:00,,
+2025,7,202507010000,202508010000,available_downloaded,zip,21,21,48185,2125,62,2025-07-01T22:00:00+00:00,2025-08-01T22:00:00+00:00,,
+2025,8,202508010000,202509010000,available_downloaded,zip,21,21,48194,2045,62,2025-08-01T22:00:00+00:00,2025-09-01T22:00:00+00:00,,
+2025,9,202509010000,202510010000,available_downloaded,zip,18,18,42288,1732,60,2025-09-01T22:00:00+00:00,2025-10-01T22:00:00+00:00,,
+2025,10,202510010000,202511010000,available_downloaded,zip,27,27,61723,2628,62,2025-10-01T22:00:00+00:00,2025-11-01T23:00:00+00:00,,
+2025,11,202511010000,202512010000,available_downloaded,zip,21,21,47536,2100,60,2025-11-01T23:00:00+00:00,2025-12-01T23:00:00+00:00,,
+2025,12,202512010000,202601010000,available_downloaded,zip,32,32,69218,3097,62,2025-12-01T23:00:00+00:00,2026-01-01T23:00:00+00:00,,
