@@ -98,7 +98,7 @@ def build_notebook() -> nbf.NotebookNode:
         code_cell(
             """
             RAW_DIR = REPO_ROOT / "data" / "00_Raw" / "ENTSOE" / "17_1_BC_NL_IR"
-            OUTPUT_DIR = REPO_ROOT / "data" / "01_cleaned" / "Balancing" / "IR Capacity" / "balancing_reserves_under_contract"
+            OUTPUT_DIR = REPO_ROOT / "data" / "01_cleaned" / "02_Balancing_mFRR_IR" / "IR Capacity" / "balancing_reserves_under_contract"
             PARSED_OUTPUT = OUTPUT_DIR / "parsed" / "balancing_reserves_under_contract_long.csv"
             HOURLY_LONG_OUTPUT = OUTPUT_DIR / "hourly" / "balancing_reserves_under_contract_hourly_long.csv"
             HOURLY_WIDE_OUTPUT = OUTPUT_DIR / "hourly" / "balancing_reserves_under_contract_hourly_wide.csv"
@@ -590,7 +590,7 @@ def build_notebook() -> nbf.NotebookNode:
             """
             ## 11. Saved Outputs and Diagnostics
 
-            The standalone cleaner saves the cleaned artifacts under `data/01_cleaned/Balancing/balancing_reserves_under_contract`.
+            The standalone cleaner saves the cleaned artifacts under `data/01_cleaned/02_Balancing_mFRR_IR/balancing_reserves_under_contract`.
             """
         ),
         code_cell(

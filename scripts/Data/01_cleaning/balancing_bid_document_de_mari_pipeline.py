@@ -70,13 +70,13 @@ DATASETS: dict[str, DatasetConfig] = {
     "12_3_e_de_mari_mfrrda": DatasetConfig(
         dataset_key="12_3_e_de_mari_mfrrda",
         raw_subdir=Path("ENTSOE/12_3_E/12_3_E_DE_MARI_mFRRda"),
-        output_subdir=Path("Balancing") / "MARI DE" / "12_3_e_de_mari_mfrrda",
+        output_subdir=Path("02_Balancing_mFRR_IR") / "MARI DE" / "12_3_e_de_mari_mfrrda",
         process_type_code="A61",
     ),
     "12_3_e_de_mari_mfrrsa": DatasetConfig(
         dataset_key="12_3_e_de_mari_mfrrsa",
         raw_subdir=Path("ENTSOE/12_3_E/12_3_E_DE_MARI_mFRRsa"),
-        output_subdir=Path("Balancing") / "MARI DE" / "12_3_e_de_mari_mfrrsa",
+        output_subdir=Path("02_Balancing_mFRR_IR") / "MARI DE" / "12_3_e_de_mari_mfrrsa",
         process_type_code="A60",
     ),
 }

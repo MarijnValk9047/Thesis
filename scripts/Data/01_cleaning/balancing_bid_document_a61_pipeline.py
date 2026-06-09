@@ -12,7 +12,7 @@ import pandas as pd
 
 DATASET_NAME = "12_3_e_nl_ir_a61"
 RAW_SUBDIR = Path("ENTSOE/12_3_E/12_3_E_NL_IR_A61")
-OUTPUT_SUBDIR = Path("Balancing") / "IR Energy" / DATASET_NAME
+OUTPUT_SUBDIR = Path("02_Balancing_mFRR_IR") / "IR Energy" / DATASET_NAME
 MARKET = "NL"
 MARKET_TIMEZONE = "Europe/Amsterdam"
 KNOWN_AT_RULE = "not_provided_in_raw_xml"
