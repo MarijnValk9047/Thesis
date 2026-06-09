@@ -52,6 +52,16 @@ class BiddingSettings:
 
 
 @dataclass(frozen=True)
+class MFRRCapacityPilotSettings:
+    enabled: bool
+    export_path: Path | None
+    pilot_start_date: str | None
+    pilot_end_date: str | None
+    capacity_offer_big_m_mw: float
+    offer_continuous_mw: bool
+
+
+@dataclass(frozen=True)
 class ProductionSettings:
     target_semantics: str
     allow_above_target_production: bool
@@ -123,6 +133,7 @@ class HydrogenConfig:
     strategies: tuple[str, ...]
     risk: RiskSettings
     bidding: BiddingSettings
+    mfrr_capacity_pilot: MFRRCapacityPilotSettings
     production: ProductionSettings
     hydrogen_system: HydrogenSystemSettings
     economics: EconomicSettings
@@ -171,6 +182,9 @@ def load_hydrogen_config(config_path: str | Path) -> HydrogenConfig:
     models_raw = _require_dict(payload, "models")
     risk_raw = _require_dict(payload, "risk")
     bidding_raw = _require_dict(payload, "bidding")
+    mfrr_raw = payload.get("mfrr_capacity_pilot", {})
+    if not isinstance(mfrr_raw, dict):
+        raise ValueError("Invalid config section: mfrr_capacity_pilot")
     production_raw = _require_dict(payload, "production")
     hydrogen_raw = _require_dict(payload, "hydrogen_system")
     economics_raw = _require_dict(payload, "economics")
@@ -203,6 +217,19 @@ def load_hydrogen_config(config_path: str | Path) -> HydrogenConfig:
     bidding = BiddingSettings(
         bid_price_grid_eur_per_mwh=tuple(float(value) for value in bidding_raw.get("bid_price_grid_eur_per_mwh", [])),
         price_insensitive_bid_price_eur_per_mwh=float(bidding_raw.get("price_insensitive_bid_price_eur_per_mwh", 3000.0)),
+    )
+    mfrr_capacity_pilot = MFRRCapacityPilotSettings(
+        enabled=bool(mfrr_raw.get("enabled", False)),
+        export_path=_to_path(mfrr_raw.get("export_path"), base=repo_root),
+        pilot_start_date=mfrr_raw.get("pilot_start_date"),
+        pilot_end_date=mfrr_raw.get("pilot_end_date"),
+        capacity_offer_big_m_mw=float(
+            mfrr_raw.get(
+                "capacity_offer_big_m_mw",
+                float(hydrogen_raw["electrolyser_nominal_mw"]) + float(hydrogen_raw["compressor_max_mw"]),
+            )
+        ),
+        offer_continuous_mw=bool(mfrr_raw.get("offer_continuous_mw", True)),
     )
     production = ProductionSettings(
         target_semantics=str(production_raw.get("target_semantics", "lower_bound_reference")),
@@ -250,6 +277,7 @@ def load_hydrogen_config(config_path: str | Path) -> HydrogenConfig:
         strategies=tuple(str(value) for value in payload.get("strategies", [])),
         risk=risk,
         bidding=bidding,
+        mfrr_capacity_pilot=mfrr_capacity_pilot,
         production=production,
         hydrogen_system=hydrogen_system,
         economics=economics,

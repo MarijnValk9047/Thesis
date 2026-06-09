@@ -36,6 +36,14 @@ bidding:
   bid_price_grid_eur_per_mwh: [-500, -100, 0, 50, 100, 125, 144, 158, 175, 200, 250, 500, 1000, 3000]
   price_insensitive_bid_price_eur_per_mwh: 3000
 
+mfrr_capacity_pilot:
+  enabled: false
+  export_path: data/02_Forecasting/02_Balancing_mFRR_IR/IR_Capacity/milp_exports/nl_ir_capacity_milp_input_daily_direction_scenarios_v1.csv
+  pilot_start_date: 2025-07-07
+  pilot_end_date: 2025-07-13
+  capacity_offer_big_m_mw: 58.0
+  offer_continuous_mw: true
+
 production:
   target_semantics: lower_bound_reference
   allow_above_target_production: true

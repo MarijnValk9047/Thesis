@@ -5,10 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
 
+from .optimisation.input_resolver import ResolvedMFRRCapacityPilotInput
 from .plant_parameters import EconomicSettings, HydrogenSystemSettings, SolverSettings
 
 try:
@@ -58,6 +60,12 @@ class DispatchSolveResult:
     optimisation_cvar: float | None
     zeta: float | None
     model_stats: ModelStats
+    objective_components: pd.DataFrame | None = None
+    mfrr_capacity_summary: pd.DataFrame | None = None
+    debug_info: dict[str, Any] | None = None
+
+
+MFRR_MARKET_TZ = ZoneInfo("Europe/Amsterdam")
 
 
 def _ensure_solver_package(settings: SolverSettings) -> None:
@@ -303,6 +311,177 @@ def _is_hard_target_mode(production_target_mode: str) -> bool:
     return str(production_target_mode).strip() in {"hard_daily_target", "weekly_hard_band_target"}
 
 
+def _resolve_mfrr_capacity_horizon_metadata(
+    timestamps: pd.DatetimeIndex,
+    mfrr_capacity_pilot: ResolvedMFRRCapacityPilotInput,
+) -> tuple[list[str], list[str], dict[int, str], dict[str, list[int]]]:
+    delivery_days = sorted(mfrr_capacity_pilot.candidate_summary["delivery_date_local"].astype(str).unique().tolist())
+    directions = sorted(mfrr_capacity_pilot.candidate_summary["direction"].astype(str).unique().tolist())
+    time_to_day = {
+        idx: pd.Timestamp(timestamp).tz_convert(MFRR_MARKET_TZ).date().isoformat()
+        for idx, timestamp in enumerate(timestamps)
+    }
+    if set(delivery_days) != set(time_to_day.values()):
+        raise ValueError(
+            "mFRR capacity pilot days must match the stochastic dispatch horizon days exactly."
+        )
+    day_to_time = {day: [idx for idx, local_day in time_to_day.items() if local_day == day] for day in delivery_days}
+    for day, indices in day_to_time.items():
+        if not indices:
+            raise ValueError(f"No dispatch periods were found for mFRR capacity pilot day {day}.")
+    return delivery_days, directions, time_to_day, day_to_time
+
+
+def _build_mfrr_capacity_summary_from_solution(
+    *,
+    mfrr_capacity_pilot: ResolvedMFRRCapacityPilotInput,
+    dispatch: pd.DataFrame,
+    hydrogen: HydrogenSystemSettings,
+    offered_lookup: dict[tuple[str, str, str], float],
+    selected_lookup: dict[tuple[str, str, str], float],
+) -> pd.DataFrame:
+    if dispatch.empty:
+        return pd.DataFrame()
+    work = dispatch.copy()
+    work["delivery_date_local"] = (
+        pd.to_datetime(work["delivery_start_utc"], utc=True, errors="raise")
+        .dt.tz_convert(MFRR_MARKET_TZ)
+        .dt.date.astype(str)
+    )
+    work["site_load_mw"] = work["P_el_mw"].astype(float) + work["P_comp_mw"].astype(float)
+    max_site_load = float(hydrogen.electrolyser_nominal_mw + hydrogen.compressor_max_mw)
+    diagnostics = (
+        work.groupby("delivery_date_local", as_index=False)
+        .agg(
+            min_up_headroom_mw=("site_load_mw", "min"),
+            max_site_load_mw=("site_load_mw", "max"),
+        )
+        .copy()
+    )
+    diagnostics["min_down_headroom_mw"] = max_site_load - diagnostics["max_site_load_mw"].astype(float)
+
+    summary = mfrr_capacity_pilot.candidate_summary.copy()
+    summary["selected_bid_candidate"] = summary.apply(
+        lambda row: float(
+            selected_lookup.get((str(row["delivery_date_local"]), str(row["direction"]), str(row["candidate_id"])), 0.0)
+        ),
+        axis=1,
+    )
+    summary["offered_capacity_mw"] = summary.apply(
+        lambda row: float(
+            offered_lookup.get((str(row["delivery_date_local"]), str(row["direction"]), str(row["candidate_id"])), 0.0)
+        ),
+        axis=1,
+    )
+    summary["expected_capacity_revenue_eur"] = (
+        summary["expected_revenue_coefficient"].astype(float) * summary["offered_capacity_mw"].astype(float)
+    )
+    totals = (
+        summary.groupby(["delivery_date_local", "direction"], as_index=False)["offered_capacity_mw"]
+        .sum()
+        .rename(columns={"offered_capacity_mw": "offered_capacity_total_mw"})
+    )
+    summary = summary.merge(totals, on=["delivery_date_local", "direction"], how="left")
+    summary = summary.merge(diagnostics, on="delivery_date_local", how="left")
+    summary["min_deliverability_margin_mw"] = np.where(
+        summary["direction"].astype(str).eq("Up"),
+        summary["min_up_headroom_mw"].astype(float) - summary["offered_capacity_total_mw"].astype(float),
+        summary["min_down_headroom_mw"].astype(float) - summary["offered_capacity_total_mw"].astype(float),
+    )
+    return summary.sort_values(["delivery_date_local", "direction", "candidate_rank"]).reset_index(drop=True)
+
+
+def _add_mfrr_capacity_pilot_pyomo_components(
+    *,
+    model: Any,
+    timestamps: pd.DatetimeIndex,
+    horizon: list[int],
+    hydrogen: HydrogenSystemSettings,
+    mfrr_capacity_pilot: ResolvedMFRRCapacityPilotInput,
+) -> dict[str, Any]:
+    delivery_days, directions, time_to_day, _ = _resolve_mfrr_capacity_horizon_metadata(
+        timestamps,
+        mfrr_capacity_pilot,
+    )
+    candidate_summary = mfrr_capacity_pilot.candidate_summary.copy()
+    candidate_summary["delivery_date_local"] = candidate_summary["delivery_date_local"].astype(str)
+    candidate_summary["direction"] = candidate_summary["direction"].astype(str)
+    candidate_summary["candidate_id"] = candidate_summary["candidate_id"].astype(str)
+    candidate_summary["candidate_price"] = pd.to_numeric(candidate_summary["candidate_price"], errors="raise")
+    candidate_summary["expected_revenue_coefficient"] = pd.to_numeric(
+        candidate_summary["expected_revenue_coefficient"], errors="raise"
+    )
+    candidate_keys = [
+        (str(row["delivery_date_local"]), str(row["direction"]), str(row["candidate_id"]))
+        for row in candidate_summary.to_dict(orient="records")
+    ]
+    day_direction_pairs = sorted({(day, direction) for day in delivery_days for direction in directions})
+    candidate_ids_by_pair = {
+        (day, direction): [
+            str(row["candidate_id"])
+            for row in candidate_summary[
+                (candidate_summary["delivery_date_local"].astype(str) == day)
+                & (candidate_summary["direction"].astype(str) == direction)
+            ].sort_values("candidate_rank")
+            .to_dict(orient="records")
+        ]
+        for day, direction in day_direction_pairs
+    }
+    expected_revenue_lookup = {
+        (str(row["delivery_date_local"]), str(row["direction"]), str(row["candidate_id"])): float(
+            row["expected_revenue_coefficient"]
+        )
+        for row in candidate_summary.to_dict(orient="records")
+    }
+    max_site_load = float(hydrogen.electrolyser_nominal_mw + hydrogen.compressor_max_mw)
+    offer_big_m = min(float(mfrr_capacity_pilot.capacity_offer_big_m_mw), max_site_load)
+    offer_domain = pyo.NonNegativeReals if mfrr_capacity_pilot.offer_continuous_mw else pyo.NonNegativeIntegers
+
+    model.MFRR_DAY_DIRECTION = pyo.Set(dimen=2, initialize=day_direction_pairs, ordered=True)
+    model.MFRR_DAY_DIRECTION_CANDIDATE = pyo.Set(dimen=3, initialize=candidate_keys, ordered=True)
+    model.mfrr_bid_select = pyo.Var(model.MFRR_DAY_DIRECTION_CANDIDATE, domain=pyo.Binary)
+    model.mfrr_offered_capacity_mw = pyo.Var(model.MFRR_DAY_DIRECTION_CANDIDATE, domain=offer_domain)
+    model.mfrr_offered_capacity_total_mw = pyo.Expression(
+        model.MFRR_DAY_DIRECTION,
+        rule=lambda m, day, direction: sum(
+            m.mfrr_offered_capacity_mw[day, direction, candidate_id]
+            for candidate_id in candidate_ids_by_pair[(day, direction)]
+        ),
+    )
+    model.mfrr_expected_capacity_revenue_eur = pyo.Expression(
+        expr=sum(
+            expected_revenue_lookup[(day, direction, candidate_id)] * model.mfrr_offered_capacity_mw[day, direction, candidate_id]
+            for day, direction, candidate_id in candidate_keys
+        )
+    )
+    for day, direction in day_direction_pairs:
+        model.constraints.add(
+            sum(
+                model.mfrr_bid_select[day, direction, candidate_id]
+                for candidate_id in candidate_ids_by_pair[(day, direction)]
+            )
+            <= 1
+        )
+    for day, direction, candidate_id in candidate_keys:
+        model.constraints.add(
+            model.mfrr_offered_capacity_mw[day, direction, candidate_id]
+            <= offer_big_m * model.mfrr_bid_select[day, direction, candidate_id]
+        )
+    for t in horizon:
+        day = time_to_day[t]
+        if (day, "Up") in day_direction_pairs:
+            model.constraints.add(model.mfrr_offered_capacity_total_mw[day, "Up"] <= model.P_el[t] + model.P_comp[t])
+        if (day, "Down") in day_direction_pairs:
+            model.constraints.add(
+                model.mfrr_offered_capacity_total_mw[day, "Down"] <= max_site_load - (model.P_el[t] + model.P_comp[t])
+            )
+    return {
+        "expected_capacity_revenue_expr": model.mfrr_expected_capacity_revenue_eur,
+        "candidate_keys": candidate_keys,
+        "day_direction_pairs": day_direction_pairs,
+    }
+
+
 def _pyomo_solver_diagnostics(results: Any) -> dict[str, float | None]:
     def _to_float_or_none(value: Any) -> float | None:
         if value is None:
@@ -391,7 +570,9 @@ def _solve_with_pyomo(
     apply_terminal_value: bool,
     terminal_reference_start_kg: float,
     terminal_value_per_kg: float,
+    mfrr_capacity_pilot: ResolvedMFRRCapacityPilotInput | None = None,
     solver_log_path: str | None = None,
+    debug_options: dict[str, Any] | None = None,
 ) -> DispatchSolveResult:
     if pyo is None:
         raise RuntimeError("Pyomo backend requested but Pyomo is not installed.")
@@ -452,6 +633,25 @@ def _solve_with_pyomo(
     else:
         m.constraints.add(sum_h_comp + m.shortfall >= target_hydrogen_min_kg)
 
+    mfrr_expected_capacity_revenue_expr: float | Any = 0.0
+    mfrr_day_direction_pairs: list[tuple[str, str]] = []
+    mfrr_candidate_keys: list[tuple[str, str, str]] = []
+    mfrr_offer_lookup: dict[tuple[str, str, str], float] = {}
+    mfrr_select_lookup: dict[tuple[str, str, str], float] = {}
+    if mfrr_capacity_pilot is not None:
+        mfrr_components = _add_mfrr_capacity_pilot_pyomo_components(
+            model=m,
+            timestamps=timestamps,
+            horizon=horizon,
+            hydrogen=hydrogen,
+            mfrr_capacity_pilot=mfrr_capacity_pilot,
+        )
+        mfrr_expected_capacity_revenue_expr = mfrr_components["expected_capacity_revenue_expr"]
+        mfrr_candidate_keys = list(mfrr_components["candidate_keys"])
+        mfrr_day_direction_pairs = list(mfrr_components["day_direction_pairs"])
+        if bool((debug_options or {}).get("force_mfrr_offer_zero", False)):
+            for key in mfrr_candidate_keys:
+                m.constraints.add(m.mfrr_offered_capacity_mw[key] == 0.0)
     terminal_value_expr = terminal_value_per_kg * (m.H_buf[t_max] - terminal_reference_start_kg) if apply_terminal_value else 0.0
     shortfall_penalty_expr = effective_shortfall_penalty * m.shortfall
     revenue_expr = economics.h2_sale_price_eur_per_kg * sum_h_comp
@@ -463,7 +663,10 @@ def _solve_with_pyomo(
 
     expected_net_cost = sum(probabilities[s] * m.net_cost[s] for s in scenario_ids)
     cvar_term = m.zeta + (1.0 / (1.0 - alpha)) * sum(probabilities[s] * m.xi[s] for s in scenario_ids)
-    m.objective = pyo.Objective(expr=expected_net_cost + gamma * cvar_term, sense=pyo.minimize)
+    m.objective = pyo.Objective(
+        expr=expected_net_cost - mfrr_expected_capacity_revenue_expr + gamma * cvar_term,
+        sense=pyo.minimize,
+    )
 
     model_build_time = perf_counter() - build_started
     solver, solver_name = _resolve_pyomo_solver(solver_settings, solver_log_path)
@@ -518,6 +721,35 @@ def _solve_with_pyomo(
     zeta_value = float(_safe_pyomo_value(m.zeta) or 0.0)
     cvar_value = float(zeta_value + (1.0 / (1.0 - alpha)) * np.sum(scenario_costs["scenario_probability"] * scenario_costs["xi_value"]))
     objective_value = _safe_pyomo_value(m.objective)
+    expected_operational_net_cost = float(np.sum(scenario_costs["scenario_probability"] * scenario_costs["net_cost_eur"]))
+    expected_mfrr_capacity_revenue = float(_safe_pyomo_value(mfrr_expected_capacity_revenue_expr) or 0.0)
+    objective_components = pd.DataFrame(
+        [
+            {
+                "expected_operational_net_cost_eur": expected_operational_net_cost,
+                "expected_mfrr_capacity_revenue_eur": expected_mfrr_capacity_revenue,
+                "cvar_term_eur": cvar_value,
+                "cvar_weight_gamma": float(gamma),
+                "objective_value_eur": float(objective_value) if objective_value is not None else np.nan,
+            }
+        ]
+    )
+    if mfrr_capacity_pilot is not None:
+        mfrr_offer_lookup = {
+            key: float(_safe_pyomo_value(m.mfrr_offered_capacity_mw[key]) or 0.0) for key in mfrr_candidate_keys
+        }
+        mfrr_select_lookup = {
+            key: float(_safe_pyomo_value(m.mfrr_bid_select[key]) or 0.0) for key in mfrr_candidate_keys
+        }
+        mfrr_capacity_summary = _build_mfrr_capacity_summary_from_solution(
+            mfrr_capacity_pilot=mfrr_capacity_pilot,
+            dispatch=dispatch,
+            hydrogen=hydrogen,
+            offered_lookup=mfrr_offer_lookup,
+            selected_lookup=mfrr_select_lookup,
+        )
+    else:
+        mfrr_capacity_summary = None
     model_stats = _pyomo_model_stats(
         m,
         scenario_count=len(scenario_ids),
@@ -526,6 +758,26 @@ def _solve_with_pyomo(
     )
     postprocess_time = perf_counter() - postprocess_started
     diagnostics = _pyomo_solver_diagnostics(results)
+    debug_info: dict[str, Any] | None = None
+    if bool((debug_options or {}).get("collect_objective_audit", False)):
+        active_objectives = list(m.component_data_objects(pyo.Objective, active=True, descend_into=True))
+        debug_info = {
+            "active_objective_count": int(len(active_objectives)),
+            "active_objectives": [
+                {
+                    "name": str(obj.name),
+                    "sense": "minimize" if obj.sense == pyo.minimize else "maximize",
+                    "value": _safe_pyomo_value(obj),
+                }
+                for obj in active_objectives
+            ],
+            "reported_objective_value_eur": float(objective_value) if objective_value is not None else None,
+            "expected_operational_net_cost_eur": float(expected_operational_net_cost),
+            "expected_mfrr_capacity_revenue_eur": float(expected_mfrr_capacity_revenue),
+            "cvar_term_eur": float(cvar_value),
+            "force_mfrr_offer_zero": bool((debug_options or {}).get("force_mfrr_offer_zero", False)),
+            "solver_diagnostics": diagnostics,
+        }
     solver_result = SolverResult(
         status=status_text,
         objective_value=objective_value,
@@ -549,6 +801,9 @@ def _solve_with_pyomo(
         optimisation_cvar=cvar_value,
         zeta=zeta_value,
         model_stats=model_stats,
+        objective_components=objective_components,
+        mfrr_capacity_summary=mfrr_capacity_summary,
+        debug_info=debug_info,
     )
 
 
@@ -570,10 +825,14 @@ def _solve_with_pulp(
     apply_terminal_value: bool,
     terminal_reference_start_kg: float,
     terminal_value_per_kg: float,
+    mfrr_capacity_pilot: ResolvedMFRRCapacityPilotInput | None = None,
     solver_log_path: str | None = None,
+    debug_options: dict[str, Any] | None = None,
 ) -> DispatchSolveResult:
     if pulp is None:
         raise RuntimeError("PuLP backend requested but PuLP is not installed.")
+    if mfrr_capacity_pilot is not None:
+        raise RuntimeError("The v1 mFRR capacity pilot is implemented only for the Pyomo backend.")
     build_started = perf_counter()
     effective_shortfall_penalty = _effective_shortfall_penalty(
         economics,
@@ -712,6 +971,7 @@ def _solve_with_pulp(
         optimisation_cvar=cvar_value,
         zeta=float(zeta.value() or 0.0),
         model_stats=model_stats,
+        debug_info=None,
     )
 
 
@@ -733,7 +993,9 @@ def solve_stochastic_dispatch(
     terminal_reference_start_kg: float,
     terminal_value_per_kg: float,
     target_hydrogen_max_kg: float | None = None,
+    mfrr_capacity_pilot: ResolvedMFRRCapacityPilotInput | None = None,
     solver_log_path: str | None = None,
+    debug_options: dict[str, Any] | None = None,
 ) -> DispatchSolveResult:
     _ensure_solver_package(solver_settings)
     _apply_gurobi_license_env(solver_settings)
@@ -758,7 +1020,9 @@ def solve_stochastic_dispatch(
                 apply_terminal_value=apply_terminal_value,
                 terminal_reference_start_kg=terminal_reference_start_kg,
                 terminal_value_per_kg=terminal_value_per_kg,
+                mfrr_capacity_pilot=mfrr_capacity_pilot,
                 solver_log_path=solver_log_path,
+                debug_options=debug_options,
             )
         except RuntimeError as exc:
             last_error = exc
@@ -782,7 +1046,9 @@ def solve_stochastic_dispatch(
             apply_terminal_value=apply_terminal_value,
             terminal_reference_start_kg=terminal_reference_start_kg,
             terminal_value_per_kg=terminal_value_per_kg,
+            mfrr_capacity_pilot=mfrr_capacity_pilot,
             solver_log_path=solver_log_path,
+            debug_options=debug_options,
         )
     if last_error is not None:
         raise RuntimeError(str(last_error)) from last_error
