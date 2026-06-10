@@ -5,7 +5,11 @@ This note is the repo-local market-rules reference for Dutch incident reserve / 
 
 It documents the product taxonomy, capacity-auction timing, capacity-price unit handling, the relation between ENTSO-E 17.1.B&C and GL EB 12.3.F data, the first capacity-only MILP scope, and the items explicitly deferred to later energy-activation modelling.
 
-This file supersedes `nl_incident_reserve_capacity_market_rules_v1.md` because V1 did not yet incorporate the ENTSO-E `EUR/MW/ISP` capacity-price interpretation and therefore used an incomplete capacity-revenue formula.
+It also defines two modelling regimes used in this project:
+- Regime A: a source-backed daily incident-reserve capacity baseline;
+- Regime B: a counterfactual 4-hour flexible-block sensitivity.
+
+Regime B is not treated as an observed Dutch mFRRda market regime unless later source data confirms such a product. It is included to test how shorter capacity-commitment blocks would affect industrial demand-side participation.
 
 ## Source Basis
 Primary source:
@@ -269,18 +273,52 @@ From the imbalance-pricing document:
 Priority rule for this project:
 - if there is any tension between the older imbalance-pricing document and the newer incident-reserve manual on incident-reserve-specific mechanics, prefer the newer incident-reserve manual for incident-reserve product mechanics.
 
-## J. Daily Versus 4-Hour Product Caveat
+## J. Market Regimes Used In This Project
 
-Current source-backed regime:
-- the inspected TenneT incident-reserve manual describes a daily capacity auction with a normal contract period of `00:00` to `00:00`.
+This project supports two incident-reserve capacity regimes.
 
-Potential future / unverified regime:
-- if TenneT moves or has moved the capacity product to shorter blocks, such as 4-hour products, the model must not hardcode daily `96` ISP logic;
-- use `delivery_start`, `delivery_end`, and ISP duration to compute `contract_isp_count`;
-- a 4-hour 15-minute product would have `contract_isp_count = 16`;
-- no 4-hour product assumption should be treated as source-backed until confirmed from TenneT/APFAS/ENTSO-E source data.
+### Regime A: Source-backed daily incident-reserve capacity baseline
 
-## K. Out Of Scope For First MILP Integration
+Regime A is the historical/source-backed baseline. It follows the inspected TenneT incident-reserve manual and models the Dutch incident reserve / `mFRRda` capacity product as a daily capacity product with a normal contract period from `00:00` to `00:00`.
+
+Configuration:
+
+* `regime_id = IR_daily_source_backed`
+* `source_status = source_backed`
+* `block_duration_hours = 24`
+* `blocks_per_day = 1`
+* `bidding_mode = daily_all_or_nothing`
+* `quantity_mode = uniform_daily_capacity`
+* `price_construction = observed_daily`
+* `contract_isp_count` is computed from `delivery_start` and `delivery_end`, normally `96` for a full 15-minute delivery day.
+
+This regime may be used for historical/source-backed backtesting.
+
+### Regime B: Counterfactual 4-hour flexible-block sensitivity
+
+Regime B is a counterfactual sensitivity. It is not treated as an observed Dutch incident-reserve / `mFRRda` market regime unless later TenneT, APFAS, or ENTSO-E source data confirms 4-hour contract blocks for the relevant product.
+
+Regime B splits each delivery day into six 4-hour capacity blocks and allows the model to decide participation and capacity volume per block. Its purpose is to test how shorter capacity-commitment blocks would affect the ability of an industrial site to participate in reserve-capacity markets under production and flexibility constraints.
+
+Configuration:
+
+* `regime_id = IR_4h_counterfactual_flexible`
+* `source_status = counterfactual`
+* `block_duration_hours = 4`
+* `blocks_per_day = 6`
+* `bidding_mode = optional_per_block`
+* `quantity_mode = block_specific_capacity`
+* `price_construction = daily_price_repeated_to_blocks` unless a separate synthetic block-price construction is explicitly documented
+* `contract_isp_count` is computed from `delivery_start` and `delivery_end`, normally `16` for a 4-hour 15-minute block.
+
+Regime B must not be described as a historical observed 4-hour mFRRda backtest if no source-confirmed 4-hour mFRRda capacity data is used. It should be reported as a counterfactual market-design sensitivity.
+
+### Shared implementation rule
+
+Do not hardcode `contract_isp_count = 96` or `contract_isp_count = 16`. Always compute `contract_isp_count` from `delivery_start`, `delivery_end`, and ISP duration, so that daily products, 4-hour blocks, DST days, and any later source-confirmed shorter products are handled consistently.
+
+
+## K. In- and Out Of Scope For First MILP Integration
 
 Explicitly out of scope for the first capacity-only integration:
 - MARI standard `mFRR` energy product;
@@ -294,7 +332,11 @@ Explicitly out of scope for the first capacity-only integration:
 - 5-minute measurement validation;
 - full submitted bid-ladder reconstruction;
 - rejected-bid inference;
-- 4-hour block products unless source-verified for the relevant product/regime.
+- source-backed historical 4-hour incident-reserve capacity modelling unless source-verified for the relevant product/regime;
+- observed 4-hour mFRRda price or contract-period claims unless supported by TenneT, APFAS, or ENTSO-E source data.
+
+Explicitly in scope as a counterfactual sensitivity:
+- Regime B: 4-hour flexible-block incident-reserve capacity modelling, provided it is clearly labelled as counterfactual and does not claim to use observed 4-hour mFRRda capacity prices or source-confirmed 4-hour contract periods.
 
 ## L. Recommended Next Tasks
 

@@ -24,6 +24,56 @@ MFRR_EXPECTED_SCENARIO_IDS = (
     "threshold_optimistic_max",
 )
 MFRR_EXPECTED_DIRECTIONS = ("Down", "Up")
+MFRR_REQUIRED_CAPACITY_PRICE_UNIT = "EUR_per_MW_per_ISP"
+MFRR_REQUIRED_CAPACITY_PRODUCT_STRUCTURE = "observed_daily"
+MFRR_REQUIRED_KNOWN_AT_ASSUMPTION = "assumed_nl_incident_reserve_capacity_auction_d_minus_1_09am_europe_amsterdam"
+MFRR_REQUIRED_REVENUE_RULE_PROXY = (
+    "accepted_times_bid_price_eur_per_mw_isp_times_offered_capacity_mw_times_contract_isp_count"
+)
+MFRR_EXPORT_USECOLS = [
+    "market",
+    "product",
+    "bidding_stage",
+    "forecast_origin_utc",
+    "forecast_origin_local",
+    "known_at_cutoff_utc",
+    "known_at_assumption",
+    "delivery_date_local",
+    "delivery_start_local",
+    "delivery_end_local",
+    "delivery_start_utc",
+    "delivery_end_utc",
+    "delivery_block_id",
+    "granularity",
+    "direction",
+    "scenario_id",
+    "scenario_role",
+    "scenario_probability",
+    "contract_isp_count",
+    "capacity_product_structure",
+    "capacity_price_unit",
+    "acceptance_threshold_price_eur_per_mw_isp",
+    "threshold_proxy_name",
+    "threshold_model_name",
+    "threshold_source_scope",
+    "threshold_observed_overlap_flag",
+    "average_price_forecast_threshold_anchor",
+    "average_price_model_threshold_anchor",
+    "average_price_forecast_primary",
+    "average_price_model_primary",
+    "average_price_forecast_comparator",
+    "average_price_model_comparator",
+    "scenario_generation_method",
+    "market_design_regime",
+    "source_data_version",
+    "methodological_caveat",
+    "quality_flags",
+    "capacity_revenue_rule_proxy",
+    "energy_bid_obligation_if_accepted",
+    "activation_modelling_in_scope",
+    "mari_modelling_in_scope",
+    "availability_obligation_note",
+]
 
 
 @dataclass(frozen=True)
@@ -212,28 +262,76 @@ def _validate_mfrr_capacity_timing(frame: pd.DataFrame) -> None:
         raise ValueError("forecast_origin_utc does not match the UTC conversion of forecast_origin_local.")
     if not known_at_cutoff_utc.equals(expected_utc):
         raise ValueError("known_at_cutoff_utc does not match the UTC conversion of forecast_origin_local.")
+    if not frame["known_at_assumption"].astype(str).eq(MFRR_REQUIRED_KNOWN_AT_ASSUMPTION).all():
+        raise ValueError("mFRR capacity export does not preserve the repaired D-1 09:00 known_at_assumption.")
+
+
+def _validate_mfrr_capacity_contract_metadata(frame: pd.DataFrame) -> None:
+    price_units = sorted(frame["capacity_price_unit"].dropna().astype(str).unique().tolist())
+    if price_units != [MFRR_REQUIRED_CAPACITY_PRICE_UNIT]:
+        raise ValueError(
+            "mFRR capacity export must use ENTSO-E-native EUR_per_MW_per_ISP prices. "
+            f"Got: {price_units}"
+        )
+
+    product_structures = sorted(frame["capacity_product_structure"].dropna().astype(str).unique().tolist())
+    if product_structures != [MFRR_REQUIRED_CAPACITY_PRODUCT_STRUCTURE]:
+        raise ValueError(
+            "mFRR capacity export must be the source-backed daily observed product. "
+            f"Got: {product_structures}"
+        )
+
+    if not frame["energy_bid_obligation_if_accepted"].astype(bool).all():
+        raise ValueError("mFRR capacity export must preserve the mandatory energy-bid obligation flag as True.")
+    if frame["activation_modelling_in_scope"].astype(bool).any():
+        raise ValueError("mFRR capacity export unexpectedly enables activation modelling.")
+    if frame["mari_modelling_in_scope"].astype(bool).any():
+        raise ValueError("mFRR capacity export unexpectedly enables MARI modelling.")
+
+    revenue_rule_proxies = sorted(frame["capacity_revenue_rule_proxy"].dropna().astype(str).unique().tolist())
+    if revenue_rule_proxies != [MFRR_REQUIRED_REVENUE_RULE_PROXY]:
+        raise ValueError(
+            "mFRR capacity export has an unexpected revenue rule proxy. "
+            f"Got: {revenue_rule_proxies}"
+        )
+
+    contract_isp_count = pd.to_numeric(frame["contract_isp_count"], errors="raise")
+    if contract_isp_count.isna().any():
+        raise ValueError("mFRR capacity export contains missing contract_isp_count values.")
+    if (contract_isp_count <= 0).any():
+        raise ValueError("mFRR capacity export contains nonpositive contract_isp_count values.")
+
+    delivery_start_utc = pd.to_datetime(frame["delivery_start_utc"], utc=True, errors="raise")
+    delivery_end_utc = pd.to_datetime(frame["delivery_end_utc"], utc=True, errors="raise")
+    derived_contract_isp_count = (delivery_end_utc - delivery_start_utc) / pd.Timedelta(minutes=15)
+    if not derived_contract_isp_count.round(12).eq(contract_isp_count.astype(float)).all():
+        raise ValueError("contract_isp_count does not match the delivery_start_utc/delivery_end_utc interval.")
 
 
 def _validate_mfrr_capacity_slice(frame: pd.DataFrame, *, start_local_date: str, end_local_date: str) -> None:
     if frame.empty:
         raise ValueError("Filtered mFRR capacity pilot slice is empty.")
-    if frame["acceptance_threshold_price"].isna().any():
-        raise ValueError("mFRR capacity pilot slice contains missing acceptance_threshold_price values.")
+    if frame["acceptance_threshold_price_eur_per_mw_isp"].isna().any():
+        raise ValueError("mFRR capacity pilot slice contains missing acceptance_threshold_price_eur_per_mw_isp values.")
     if sorted(frame["direction"].drop_duplicates().tolist()) != list(MFRR_EXPECTED_DIRECTIONS):
         raise ValueError("mFRR capacity pilot slice does not contain exactly the expected Up/Down directions.")
     if sorted(frame["scenario_id"].drop_duplicates().tolist()) != sorted(MFRR_EXPECTED_SCENARIO_IDS):
         raise ValueError("mFRR capacity pilot slice does not contain exactly the expected scenario IDs.")
 
     _validate_mfrr_capacity_timing(frame)
+    _validate_mfrr_capacity_contract_metadata(frame)
 
     grouped = frame.groupby(["delivery_date_local", "direction"], as_index=False).agg(
         scenario_count=("scenario_id", "nunique"),
         probability_sum=("scenario_probability", "sum"),
+        contract_isp_count_nunique=("contract_isp_count", "nunique"),
     )
     if not (grouped["scenario_count"] == 3).all():
         raise ValueError("Expected exactly three threshold scenarios per delivery_date_local x direction.")
     if not (grouped["probability_sum"] - 1.0).abs().le(1e-9).all():
         raise ValueError("Scenario probabilities must sum to 1 per delivery_date_local x direction.")
+    if not (grouped["contract_isp_count_nunique"] == 1).all():
+        raise ValueError("contract_isp_count must be unique per delivery_date_local x direction.")
 
     expected_day_count = len(pd.date_range(start_local_date, end_local_date, freq="D"))
     expected_row_count = expected_day_count * len(MFRR_EXPECTED_DIRECTIONS) * len(MFRR_EXPECTED_SCENARIO_IDS)
@@ -249,7 +347,7 @@ def _build_mfrr_capacity_candidate_tables(frame: pd.DataFrame) -> tuple[pd.DataF
         frame.pivot_table(
             index=["delivery_date_local", "direction"],
             columns="scenario_id",
-            values="acceptance_threshold_price",
+            values="acceptance_threshold_price_eur_per_mw_isp",
             aggfunc="first",
         )
         .reset_index()
@@ -264,12 +362,15 @@ def _build_mfrr_capacity_candidate_tables(frame: pd.DataFrame) -> tuple[pd.DataF
             "direction",
             "scenario_id",
             "scenario_probability",
-            "acceptance_threshold_price",
+            "contract_isp_count",
+            "capacity_price_unit",
+            "acceptance_threshold_price_eur_per_mw_isp",
         ]
     ].copy()
     scenario_frame["scenario_probability"] = pd.to_numeric(scenario_frame["scenario_probability"], errors="raise")
-    scenario_frame["acceptance_threshold_price"] = pd.to_numeric(
-        scenario_frame["acceptance_threshold_price"], errors="raise"
+    scenario_frame["contract_isp_count"] = pd.to_numeric(scenario_frame["contract_isp_count"], errors="raise").astype(int)
+    scenario_frame["acceptance_threshold_price_eur_per_mw_isp"] = pd.to_numeric(
+        scenario_frame["acceptance_threshold_price_eur_per_mw_isp"], errors="raise"
     )
 
     candidate_rows: list[dict[str, Any]] = []
@@ -283,26 +384,32 @@ def _build_mfrr_capacity_candidate_tables(frame: pd.DataFrame) -> tuple[pd.DataF
             (scenario_frame["delivery_date_local"].astype(str) == delivery_date_local)
             & (scenario_frame["direction"].astype(str) == direction)
         ].copy()
+        contract_isp_count = int(threshold_rows["contract_isp_count"].iloc[0])
+        capacity_price_unit = str(threshold_rows["capacity_price_unit"].iloc[0])
         for candidate_id in MFRR_EXPECTED_SCENARIO_IDS:
             candidate_price = float(pivot_row[candidate_id])
             threshold_rows["candidate_id"] = candidate_id
-            threshold_rows["candidate_price"] = candidate_price
+            threshold_rows["candidate_price_eur_per_mw_isp"] = candidate_price
             threshold_rows["acceptance_param"] = (
-                threshold_rows["candidate_price"] <= threshold_rows["acceptance_threshold_price"]
+                threshold_rows["candidate_price_eur_per_mw_isp"] <= threshold_rows["acceptance_threshold_price_eur_per_mw_isp"]
             ).astype(int)
             expected_acceptance_probability = float(
                 (threshold_rows["scenario_probability"] * threshold_rows["acceptance_param"]).sum()
             )
-            expected_revenue_coefficient = float(candidate_price * expected_acceptance_probability)
+            expected_revenue_coefficient_eur_per_mw = float(
+                candidate_price * expected_acceptance_probability * contract_isp_count
+            )
             candidate_rows.append(
                 {
                     "delivery_date_local": delivery_date_local,
                     "direction": direction,
                     "candidate_id": candidate_id,
                     "candidate_rank": candidate_rank[candidate_id],
-                    "candidate_price": candidate_price,
+                    "candidate_price_eur_per_mw_isp": candidate_price,
+                    "capacity_price_unit": capacity_price_unit,
+                    "contract_isp_count": contract_isp_count,
                     "expected_acceptance_probability": expected_acceptance_probability,
-                    "expected_revenue_coefficient": expected_revenue_coefficient,
+                    "expected_revenue_coefficient_eur_per_mw": expected_revenue_coefficient_eur_per_mw,
                 }
             )
             for acceptance_row in threshold_rows.to_dict(orient="records"):
@@ -313,8 +420,11 @@ def _build_mfrr_capacity_candidate_tables(frame: pd.DataFrame) -> tuple[pd.DataF
                         "candidate_id": candidate_id,
                         "scenario_id": str(acceptance_row["scenario_id"]),
                         "scenario_probability": float(acceptance_row["scenario_probability"]),
-                        "candidate_price": candidate_price,
-                        "acceptance_threshold_price": float(acceptance_row["acceptance_threshold_price"]),
+                        "contract_isp_count": int(acceptance_row["contract_isp_count"]),
+                        "candidate_price_eur_per_mw_isp": candidate_price,
+                        "acceptance_threshold_price_eur_per_mw_isp": float(
+                            acceptance_row["acceptance_threshold_price_eur_per_mw_isp"]
+                        ),
                         "acceptance_param": int(acceptance_row["acceptance_param"]),
                     }
                 )
@@ -333,9 +443,27 @@ def _build_mfrr_capacity_candidate_tables(frame: pd.DataFrame) -> tuple[pd.DataF
         probabilities = ordered["expected_acceptance_probability"].tolist()
         if not (probabilities[0] >= probabilities[1] >= probabilities[2]):
             raise ValueError("Expected acceptance probabilities are not monotone conservative >= central >= optimistic.")
-        if (ordered["expected_revenue_coefficient"] < -1e-9).any():
+        if (ordered["expected_revenue_coefficient_eur_per_mw"] < -1e-9).any():
             raise ValueError("Expected revenue coefficients must be nonnegative.")
     return candidate_summary, acceptance_table
+
+
+def _load_mfrr_capacity_export_frame(resolved_export_path: Path) -> pd.DataFrame:
+    frame = pd.read_csv(resolved_export_path, usecols=MFRR_EXPORT_USECOLS)
+    frame["delivery_date_local"] = frame["delivery_date_local"].astype(str)
+    frame["scenario_probability"] = pd.to_numeric(frame["scenario_probability"], errors="raise")
+    frame["contract_isp_count"] = pd.to_numeric(frame["contract_isp_count"], errors="raise").astype(int)
+    frame["acceptance_threshold_price_eur_per_mw_isp"] = pd.to_numeric(
+        frame["acceptance_threshold_price_eur_per_mw_isp"], errors="raise"
+    )
+    for column in (
+        "threshold_observed_overlap_flag",
+        "energy_bid_obligation_if_accepted",
+        "activation_modelling_in_scope",
+        "mari_modelling_in_scope",
+    ):
+        frame[column] = frame[column].map(_parse_boolish)
+    return frame
 
 
 def resolve_mfrr_capacity_pilot_input(
@@ -349,6 +477,11 @@ def resolve_mfrr_capacity_pilot_input(
     config = _as_config(config_or_path)
     if require_enabled and not config.mfrr_capacity_pilot.enabled:
         raise ValueError("mFRR capacity pilot is disabled in the current hydrogen config.")
+    if bool(config.mfrr_capacity_pilot.offer_continuous_mw):
+        raise ValueError(
+            "mfrr_capacity_pilot.offer_continuous_mw=True is not allowed for Dutch incident reserve. "
+            "Capacity bids must use integer MW steps."
+        )
 
     resolved_start, resolved_end = _resolve_mfrr_capacity_pilot_dates(
         config,
@@ -358,59 +491,7 @@ def resolve_mfrr_capacity_pilot_input(
     resolved_export_path = _resolve_mfrr_capacity_export_path(config, export_path=export_path)
     if not resolved_export_path.exists():
         raise FileNotFoundError(f"mFRR capacity export not found: {resolved_export_path}")
-
-    frame = pd.read_csv(
-        resolved_export_path,
-        usecols=[
-            "market",
-            "product",
-            "bidding_stage",
-            "forecast_origin_utc",
-            "forecast_origin_local",
-            "known_at_cutoff_utc",
-            "delivery_date_local",
-            "delivery_start_utc",
-            "delivery_end_utc",
-            "delivery_block_id",
-            "granularity",
-            "direction",
-            "scenario_id",
-            "scenario_role",
-            "scenario_probability",
-            "acceptance_threshold_price",
-            "threshold_proxy_name",
-            "threshold_model_name",
-            "threshold_source_scope",
-            "threshold_observed_overlap_flag",
-            "average_price_forecast_threshold_anchor",
-            "average_price_model_threshold_anchor",
-            "average_price_forecast_primary",
-            "average_price_model_primary",
-            "average_price_forecast_comparator",
-            "average_price_model_comparator",
-            "scenario_generation_method",
-            "market_design_regime",
-            "source_data_version",
-            "methodological_caveat",
-            "quality_flags",
-            "activation_included",
-            "imbalance_settlement_included",
-            "mari_energy_included",
-            "afrr_included",
-            "availability_obligation_note",
-        ],
-    )
-    frame["delivery_date_local"] = frame["delivery_date_local"].astype(str)
-    frame["scenario_probability"] = pd.to_numeric(frame["scenario_probability"], errors="raise")
-    frame["acceptance_threshold_price"] = pd.to_numeric(frame["acceptance_threshold_price"], errors="raise")
-    for column in (
-        "activation_included",
-        "imbalance_settlement_included",
-        "mari_energy_included",
-        "afrr_included",
-        "threshold_observed_overlap_flag",
-    ):
-        frame[column] = frame[column].map(_parse_boolish)
+    frame = _load_mfrr_capacity_export_frame(resolved_export_path)
 
     mask = (
         frame["delivery_date_local"].between(str(resolved_start), str(resolved_end))
@@ -419,10 +500,11 @@ def resolve_mfrr_capacity_pilot_input(
         & frame["product"].astype(str).eq("mFRRda_capacity")
         & frame["market"].astype(str).eq("NL_incident_reserve")
         & frame["bidding_stage"].astype(str).eq("capacity_auction_D_minus_1_09am")
-        & ~frame["activation_included"]
-        & ~frame["mari_energy_included"]
-        & ~frame["afrr_included"]
-        & ~frame["imbalance_settlement_included"]
+        & frame["capacity_product_structure"].astype(str).eq(MFRR_REQUIRED_CAPACITY_PRODUCT_STRUCTURE)
+        & frame["capacity_price_unit"].astype(str).eq(MFRR_REQUIRED_CAPACITY_PRICE_UNIT)
+        & frame["energy_bid_obligation_if_accepted"]
+        & ~frame["activation_modelling_in_scope"]
+        & ~frame["mari_modelling_in_scope"]
     )
     filtered = frame.loc[mask].copy().reset_index(drop=True)
     _validate_mfrr_capacity_slice(filtered, start_local_date=str(resolved_start), end_local_date=str(resolved_end))
@@ -431,7 +513,10 @@ def resolve_mfrr_capacity_pilot_input(
     findings = [
         "frozen_mfrr_capacity_export_consumed_without_recomputation",
         "capacity_auction_timing_preserved_at_d_minus_1_09am_europe_amsterdam",
-        "activation_mari_afrr_imbalance_flags_verified_false",
+        "capacity_price_unit_verified_eur_per_mw_per_isp",
+        "contract_isp_count_consumed_in_expected_revenue_coefficients",
+        "energy_bid_obligation_preserved_as_metadata_only",
+        "activation_and_mari_flags_verified_false",
     ]
     selected_period = {
         "start_local_date": str(resolved_start),
@@ -456,66 +541,19 @@ def load_mfrr_capacity_pilot_inputs(
     start_local_date: str = "2025-07-07",
     end_local_date: str = "2025-07-13",
     capacity_offer_big_m_mw: float | None = None,
-    offer_continuous_mw: bool = True,
+    offer_continuous_mw: bool = False,
 ) -> ResolvedMFRRCapacityPilotInput:
+    if bool(offer_continuous_mw):
+        raise ValueError(
+            "offer_continuous_mw=True is not allowed for Dutch incident reserve. "
+            "Capacity bids must use integer MW steps."
+        )
     resolved_export_path = Path(export_path)
     if not resolved_export_path.is_absolute():
         resolved_export_path = resolved_export_path.resolve()
     if not resolved_export_path.exists():
         raise FileNotFoundError(f"mFRR capacity export not found: {resolved_export_path}")
-
-    frame = pd.read_csv(
-        resolved_export_path,
-        usecols=[
-            "market",
-            "product",
-            "bidding_stage",
-            "forecast_origin_utc",
-            "forecast_origin_local",
-            "known_at_cutoff_utc",
-            "delivery_date_local",
-            "delivery_start_utc",
-            "delivery_end_utc",
-            "delivery_block_id",
-            "granularity",
-            "direction",
-            "scenario_id",
-            "scenario_role",
-            "scenario_probability",
-            "acceptance_threshold_price",
-            "threshold_proxy_name",
-            "threshold_model_name",
-            "threshold_source_scope",
-            "threshold_observed_overlap_flag",
-            "average_price_forecast_threshold_anchor",
-            "average_price_model_threshold_anchor",
-            "average_price_forecast_primary",
-            "average_price_model_primary",
-            "average_price_forecast_comparator",
-            "average_price_model_comparator",
-            "scenario_generation_method",
-            "market_design_regime",
-            "source_data_version",
-            "methodological_caveat",
-            "quality_flags",
-            "activation_included",
-            "imbalance_settlement_included",
-            "mari_energy_included",
-            "afrr_included",
-            "availability_obligation_note",
-        ],
-    )
-    frame["delivery_date_local"] = frame["delivery_date_local"].astype(str)
-    frame["scenario_probability"] = pd.to_numeric(frame["scenario_probability"], errors="raise")
-    frame["acceptance_threshold_price"] = pd.to_numeric(frame["acceptance_threshold_price"], errors="raise")
-    for column in (
-        "activation_included",
-        "imbalance_settlement_included",
-        "mari_energy_included",
-        "afrr_included",
-        "threshold_observed_overlap_flag",
-    ):
-        frame[column] = frame[column].map(_parse_boolish)
+    frame = _load_mfrr_capacity_export_frame(resolved_export_path)
 
     mask = (
         frame["delivery_date_local"].between(str(start_local_date), str(end_local_date))
@@ -524,10 +562,11 @@ def load_mfrr_capacity_pilot_inputs(
         & frame["product"].astype(str).eq("mFRRda_capacity")
         & frame["market"].astype(str).eq("NL_incident_reserve")
         & frame["bidding_stage"].astype(str).eq("capacity_auction_D_minus_1_09am")
-        & ~frame["activation_included"]
-        & ~frame["mari_energy_included"]
-        & ~frame["afrr_included"]
-        & ~frame["imbalance_settlement_included"]
+        & frame["capacity_product_structure"].astype(str).eq(MFRR_REQUIRED_CAPACITY_PRODUCT_STRUCTURE)
+        & frame["capacity_price_unit"].astype(str).eq(MFRR_REQUIRED_CAPACITY_PRICE_UNIT)
+        & frame["energy_bid_obligation_if_accepted"]
+        & ~frame["activation_modelling_in_scope"]
+        & ~frame["mari_modelling_in_scope"]
     )
     filtered = frame.loc[mask].copy().reset_index(drop=True)
     _validate_mfrr_capacity_slice(filtered, start_local_date=str(start_local_date), end_local_date=str(end_local_date))
@@ -536,7 +575,10 @@ def load_mfrr_capacity_pilot_inputs(
     findings = [
         "frozen_mfrr_capacity_export_consumed_without_recomputation",
         "capacity_auction_timing_preserved_at_d_minus_1_09am_europe_amsterdam",
-        "activation_mari_afrr_imbalance_flags_verified_false",
+        "capacity_price_unit_verified_eur_per_mw_per_isp",
+        "contract_isp_count_consumed_in_expected_revenue_coefficients",
+        "energy_bid_obligation_preserved_as_metadata_only",
+        "activation_and_mari_flags_verified_false",
     ]
     selected_period = {
         "start_local_date": str(start_local_date),

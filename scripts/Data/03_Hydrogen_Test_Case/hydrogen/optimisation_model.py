@@ -11,7 +11,24 @@ import numpy as np
 import pandas as pd
 
 from .optimisation.input_resolver import ResolvedMFRRCapacityPilotInput
-from .plant_parameters import EconomicSettings, HydrogenSystemSettings, SolverSettings
+from .plant_parameters import (
+    EconomicSettings,
+    HydrogenSystemSettings,
+    ProductionTargetsSettings,
+    ReserveFeasibilityProxySettings,
+    SolverSettings,
+)
+from .production_target import (
+    build_rolling_production_target_plan,
+    build_rolling_up_recovery_proxy_bounds,
+    deliverable_output_kg_per_site_load_mwh,
+    is_rolling_deadline_mode,
+    RESERVE_FEASIBILITY_PROXY_DOWN_SOURCE_ROLLING_PRODUCTION_CREDIT_HEADROOM,
+    RESERVE_FEASIBILITY_PROXY_MODE_CONSERVATIVE_OUTPUT_ABSORPTION,
+    RESERVE_FEASIBILITY_PROXY_MODE_CONSERVATIVE_OUTPUT_ABSORPTION_AND_RECOVERY,
+    RESERVE_FEASIBILITY_PROXY_UP_SOURCE_ROLLING_FUTURE_RECOVERABLE_PRODUCTION_HEADROOM,
+    should_apply_terminal_inventory_value,
+)
 
 try:
     import pyomo.environ as pyo
@@ -235,6 +252,7 @@ def _extract_solution_rows(
     dispatch: pd.DataFrame,
     delta_t_hours: float,
     economics: EconomicSettings,
+    hydrogen_revenue_per_kg: float,
     shortfall_kg: float,
     shortfall_penalty_eur_per_kg: float,
     apply_terminal_value: bool,
@@ -253,7 +271,7 @@ def _extract_solution_rows(
             .to_numpy()
         )
         electricity_cost = float(np.sum(scenario_prices * power_total.to_numpy() * delta_t_hours))
-        hydrogen_revenue = float(economics.h2_sale_price_eur_per_kg * dispatch["H_comp_kg"].sum())
+        hydrogen_revenue = float(hydrogen_revenue_per_kg * dispatch["H_comp_kg"].sum())
         shortfall_penalty = float(shortfall_penalty_eur_per_kg * shortfall_kg)
         terminal_value = (
             float(terminal_value_per_kg * (dispatch["H_buf_kg"].iloc[-1] - terminal_reference_start_kg))
@@ -374,7 +392,7 @@ def _build_mfrr_capacity_summary_from_solution(
         axis=1,
     )
     summary["expected_capacity_revenue_eur"] = (
-        summary["expected_revenue_coefficient"].astype(float) * summary["offered_capacity_mw"].astype(float)
+        summary["expected_revenue_coefficient_eur_per_mw"].astype(float) * summary["offered_capacity_mw"].astype(float)
     )
     totals = (
         summary.groupby(["delivery_date_local", "direction"], as_index=False)["offered_capacity_mw"]
@@ -396,8 +414,11 @@ def _add_mfrr_capacity_pilot_pyomo_components(
     model: Any,
     timestamps: pd.DatetimeIndex,
     horizon: list[int],
+    delta_t_hours: float,
     hydrogen: HydrogenSystemSettings,
     mfrr_capacity_pilot: ResolvedMFRRCapacityPilotInput,
+    rolling_target_plan: Any = None,
+    reserve_feasibility_proxy: ReserveFeasibilityProxySettings | None = None,
 ) -> dict[str, Any]:
     delivery_days, directions, time_to_day, _ = _resolve_mfrr_capacity_horizon_metadata(
         timestamps,
@@ -407,9 +428,11 @@ def _add_mfrr_capacity_pilot_pyomo_components(
     candidate_summary["delivery_date_local"] = candidate_summary["delivery_date_local"].astype(str)
     candidate_summary["direction"] = candidate_summary["direction"].astype(str)
     candidate_summary["candidate_id"] = candidate_summary["candidate_id"].astype(str)
-    candidate_summary["candidate_price"] = pd.to_numeric(candidate_summary["candidate_price"], errors="raise")
-    candidate_summary["expected_revenue_coefficient"] = pd.to_numeric(
-        candidate_summary["expected_revenue_coefficient"], errors="raise"
+    candidate_summary["candidate_price_eur_per_mw_isp"] = pd.to_numeric(
+        candidate_summary["candidate_price_eur_per_mw_isp"], errors="raise"
+    )
+    candidate_summary["expected_revenue_coefficient_eur_per_mw"] = pd.to_numeric(
+        candidate_summary["expected_revenue_coefficient_eur_per_mw"], errors="raise"
     )
     candidate_keys = [
         (str(row["delivery_date_local"]), str(row["direction"]), str(row["candidate_id"]))
@@ -429,13 +452,79 @@ def _add_mfrr_capacity_pilot_pyomo_components(
     }
     expected_revenue_lookup = {
         (str(row["delivery_date_local"]), str(row["direction"]), str(row["candidate_id"])): float(
-            row["expected_revenue_coefficient"]
+            row["expected_revenue_coefficient_eur_per_mw"]
         )
         for row in candidate_summary.to_dict(orient="records")
     }
     max_site_load = float(hydrogen.electrolyser_nominal_mw + hydrogen.compressor_max_mw)
     offer_big_m = min(float(mfrr_capacity_pilot.capacity_offer_big_m_mw), max_site_load)
-    offer_domain = pyo.NonNegativeReals if mfrr_capacity_pilot.offer_continuous_mw else pyo.NonNegativeIntegers
+    proxy_mode = str(reserve_feasibility_proxy.mode).strip() if reserve_feasibility_proxy is not None else "none"
+    down_absorption_proxy_active = bool(
+        reserve_feasibility_proxy is not None
+        and bool(reserve_feasibility_proxy.enabled)
+        and proxy_mode in {
+            RESERVE_FEASIBILITY_PROXY_MODE_CONSERVATIVE_OUTPUT_ABSORPTION,
+            RESERVE_FEASIBILITY_PROXY_MODE_CONSERVATIVE_OUTPUT_ABSORPTION_AND_RECOVERY,
+        }
+        and rolling_target_plan is not None
+    )
+    up_recovery_proxy_active = bool(
+        reserve_feasibility_proxy is not None
+        and bool(reserve_feasibility_proxy.enabled)
+        and proxy_mode == RESERVE_FEASIBILITY_PROXY_MODE_CONSERVATIVE_OUTPUT_ABSORPTION_AND_RECOVERY
+        and rolling_target_plan is not None
+    )
+    if down_absorption_proxy_active:
+        if rolling_target_plan.max_inventory_kg is None:
+            raise ValueError(
+                "reserve_feasibility_proxy conservative_output_absorption requires "
+                "a finite production_targets.max_inventory_kg in rolling_deadline_envelope mode."
+            )
+        if (
+            str(reserve_feasibility_proxy.down_output_absorption_source).strip()
+            != RESERVE_FEASIBILITY_PROXY_DOWN_SOURCE_ROLLING_PRODUCTION_CREDIT_HEADROOM
+        ):
+            raise ValueError(
+                "Unsupported reserve_feasibility_proxy.down_output_absorption_source: "
+                f"{reserve_feasibility_proxy.down_output_absorption_source!r}"
+            )
+        down_activation_duration_hours = float(reserve_feasibility_proxy.down_activation_duration_hours)
+        down_output_kg_per_mwh = float(deliverable_output_kg_per_site_load_mwh(hydrogen=hydrogen))
+    else:
+        down_activation_duration_hours = 0.0
+        down_output_kg_per_mwh = 0.0
+    if up_recovery_proxy_active:
+        if (
+            str(reserve_feasibility_proxy.up_recovery_source).strip()
+            != RESERVE_FEASIBILITY_PROXY_UP_SOURCE_ROLLING_FUTURE_RECOVERABLE_PRODUCTION_HEADROOM
+        ):
+            raise ValueError(
+                "Unsupported reserve_feasibility_proxy.up_recovery_source: "
+                f"{reserve_feasibility_proxy.up_recovery_source!r}"
+            )
+        up_activation_duration_hours = float(reserve_feasibility_proxy.up_activation_duration_hours)
+        up_output_kg_per_mwh = float(deliverable_output_kg_per_site_load_mwh(hydrogen=hydrogen))
+        up_recovery_bounds = build_rolling_up_recovery_proxy_bounds(
+            timestamps_utc=timestamps,
+            hydrogen=hydrogen,
+            rolling_target_plan=rolling_target_plan,
+            delta_t_hours=delta_t_hours,
+        )
+        max_cumulative_required_kg = max(
+            [float(required) for _, required in rolling_target_plan.cumulative_requirements_by_due_date] or [0.0]
+        )
+        up_recovery_relaxation_kg = max(0.0, max_cumulative_required_kg - float(rolling_target_plan.initial_inventory_kg))
+    else:
+        up_activation_duration_hours = 0.0
+        up_output_kg_per_mwh = 0.0
+        up_recovery_bounds = tuple()
+        up_recovery_relaxation_kg = 0.0
+    if bool(mfrr_capacity_pilot.offer_continuous_mw):
+        raise ValueError(
+            "Continuous mFRR capacity offers are no longer supported in this pilot. "
+            "Dutch incident reserve capacity bids must respect the 1 MW minimum and 1 MW step size."
+        )
+    offer_domain = pyo.NonNegativeIntegers
 
     model.MFRR_DAY_DIRECTION = pyo.Set(dimen=2, initialize=day_direction_pairs, ordered=True)
     model.MFRR_DAY_DIRECTION_CANDIDATE = pyo.Set(dimen=3, initialize=candidate_keys, ordered=True)
@@ -467,18 +556,53 @@ def _add_mfrr_capacity_pilot_pyomo_components(
             model.mfrr_offered_capacity_mw[day, direction, candidate_id]
             <= offer_big_m * model.mfrr_bid_select[day, direction, candidate_id]
         )
+        model.constraints.add(
+            model.mfrr_offered_capacity_mw[day, direction, candidate_id]
+            >= 1.0 * model.mfrr_bid_select[day, direction, candidate_id]
+        )
     for t in horizon:
         day = time_to_day[t]
         if (day, "Up") in day_direction_pairs:
             model.constraints.add(model.mfrr_offered_capacity_total_mw[day, "Up"] <= model.P_el[t] + model.P_comp[t])
+            if up_recovery_proxy_active:
+                selected_up_expr = sum(
+                    model.mfrr_bid_select[day, "Up", candidate_id]
+                    for candidate_id in candidate_ids_by_pair[(day, "Up")]
+                )
+                for bound in up_recovery_bounds:
+                    if int(bound.time_index) != int(t):
+                        continue
+                    model.constraints.add(
+                        model.mfrr_offered_capacity_total_mw[day, "Up"] * up_activation_duration_hours * up_output_kg_per_mwh
+                        <= float(rolling_target_plan.initial_inventory_kg)
+                        + sum(model.H_comp[k] for k in range(t + 1))
+                        + float(bound.future_max_recoverable_output_kg)
+                        - float(bound.cumulative_required_kg)
+                        + float(up_recovery_relaxation_kg) * (1.0 - selected_up_expr)
+                    )
         if (day, "Down") in day_direction_pairs:
             model.constraints.add(
                 model.mfrr_offered_capacity_total_mw[day, "Down"] <= max_site_load - (model.P_el[t] + model.P_comp[t])
             )
+            if down_absorption_proxy_active:
+                model.constraints.add(
+                    model.mfrr_offered_capacity_total_mw[day, "Down"] * down_activation_duration_hours * down_output_kg_per_mwh
+                    + float(rolling_target_plan.initial_inventory_kg)
+                    + sum(model.H_comp[k] for k in range(t + 1))
+                    - float(rolling_target_plan.cumulative_required_due_by_time_index_kg[t])
+                    <= float(rolling_target_plan.max_inventory_kg)
+                )
     return {
         "expected_capacity_revenue_expr": model.mfrr_expected_capacity_revenue_eur,
         "candidate_keys": candidate_keys,
         "day_direction_pairs": day_direction_pairs,
+        "down_absorption_proxy_active": down_absorption_proxy_active,
+        "down_activation_duration_hours": float(down_activation_duration_hours),
+        "down_output_kg_per_mwh": float(down_output_kg_per_mwh),
+        "up_recovery_proxy_active": up_recovery_proxy_active,
+        "up_activation_duration_hours": float(up_activation_duration_hours),
+        "up_output_kg_per_mwh": float(up_output_kg_per_mwh),
+        "up_recovery_bounds": up_recovery_bounds,
     }
 
 
@@ -566,6 +690,8 @@ def _solve_with_pyomo(
     gamma: float,
     alpha: float,
     production_target_mode: str,
+    production_targets: ProductionTargetsSettings | None,
+    reserve_feasibility_proxy: ReserveFeasibilityProxySettings | None,
     shortfall_penalty_eur_per_kg: float | None,
     apply_terminal_value: bool,
     terminal_reference_start_kg: float,
@@ -587,6 +713,20 @@ def _solve_with_pyomo(
     effective_shortfall_penalty = _effective_shortfall_penalty(
         economics,
         shortfall_penalty_eur_per_kg=shortfall_penalty_eur_per_kg,
+    )
+    rolling_target_plan = (
+        build_rolling_production_target_plan(
+            timestamps_utc=timestamps,
+            hydrogen=hydrogen,
+            production_targets=production_targets,
+            delta_t_hours=delta_t_hours,
+        )
+        if is_rolling_deadline_mode(production_targets)
+        else None
+    )
+    effective_apply_terminal_value = should_apply_terminal_inventory_value(
+        apply_terminal_value=apply_terminal_value,
+        production_targets=production_targets,
     )
     m = pyo.ConcreteModel(name="hydrogen_stochastic_dispatch")
     m.T = pyo.RangeSet(0, t_max)
@@ -625,7 +765,26 @@ def _solve_with_pyomo(
         None if target_hydrogen_max_kg is None else float(target_hydrogen_max_kg)
     )
     sum_h_comp = sum(m.H_comp[t] for t in horizon)
-    if _is_hard_target_mode(production_target_mode):
+    if rolling_target_plan is not None:
+        m.constraints.add(m.shortfall == 0.0)
+        for bound in rolling_target_plan.rolling_constraints:
+            m.constraints.add(
+                float(rolling_target_plan.initial_inventory_kg)
+                + sum(m.H_comp[t] for t in range(bound.cutoff_time_index + 1))
+                >= float(bound.cumulative_required_kg)
+            )
+        for guard in rolling_target_plan.terminal_guards:
+            if guard.active:
+                m.constraints.add(sum_h_comp >= float(guard.minimum_h_comp_required_by_horizon_end_kg))
+        if rolling_target_plan.max_inventory_kg is not None:
+            for t in horizon:
+                m.constraints.add(
+                    float(rolling_target_plan.initial_inventory_kg)
+                    + sum(m.H_comp[k] for k in range(t + 1))
+                    - float(rolling_target_plan.cumulative_required_due_by_time_index_kg[t])
+                    <= float(rolling_target_plan.max_inventory_kg)
+                )
+    elif _is_hard_target_mode(production_target_mode):
         m.constraints.add(sum_h_comp >= target_hydrogen_min_kg)
         if target_hydrogen_max_kg_value is not None:
             m.constraints.add(sum_h_comp <= target_hydrogen_max_kg_value)
@@ -643,18 +802,41 @@ def _solve_with_pyomo(
             model=m,
             timestamps=timestamps,
             horizon=horizon,
+            delta_t_hours=delta_t_hours,
             hydrogen=hydrogen,
             mfrr_capacity_pilot=mfrr_capacity_pilot,
+            rolling_target_plan=rolling_target_plan,
+            reserve_feasibility_proxy=reserve_feasibility_proxy,
         )
         mfrr_expected_capacity_revenue_expr = mfrr_components["expected_capacity_revenue_expr"]
         mfrr_candidate_keys = list(mfrr_components["candidate_keys"])
         mfrr_day_direction_pairs = list(mfrr_components["day_direction_pairs"])
+        mfrr_down_absorption_proxy_active = bool(mfrr_components["down_absorption_proxy_active"])
+        mfrr_down_output_kg_per_mwh = float(mfrr_components["down_output_kg_per_mwh"])
+        mfrr_up_recovery_proxy_active = bool(mfrr_components["up_recovery_proxy_active"])
+        mfrr_up_output_kg_per_mwh = float(mfrr_components["up_output_kg_per_mwh"])
+        mfrr_up_recovery_bounds = tuple(mfrr_components["up_recovery_bounds"])
         if bool((debug_options or {}).get("force_mfrr_offer_zero", False)):
             for key in mfrr_candidate_keys:
                 m.constraints.add(m.mfrr_offered_capacity_mw[key] == 0.0)
-    terminal_value_expr = terminal_value_per_kg * (m.H_buf[t_max] - terminal_reference_start_kg) if apply_terminal_value else 0.0
+    else:
+        mfrr_down_absorption_proxy_active = False
+        mfrr_down_output_kg_per_mwh = 0.0
+        mfrr_up_recovery_proxy_active = False
+        mfrr_up_output_kg_per_mwh = 0.0
+        mfrr_up_recovery_bounds = tuple()
+    terminal_value_expr = (
+        terminal_value_per_kg * (m.H_buf[t_max] - terminal_reference_start_kg)
+        if effective_apply_terminal_value
+        else 0.0
+    )
     shortfall_penalty_expr = effective_shortfall_penalty * m.shortfall
-    revenue_expr = economics.h2_sale_price_eur_per_kg * sum_h_comp
+    effective_hydrogen_revenue_per_kg = (
+        float(economics.h2_sale_price_eur_per_kg)
+        if rolling_target_plan is None
+        else 0.0
+    )
+    revenue_expr = effective_hydrogen_revenue_per_kg * sum_h_comp
 
     for s in scenario_ids:
         electricity_cost_expr = sum(price_lookup[(s, t)] * (m.P_el[t] + m.P_comp[t]) * delta_t_hours for t in horizon)
@@ -710,9 +892,10 @@ def _solve_with_pyomo(
         dispatch=dispatch,
         delta_t_hours=delta_t_hours,
         economics=economics,
+        hydrogen_revenue_per_kg=effective_hydrogen_revenue_per_kg,
         shortfall_kg=shortfall_value,
         shortfall_penalty_eur_per_kg=effective_shortfall_penalty,
-        apply_terminal_value=apply_terminal_value,
+        apply_terminal_value=effective_apply_terminal_value,
         terminal_reference_start_kg=terminal_reference_start_kg,
         terminal_value_per_kg=terminal_value_per_kg,
         net_cost_lookup=net_cost_lookup,
@@ -758,6 +941,24 @@ def _solve_with_pyomo(
     )
     postprocess_time = perf_counter() - postprocess_started
     diagnostics = _pyomo_solver_diagnostics(results)
+    up_recovery_headroom_by_time_index_kg: list[float] = []
+    if rolling_target_plan is not None and mfrr_up_recovery_bounds:
+        cumulative_h_comp = dispatch["H_comp_kg"].astype(float).cumsum().tolist()
+        grouped_bounds: dict[int, list[Any]] = {}
+        for bound in mfrr_up_recovery_bounds:
+            grouped_bounds.setdefault(int(bound.time_index), []).append(bound)
+        for t in horizon:
+            if int(t) not in grouped_bounds:
+                up_recovery_headroom_by_time_index_kg.append(0.0)
+                continue
+            candidate_headrooms = [
+                float(rolling_target_plan.initial_inventory_kg)
+                + float(cumulative_h_comp[t])
+                + float(bound.future_max_recoverable_output_kg)
+                - float(bound.cumulative_required_kg)
+                for bound in grouped_bounds[int(t)]
+            ]
+            up_recovery_headroom_by_time_index_kg.append(float(min(candidate_headrooms)))
     debug_info: dict[str, Any] | None = None
     if bool((debug_options or {}).get("collect_objective_audit", False)):
         active_objectives = list(m.component_data_objects(pyo.Objective, active=True, descend_into=True))
@@ -775,8 +976,140 @@ def _solve_with_pyomo(
             "expected_operational_net_cost_eur": float(expected_operational_net_cost),
             "expected_mfrr_capacity_revenue_eur": float(expected_mfrr_capacity_revenue),
             "cvar_term_eur": float(cvar_value),
+            "effective_hydrogen_revenue_per_kg": float(effective_hydrogen_revenue_per_kg),
             "force_mfrr_offer_zero": bool((debug_options or {}).get("force_mfrr_offer_zero", False)),
             "solver_diagnostics": diagnostics,
+            "production_targets_mode": str(production_targets.mode) if production_targets is not None else "legacy_daily_minimum",
+            "rolling_target_plan": None
+            if rolling_target_plan is None
+            else {
+                "due_date_interpretation": rolling_target_plan.due_date_interpretation,
+                "horizon_start_local_date": rolling_target_plan.horizon_start_local_date,
+                "horizon_end_local_date": rolling_target_plan.horizon_end_local_date,
+                "rolling_constraints": [
+                    {
+                        "due_date": bound.due_date,
+                        "cutoff_time_index": int(bound.cutoff_time_index),
+                        "cumulative_required_kg": float(bound.cumulative_required_kg),
+                    }
+                    for bound in rolling_target_plan.rolling_constraints
+                ],
+                "terminal_guards": [
+                    {
+                        "due_date": guard.due_date,
+                        "cumulative_required_kg": float(guard.cumulative_required_kg),
+                        "future_max_production_kg": float(guard.future_max_production_kg),
+                        "minimum_h_comp_required_by_horizon_end_kg": float(guard.minimum_h_comp_required_by_horizon_end_kg),
+                        "active": bool(guard.active),
+                    }
+                    for guard in rolling_target_plan.terminal_guards
+                ],
+                "inventory_cap_active": rolling_target_plan.max_inventory_kg is not None,
+                "max_inventory_kg": rolling_target_plan.max_inventory_kg,
+                "cumulative_required_due_by_time_index_kg": [
+                    float(value) for value in rolling_target_plan.cumulative_required_due_by_time_index_kg
+                ],
+                "terminal_inventory_value_mode": rolling_target_plan.terminal_inventory_value_mode,
+                "effective_apply_terminal_value": bool(effective_apply_terminal_value),
+                "effective_hydrogen_revenue_per_kg": float(effective_hydrogen_revenue_per_kg),
+                "reserve_feasibility_proxy": {
+                    "enabled": bool(reserve_feasibility_proxy.enabled) if reserve_feasibility_proxy is not None else False,
+                    "mode": str(reserve_feasibility_proxy.mode) if reserve_feasibility_proxy is not None else "none",
+                    "down_activation_duration_hours": (
+                        float(reserve_feasibility_proxy.down_activation_duration_hours)
+                        if reserve_feasibility_proxy is not None
+                        else 0.0
+                    ),
+                    "down_output_absorption_source": (
+                        str(reserve_feasibility_proxy.down_output_absorption_source)
+                        if reserve_feasibility_proxy is not None
+                        else "none"
+                    ),
+                    "up_activation_duration_hours": (
+                        float(reserve_feasibility_proxy.up_activation_duration_hours)
+                        if reserve_feasibility_proxy is not None
+                        else 0.0
+                    ),
+                    "up_recovery_source": (
+                        str(reserve_feasibility_proxy.up_recovery_source)
+                        if reserve_feasibility_proxy is not None
+                        else "none"
+                    ),
+                    "active_for_down_rolling_cap": bool(mfrr_down_absorption_proxy_active),
+                    "down_output_kg_per_mwh": float(mfrr_down_output_kg_per_mwh),
+                    "active_for_up_rolling_recovery": bool(mfrr_up_recovery_proxy_active),
+                    "up_output_kg_per_mwh": float(mfrr_up_output_kg_per_mwh),
+                    "up_recovery_headroom_by_time_index_kg": [
+                        float(value) for value in up_recovery_headroom_by_time_index_kg
+                    ],
+                },
+            },
+        }
+    elif rolling_target_plan is not None:
+        debug_info = {
+            "production_targets_mode": str(production_targets.mode),
+            "rolling_target_plan": {
+                "due_date_interpretation": rolling_target_plan.due_date_interpretation,
+                "horizon_start_local_date": rolling_target_plan.horizon_start_local_date,
+                "horizon_end_local_date": rolling_target_plan.horizon_end_local_date,
+                "rolling_constraints": [
+                    {
+                        "due_date": bound.due_date,
+                        "cutoff_time_index": int(bound.cutoff_time_index),
+                        "cumulative_required_kg": float(bound.cumulative_required_kg),
+                    }
+                    for bound in rolling_target_plan.rolling_constraints
+                ],
+                "terminal_guards": [
+                    {
+                        "due_date": guard.due_date,
+                        "cumulative_required_kg": float(guard.cumulative_required_kg),
+                        "future_max_production_kg": float(guard.future_max_production_kg),
+                        "minimum_h_comp_required_by_horizon_end_kg": float(guard.minimum_h_comp_required_by_horizon_end_kg),
+                        "active": bool(guard.active),
+                    }
+                    for guard in rolling_target_plan.terminal_guards
+                ],
+                "inventory_cap_active": rolling_target_plan.max_inventory_kg is not None,
+                "max_inventory_kg": rolling_target_plan.max_inventory_kg,
+                "cumulative_required_due_by_time_index_kg": [
+                    float(value) for value in rolling_target_plan.cumulative_required_due_by_time_index_kg
+                ],
+                "terminal_inventory_value_mode": rolling_target_plan.terminal_inventory_value_mode,
+                "effective_apply_terminal_value": bool(effective_apply_terminal_value),
+                "effective_hydrogen_revenue_per_kg": float(effective_hydrogen_revenue_per_kg),
+                "reserve_feasibility_proxy": {
+                    "enabled": bool(reserve_feasibility_proxy.enabled) if reserve_feasibility_proxy is not None else False,
+                    "mode": str(reserve_feasibility_proxy.mode) if reserve_feasibility_proxy is not None else "none",
+                    "down_activation_duration_hours": (
+                        float(reserve_feasibility_proxy.down_activation_duration_hours)
+                        if reserve_feasibility_proxy is not None
+                        else 0.0
+                    ),
+                    "down_output_absorption_source": (
+                        str(reserve_feasibility_proxy.down_output_absorption_source)
+                        if reserve_feasibility_proxy is not None
+                        else "none"
+                    ),
+                    "up_activation_duration_hours": (
+                        float(reserve_feasibility_proxy.up_activation_duration_hours)
+                        if reserve_feasibility_proxy is not None
+                        else 0.0
+                    ),
+                    "up_recovery_source": (
+                        str(reserve_feasibility_proxy.up_recovery_source)
+                        if reserve_feasibility_proxy is not None
+                        else "none"
+                    ),
+                    "active_for_down_rolling_cap": bool(mfrr_down_absorption_proxy_active),
+                    "down_output_kg_per_mwh": float(mfrr_down_output_kg_per_mwh),
+                    "active_for_up_rolling_recovery": bool(mfrr_up_recovery_proxy_active),
+                    "up_output_kg_per_mwh": float(mfrr_up_output_kg_per_mwh),
+                    "up_recovery_headroom_by_time_index_kg": [
+                        float(value) for value in up_recovery_headroom_by_time_index_kg
+                    ],
+                },
+            },
         }
     solver_result = SolverResult(
         status=status_text,
@@ -821,6 +1154,8 @@ def _solve_with_pulp(
     gamma: float,
     alpha: float,
     production_target_mode: str,
+    production_targets: ProductionTargetsSettings | None,
+    reserve_feasibility_proxy: ReserveFeasibilityProxySettings | None,
     shortfall_penalty_eur_per_kg: float | None,
     apply_terminal_value: bool,
     terminal_reference_start_kg: float,
@@ -837,6 +1172,20 @@ def _solve_with_pulp(
     effective_shortfall_penalty = _effective_shortfall_penalty(
         economics,
         shortfall_penalty_eur_per_kg=shortfall_penalty_eur_per_kg,
+    )
+    rolling_target_plan = (
+        build_rolling_production_target_plan(
+            timestamps_utc=timestamps,
+            hydrogen=hydrogen,
+            production_targets=production_targets,
+            delta_t_hours=delta_t_hours,
+        )
+        if is_rolling_deadline_mode(production_targets)
+        else None
+    )
+    effective_apply_terminal_value = should_apply_terminal_inventory_value(
+        apply_terminal_value=apply_terminal_value,
+        production_targets=production_targets,
     )
     timestamps, scenario_ids, price_lookup, probabilities = _prepare_price_panel(day_scenarios)
     if not scenario_ids:
@@ -877,7 +1226,26 @@ def _solve_with_pulp(
         None if target_hydrogen_max_kg is None else float(target_hydrogen_max_kg)
     )
     sum_h_comp = pulp.lpSum(h_comp[t] for t in horizon)
-    if _is_hard_target_mode(production_target_mode):
+    if rolling_target_plan is not None:
+        model += shortfall == 0.0, "rolling_target_shortfall_zero"
+        for idx, bound in enumerate(rolling_target_plan.rolling_constraints):
+            model += (
+                float(rolling_target_plan.initial_inventory_kg)
+                + pulp.lpSum(h_comp[t] for t in range(bound.cutoff_time_index + 1))
+                >= float(bound.cumulative_required_kg)
+            ), f"rolling_due_lb_{idx}"
+        for idx, guard in enumerate(rolling_target_plan.terminal_guards):
+            if guard.active:
+                model += sum_h_comp >= float(guard.minimum_h_comp_required_by_horizon_end_kg), f"rolling_terminal_guard_{idx}"
+        if rolling_target_plan.max_inventory_kg is not None:
+            for t in horizon:
+                model += (
+                    float(rolling_target_plan.initial_inventory_kg)
+                    + pulp.lpSum(h_comp[k] for k in range(t + 1))
+                    - float(rolling_target_plan.cumulative_required_due_by_time_index_kg[t])
+                    <= float(rolling_target_plan.max_inventory_kg)
+                ), f"rolling_inventory_cap_{t}"
+    elif _is_hard_target_mode(production_target_mode):
         model += sum_h_comp >= target_hydrogen_min_kg, "daily_target_lb"
         if target_hydrogen_max_kg_value is not None:
             model += sum_h_comp <= target_hydrogen_max_kg_value, "daily_target_ub"
@@ -885,9 +1253,18 @@ def _solve_with_pulp(
     else:
         model += sum_h_comp + shortfall >= target_hydrogen_min_kg, "daily_target_lb"
 
-    terminal_value_expr = terminal_value_per_kg * (h_buf[len(timestamps) - 1] - terminal_reference_start_kg) if apply_terminal_value else 0.0
+    terminal_value_expr = (
+        terminal_value_per_kg * (h_buf[len(timestamps) - 1] - terminal_reference_start_kg)
+        if effective_apply_terminal_value
+        else 0.0
+    )
     shortfall_penalty_expr = effective_shortfall_penalty * shortfall
-    revenue_expr = economics.h2_sale_price_eur_per_kg * sum_h_comp
+    effective_hydrogen_revenue_per_kg = (
+        float(economics.h2_sale_price_eur_per_kg)
+        if rolling_target_plan is None
+        else 0.0
+    )
+    revenue_expr = effective_hydrogen_revenue_per_kg * sum_h_comp
 
     for scenario_id in scenario_ids:
         electricity_cost_expr = pulp.lpSum(
@@ -935,9 +1312,10 @@ def _solve_with_pulp(
         dispatch=dispatch,
         delta_t_hours=delta_t_hours,
         economics=economics,
+        hydrogen_revenue_per_kg=effective_hydrogen_revenue_per_kg,
         shortfall_kg=shortfall_value,
         shortfall_penalty_eur_per_kg=effective_shortfall_penalty,
-        apply_terminal_value=apply_terminal_value,
+        apply_terminal_value=effective_apply_terminal_value,
         terminal_reference_start_kg=terminal_reference_start_kg,
         terminal_value_per_kg=terminal_value_per_kg,
         net_cost_lookup=net_cost_lookup,
@@ -971,7 +1349,39 @@ def _solve_with_pulp(
         optimisation_cvar=cvar_value,
         zeta=float(zeta.value() or 0.0),
         model_stats=model_stats,
-        debug_info=None,
+        debug_info={
+            "production_targets_mode": str(production_targets.mode) if production_targets is not None else "legacy_daily_minimum",
+            "rolling_target_plan": None
+            if rolling_target_plan is None
+            else {
+                "due_date_interpretation": rolling_target_plan.due_date_interpretation,
+                "horizon_start_local_date": rolling_target_plan.horizon_start_local_date,
+                "horizon_end_local_date": rolling_target_plan.horizon_end_local_date,
+                "rolling_constraints": [
+                    {
+                        "due_date": bound.due_date,
+                        "cutoff_time_index": int(bound.cutoff_time_index),
+                        "cumulative_required_kg": float(bound.cumulative_required_kg),
+                    }
+                    for bound in rolling_target_plan.rolling_constraints
+                ],
+                "terminal_guards": [
+                    {
+                        "due_date": guard.due_date,
+                        "cumulative_required_kg": float(guard.cumulative_required_kg),
+                        "future_max_production_kg": float(guard.future_max_production_kg),
+                        "minimum_h_comp_required_by_horizon_end_kg": float(guard.minimum_h_comp_required_by_horizon_end_kg),
+                        "active": bool(guard.active),
+                    }
+                    for guard in rolling_target_plan.terminal_guards
+                ],
+                "inventory_cap_active": rolling_target_plan.max_inventory_kg is not None,
+                "max_inventory_kg": rolling_target_plan.max_inventory_kg,
+                "terminal_inventory_value_mode": rolling_target_plan.terminal_inventory_value_mode,
+                "effective_apply_terminal_value": bool(effective_apply_terminal_value),
+                "effective_hydrogen_revenue_per_kg": float(effective_hydrogen_revenue_per_kg),
+            },
+        },
     )
 
 
@@ -988,6 +1398,8 @@ def solve_stochastic_dispatch(
     gamma: float,
     alpha: float,
     production_target_mode: str = "current_soft_target",
+    production_targets: ProductionTargetsSettings | None = None,
+    reserve_feasibility_proxy: ReserveFeasibilityProxySettings | None = None,
     shortfall_penalty_eur_per_kg: float | None = None,
     apply_terminal_value: bool,
     terminal_reference_start_kg: float,
@@ -1016,6 +1428,8 @@ def solve_stochastic_dispatch(
                 gamma=gamma,
                 alpha=alpha,
                 production_target_mode=production_target_mode,
+                production_targets=production_targets,
+                reserve_feasibility_proxy=reserve_feasibility_proxy,
                 shortfall_penalty_eur_per_kg=shortfall_penalty_eur_per_kg,
                 apply_terminal_value=apply_terminal_value,
                 terminal_reference_start_kg=terminal_reference_start_kg,
@@ -1042,6 +1456,8 @@ def solve_stochastic_dispatch(
             gamma=gamma,
             alpha=alpha,
             production_target_mode=production_target_mode,
+            production_targets=production_targets,
+            reserve_feasibility_proxy=reserve_feasibility_proxy,
             shortfall_penalty_eur_per_kg=shortfall_penalty_eur_per_kg,
             apply_terminal_value=apply_terminal_value,
             terminal_reference_start_kg=terminal_reference_start_kg,
@@ -1070,6 +1486,8 @@ def solve_deterministic_dispatch(
     reserve_kg: float,
     daily_target_kg: float,
     production_target_mode: str = "current_soft_target",
+    production_targets: ProductionTargetsSettings | None = None,
+    reserve_feasibility_proxy: ReserveFeasibilityProxySettings | None = None,
     shortfall_penalty_eur_per_kg: float | None = None,
     apply_terminal_value: bool,
     terminal_reference_start_kg: float,
@@ -1098,6 +1516,8 @@ def solve_deterministic_dispatch(
         gamma=0.0,
         alpha=0.95,
         production_target_mode=production_target_mode,
+        production_targets=production_targets,
+        reserve_feasibility_proxy=reserve_feasibility_proxy,
         shortfall_penalty_eur_per_kg=shortfall_penalty_eur_per_kg,
         apply_terminal_value=apply_terminal_value,
         terminal_reference_start_kg=terminal_reference_start_kg,

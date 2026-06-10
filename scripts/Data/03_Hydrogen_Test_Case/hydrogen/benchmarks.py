@@ -22,6 +22,11 @@ from .optimisation_model import (
     solve_stochastic_dispatch,
 )
 from .plant_parameters import HydrogenConfig
+from .production_target import (
+    build_rolling_production_target_plan,
+    is_rolling_deadline_mode,
+    should_apply_terminal_inventory_value,
+)
 
 
 @dataclass(frozen=True)
@@ -66,6 +71,11 @@ def _price_insensitive_heuristic(
     reserve_kg: float,
     target_hydrogen_min_kg: float | None = None,
 ) -> pd.DataFrame:
+    if is_rolling_deadline_mode(config.production_targets):
+        raise ValueError(
+            "price_insensitive_heuristic does not support production_targets.mode=rolling_deadline_envelope. "
+            "Use the optimisation-based benchmark path instead."
+        )
     timestamps, _ = _extract_actual_series(day_frame)
     horizon = len(timestamps)
     delta_t = config.delta_t_hours
@@ -118,6 +128,11 @@ def _solve_price_insensitive_optimised_plan(
     target_hydrogen_max_kg: float | None,
     solver_log_path: str | None,
 ) -> tuple[pd.DataFrame, SolverResult, ModelStats]:
+    if is_rolling_deadline_mode(config.production_targets):
+        raise ValueError(
+            "price_insensitive optimisation benchmark does not yet support rolling_deadline_envelope economics. "
+            "Rolling mode no longer values all H_comp as unlimited sellable output."
+        )
     timestamps, _ = _extract_actual_series(day_frame)
     delta_t = float(config.delta_t_hours)
     horizon = list(range(len(timestamps)))
@@ -133,6 +148,16 @@ def _solve_price_insensitive_optimised_plan(
     )
     target_hydrogen_max_kg_value = (
         None if target_hydrogen_max_kg is None else float(target_hydrogen_max_kg)
+    )
+    rolling_target_plan = (
+        build_rolling_production_target_plan(
+            timestamps_utc=timestamps,
+            hydrogen=config.hydrogen_system,
+            production_targets=config.production_targets,
+            delta_t_hours=delta_t,
+        )
+        if is_rolling_deadline_mode(config.production_targets)
+        else None
     )
 
     def _build_pyomo_model():
@@ -163,7 +188,26 @@ def _solve_price_insensitive_optimised_plan(
                 m.constraints.add(m.P_el[t - 1] - m.P_el[t] <= config.hydrogen_system.electrolyser_ramp_mw_per_h)
             m.constraints.add(m.H_buf[t] >= reserve_kg)
             m.constraints.add(m.H_buf[t] <= config.hydrogen_system.storage_capacity_kg)
-        if str(production_target_mode).strip() in {"hard_daily_target", "weekly_hard_band_target"}:
+        if rolling_target_plan is not None:
+            m.constraints.add(m.shortfall == 0.0)
+            for bound in rolling_target_plan.rolling_constraints:
+                m.constraints.add(
+                    float(rolling_target_plan.initial_inventory_kg)
+                    + sum(m.H_comp[t] for t in range(bound.cutoff_time_index + 1))
+                    >= float(bound.cumulative_required_kg)
+                )
+            for guard in rolling_target_plan.terminal_guards:
+                if guard.active:
+                    m.constraints.add(sum(m.H_comp[t] for t in horizon) >= float(guard.minimum_h_comp_required_by_horizon_end_kg))
+            if rolling_target_plan.max_inventory_kg is not None:
+                for t in horizon:
+                    m.constraints.add(
+                        float(rolling_target_plan.initial_inventory_kg)
+                        + sum(m.H_comp[k] for k in range(t + 1))
+                        - float(rolling_target_plan.cumulative_required_due_by_time_index_kg[t])
+                        <= float(rolling_target_plan.max_inventory_kg)
+                    )
+        elif str(production_target_mode).strip() in {"hard_daily_target", "weekly_hard_band_target"}:
             m.constraints.add(sum(m.H_comp[t] for t in horizon) >= target_hydrogen_min_kg_value)
             if target_hydrogen_max_kg_value is not None:
                 m.constraints.add(sum(m.H_comp[t] for t in horizon) <= target_hydrogen_max_kg_value)
@@ -249,7 +293,26 @@ def _solve_price_insensitive_optimised_plan(
                 model += p_el[t - 1] - p_el[t] <= config.hydrogen_system.electrolyser_ramp_mw_per_h, f"ramp_down_{t}"
             model += h_buf[t] >= reserve_kg, f"reserve_min_{t}"
             model += h_buf[t] <= config.hydrogen_system.storage_capacity_kg, f"buffer_max_{t}"
-        if str(production_target_mode).strip() in {"hard_daily_target", "weekly_hard_band_target"}:
+        if rolling_target_plan is not None:
+            model += shortfall == 0.0, "rolling_target_shortfall_zero"
+            for idx, bound in enumerate(rolling_target_plan.rolling_constraints):
+                model += (
+                    float(rolling_target_plan.initial_inventory_kg)
+                    + pulp.lpSum(h_comp[t] for t in range(bound.cutoff_time_index + 1))
+                    >= float(bound.cumulative_required_kg)
+                ), f"rolling_due_lb_{idx}"
+            for idx, guard in enumerate(rolling_target_plan.terminal_guards):
+                if guard.active:
+                    model += pulp.lpSum(h_comp[t] for t in horizon) >= float(guard.minimum_h_comp_required_by_horizon_end_kg), f"rolling_terminal_guard_{idx}"
+            if rolling_target_plan.max_inventory_kg is not None:
+                for t in horizon:
+                    model += (
+                        float(rolling_target_plan.initial_inventory_kg)
+                        + pulp.lpSum(h_comp[k] for k in range(t + 1))
+                        - float(rolling_target_plan.cumulative_required_due_by_time_index_kg[t])
+                        <= float(rolling_target_plan.max_inventory_kg)
+                    ), f"rolling_inventory_cap_{t}"
+        elif str(production_target_mode).strip() in {"hard_daily_target", "weekly_hard_band_target"}:
             model += pulp.lpSum(h_comp[t] for t in horizon) >= target_hydrogen_min_kg_value, "delivery_target_lb"
             if target_hydrogen_max_kg_value is not None:
                 model += pulp.lpSum(h_comp[t] for t in horizon) <= target_hydrogen_max_kg_value, "delivery_target_ub"
@@ -329,8 +392,13 @@ def _scenario_cost_table_for_fixed_dispatch(
         if shortfall_penalty_eur_per_kg is None
         else shortfall_penalty_eur_per_kg
     )
+    effective_hydrogen_revenue_per_kg = (
+        float(config.economics.h2_sale_price_eur_per_kg)
+        if not is_rolling_deadline_mode(config.production_targets)
+        else 0.0
+    )
     shortfall_penalty = float(effective_shortfall_penalty * dispatch["shortfall_kg"].iloc[0])
-    revenue = float(config.economics.h2_sale_price_eur_per_kg * dispatch["H_comp_kg"].sum())
+    revenue = float(effective_hydrogen_revenue_per_kg * dispatch["H_comp_kg"].sum())
     terminal_value = (
         float(config.terminal_inventory_value_per_kg * (dispatch["H_buf_kg"].iloc[-1] - terminal_reference_start_kg))
         if apply_terminal_value
@@ -374,6 +442,10 @@ def run_price_insensitive(
     shortfall_penalty_eur_per_kg: float | None = None,
     solver_log_path: str | None = None,
 ) -> StrategyResult:
+    effective_apply_terminal_value = should_apply_terminal_inventory_value(
+        apply_terminal_value=apply_terminal_value,
+        production_targets=config.production_targets,
+    )
     dispatch, solver_result, model_stats = _solve_price_insensitive_optimised_plan(
         day_frame=day_frame,
         config=config,
@@ -388,7 +460,7 @@ def run_price_insensitive(
         day_frame=day_frame,
         dispatch=dispatch,
         config=config,
-        apply_terminal_value=apply_terminal_value,
+        apply_terminal_value=effective_apply_terminal_value,
         terminal_reference_start_kg=terminal_reference_start_kg,
         shortfall_penalty_eur_per_kg=shortfall_penalty_eur_per_kg,
     )
@@ -425,6 +497,10 @@ def run_price_insensitive_heuristic(
     shortfall_penalty_eur_per_kg: float | None = None,
     solver_log_path: str | None = None,
 ) -> StrategyResult:
+    effective_apply_terminal_value = should_apply_terminal_inventory_value(
+        apply_terminal_value=apply_terminal_value,
+        production_targets=config.production_targets,
+    )
     dispatch = _price_insensitive_heuristic(
         day_frame=day_frame,
         config=config,
@@ -436,7 +512,7 @@ def run_price_insensitive_heuristic(
         day_frame=day_frame,
         dispatch=dispatch,
         config=config,
-        apply_terminal_value=apply_terminal_value,
+        apply_terminal_value=effective_apply_terminal_value,
         terminal_reference_start_kg=terminal_reference_start_kg,
         shortfall_penalty_eur_per_kg=shortfall_penalty_eur_per_kg,
     )
@@ -472,6 +548,10 @@ def _run_stochastic_with_gamma(
     shortfall_penalty_eur_per_kg: float | None,
     solver_log_path: str | None,
 ) -> StrategyResult:
+    effective_apply_terminal_value = should_apply_terminal_inventory_value(
+        apply_terminal_value=apply_terminal_value,
+        production_targets=config.production_targets,
+    )
     solve = solve_stochastic_dispatch(
         day_scenarios=day_frame,
         hydrogen=config.hydrogen_system,
@@ -484,8 +564,9 @@ def _run_stochastic_with_gamma(
         gamma=float(gamma),
         alpha=float(config.risk.alpha),
         production_target_mode=production_target_mode,
+        production_targets=config.production_targets,
         shortfall_penalty_eur_per_kg=shortfall_penalty_eur_per_kg,
-        apply_terminal_value=apply_terminal_value,
+        apply_terminal_value=effective_apply_terminal_value,
         terminal_reference_start_kg=terminal_reference_start_kg,
         terminal_value_per_kg=float(config.terminal_inventory_value_per_kg),
         target_hydrogen_max_kg=target_hydrogen_max_kg,
@@ -585,6 +666,10 @@ def run_perfect_foresight(
     solver_log_path: str | None,
 ) -> StrategyResult:
     timestamps, actual_prices = _extract_actual_series(day_frame)
+    effective_apply_terminal_value = should_apply_terminal_inventory_value(
+        apply_terminal_value=apply_terminal_value,
+        production_targets=config.production_targets,
+    )
     solve = solve_deterministic_dispatch(
         prices_eur_per_mwh=actual_prices,
         timestamps_utc=timestamps,
@@ -596,8 +681,9 @@ def run_perfect_foresight(
         reserve_kg=reserve_kg,
         daily_target_kg=float(config.economics.daily_target_kg if target_hydrogen_min_kg is None else target_hydrogen_min_kg),
         production_target_mode=production_target_mode,
+        production_targets=config.production_targets,
         shortfall_penalty_eur_per_kg=shortfall_penalty_eur_per_kg,
-        apply_terminal_value=apply_terminal_value,
+        apply_terminal_value=effective_apply_terminal_value,
         terminal_reference_start_kg=terminal_reference_start_kg,
         terminal_value_per_kg=float(config.terminal_inventory_value_per_kg),
         target_hydrogen_max_kg=target_hydrogen_max_kg,
@@ -634,6 +720,10 @@ def run_deterministic_point_forecast(
     solver_log_path: str | None,
 ) -> StrategyResult:
     timestamps, point = _extract_point_forecast_series(day_frame)
+    effective_apply_terminal_value = should_apply_terminal_inventory_value(
+        apply_terminal_value=apply_terminal_value,
+        production_targets=config.production_targets,
+    )
     solve = solve_deterministic_dispatch(
         prices_eur_per_mwh=point,
         timestamps_utc=timestamps,
@@ -645,8 +735,9 @@ def run_deterministic_point_forecast(
         reserve_kg=reserve_kg,
         daily_target_kg=float(config.economics.daily_target_kg if target_hydrogen_min_kg is None else target_hydrogen_min_kg),
         production_target_mode=production_target_mode,
+        production_targets=config.production_targets,
         shortfall_penalty_eur_per_kg=shortfall_penalty_eur_per_kg,
-        apply_terminal_value=apply_terminal_value,
+        apply_terminal_value=effective_apply_terminal_value,
         terminal_reference_start_kg=terminal_reference_start_kg,
         terminal_value_per_kg=float(config.terminal_inventory_value_per_kg),
         target_hydrogen_max_kg=target_hydrogen_max_kg,

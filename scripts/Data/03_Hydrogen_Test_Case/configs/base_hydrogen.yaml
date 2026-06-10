@@ -38,16 +38,43 @@ bidding:
 
 mfrr_capacity_pilot:
   enabled: false
-  export_path: data/02_Forecasting/02_Balancing_mFRR_IR/IR_Capacity/milp_exports/nl_ir_capacity_milp_input_daily_direction_scenarios_v1.csv
+  export_path: data/02_Forecasting/02_Balancing_mFRR_IR/IR_Capacity/milp_exports/nl_ir_capacity_milp_input_daily_direction_scenarios_v2.csv
   pilot_start_date: 2025-07-07
   pilot_end_date: 2025-07-13
   capacity_offer_big_m_mw: 58.0
-  offer_continuous_mw: true
+  offer_continuous_mw: false
 
 production:
   target_semantics: lower_bound_reference
   allow_above_target_production: true
   allow_above_target_sales: true
+
+production_targets:
+  mode: legacy_daily_minimum
+  initial_inventory_kg: 0.0
+  max_inventory_kg: null
+  terminal_inventory_value_mode: legacy
+  targets: []
+  # Future rolling-envelope example:
+  # mode: rolling_deadline_envelope
+  # initial_inventory_kg: 0.0
+  # max_inventory_kg: 50000.0
+  # terminal_inventory_value_mode: disabled
+  # targets:
+  #   - delivery_id: target_2025_07_14
+  #     due_date: 2025-07-14
+  #     required_quantity_kg: 80000.0
+  #   - delivery_id: target_2025_07_18
+  #     due_date: 2025-07-18
+  #     required_quantity_kg: 100000.0
+
+reserve_feasibility_proxy:
+  enabled: false
+  mode: none
+  down_activation_duration_hours: 0.25
+  up_activation_duration_hours: 0.25
+  down_output_absorption_source: rolling_production_credit_headroom
+  up_recovery_source: rolling_future_recoverable_production_headroom
 
 hydrogen_system:
   electrolyser_nominal_mw: 55.0

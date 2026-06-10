@@ -1,10 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from .production_target import (
+    PRODUCTION_TARGETS_MODE_LEGACY_DAILY_MINIMUM,
+    PRODUCTION_TARGETS_MODE_ROLLING_DEADLINE_ENVELOPE,
+    RESERVE_FEASIBILITY_PROXY_DOWN_SOURCE_ROLLING_PRODUCTION_CREDIT_HEADROOM,
+    RESERVE_FEASIBILITY_PROXY_MODE_CONSERVATIVE_OUTPUT_ABSORPTION,
+    RESERVE_FEASIBILITY_PROXY_MODE_CONSERVATIVE_OUTPUT_ABSORPTION_AND_RECOVERY,
+    RESERVE_FEASIBILITY_PROXY_MODE_NONE,
+    RESERVE_FEASIBILITY_PROXY_UP_SOURCE_ROLLING_FUTURE_RECOVERABLE_PRODUCTION_HEADROOM,
+    TERMINAL_INVENTORY_VALUE_MODE_LEGACY,
+    validate_production_targets_mode,
+    validate_reserve_feasibility_proxy_down_source,
+    validate_reserve_feasibility_proxy_mode,
+    validate_reserve_feasibility_proxy_up_source,
+    validate_terminal_inventory_value_mode,
+)
 
 
 def _to_path(value: str | Path | None, *, base: Path) -> Path | None:
@@ -66,6 +83,37 @@ class ProductionSettings:
     target_semantics: str
     allow_above_target_production: bool
     allow_above_target_sales: bool
+
+
+@dataclass(frozen=True)
+class ProductionTargetEntry:
+    delivery_id: str
+    due_date: str
+    required_quantity_kg: float
+    earliest_production_date: str | None = None
+    product_type: str | None = None
+    priority: str | float | int | None = None
+    inventory_allowed: bool | None = None
+    maximum_inventory_or_credit_kg: float | None = None
+
+
+@dataclass(frozen=True)
+class ProductionTargetsSettings:
+    mode: str
+    initial_inventory_kg: float
+    max_inventory_kg: float | None
+    terminal_inventory_value_mode: str
+    targets: tuple[ProductionTargetEntry, ...]
+
+
+@dataclass(frozen=True)
+class ReserveFeasibilityProxySettings:
+    enabled: bool
+    mode: str
+    down_activation_duration_hours: float
+    up_activation_duration_hours: float
+    down_output_absorption_source: str
+    up_recovery_source: str
 
 
 @dataclass(frozen=True)
@@ -135,6 +183,8 @@ class HydrogenConfig:
     bidding: BiddingSettings
     mfrr_capacity_pilot: MFRRCapacityPilotSettings
     production: ProductionSettings
+    production_targets: ProductionTargetsSettings
+    reserve_feasibility_proxy: ReserveFeasibilityProxySettings
     hydrogen_system: HydrogenSystemSettings
     economics: EconomicSettings
     solver: SolverSettings
@@ -169,6 +219,185 @@ def _resolve_repo_root() -> Path:
     return Path(__file__).resolve().parents[4]
 
 
+def _parse_date_string(value: Any, *, field_name: str) -> str:
+    if value is None:
+        raise ValueError(f"Missing required production target field: {field_name}")
+    try:
+        return date.fromisoformat(str(value)).isoformat()
+    except ValueError as exc:
+        raise ValueError(f"Invalid date for {field_name}: {value!r}") from exc
+
+
+def _parse_optional_nonnegative_float(value: Any, *, field_name: str) -> float | None:
+    if value is None:
+        return None
+    parsed = float(value)
+    if parsed < 0.0:
+        raise ValueError(f"{field_name} must be nonnegative. Got: {value!r}")
+    return parsed
+
+
+def _parse_priority(value: Any) -> str | float | int | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    return str(value)
+
+
+def _parse_production_targets_settings(payload: dict[str, Any]) -> ProductionTargetsSettings:
+    raw = payload.get("production_targets", {})
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ValueError("Invalid config section: production_targets")
+
+    mode = validate_production_targets_mode(raw.get("mode", PRODUCTION_TARGETS_MODE_LEGACY_DAILY_MINIMUM))
+    terminal_inventory_value_mode = validate_terminal_inventory_value_mode(
+        raw.get("terminal_inventory_value_mode", TERMINAL_INVENTORY_VALUE_MODE_LEGACY)
+    )
+    initial_inventory_kg = float(raw.get("initial_inventory_kg", 0.0))
+    if initial_inventory_kg < 0.0:
+        raise ValueError(f"production_targets.initial_inventory_kg must be nonnegative. Got: {initial_inventory_kg!r}")
+    max_inventory_kg = _parse_optional_nonnegative_float(
+        raw.get("max_inventory_kg"),
+        field_name="production_targets.max_inventory_kg",
+    )
+
+    raw_targets = raw.get("targets", [])
+    if raw_targets is None:
+        raw_targets = []
+    if not isinstance(raw_targets, list):
+        raise ValueError("production_targets.targets must be a list.")
+
+    targets: list[ProductionTargetEntry] = []
+    seen_delivery_ids: set[str] = set()
+    for idx, target_raw in enumerate(raw_targets):
+        if not isinstance(target_raw, dict):
+            raise ValueError(f"production_targets.targets[{idx}] must be a mapping.")
+        delivery_id = str(target_raw.get("delivery_id", "")).strip()
+        if not delivery_id:
+            raise ValueError(f"production_targets.targets[{idx}].delivery_id is required.")
+        if delivery_id in seen_delivery_ids:
+            raise ValueError(f"Duplicate production_targets delivery_id: {delivery_id!r}")
+        seen_delivery_ids.add(delivery_id)
+        due_date = _parse_date_string(target_raw.get("due_date"), field_name=f"production_targets.targets[{idx}].due_date")
+        if "required_quantity_kg" not in target_raw:
+            raise ValueError(f"production_targets.targets[{idx}].required_quantity_kg is required.")
+        required_quantity_kg = float(target_raw["required_quantity_kg"])
+        if required_quantity_kg < 0.0:
+            raise ValueError(
+                f"production_targets.targets[{idx}].required_quantity_kg must be nonnegative. "
+                f"Got: {required_quantity_kg!r}"
+            )
+        earliest_production_date = (
+            _parse_date_string(
+                target_raw.get("earliest_production_date"),
+                field_name=f"production_targets.targets[{idx}].earliest_production_date",
+            )
+            if target_raw.get("earliest_production_date") is not None
+            else None
+        )
+        product_type = str(target_raw["product_type"]) if target_raw.get("product_type") is not None else None
+        inventory_allowed = (
+            bool(target_raw["inventory_allowed"]) if target_raw.get("inventory_allowed") is not None else None
+        )
+        maximum_inventory_or_credit_kg = _parse_optional_nonnegative_float(
+            target_raw.get("maximum_inventory_or_credit_kg"),
+            field_name=f"production_targets.targets[{idx}].maximum_inventory_or_credit_kg",
+        )
+        targets.append(
+            ProductionTargetEntry(
+                delivery_id=delivery_id,
+                due_date=due_date,
+                required_quantity_kg=required_quantity_kg,
+                earliest_production_date=earliest_production_date,
+                product_type=product_type,
+                priority=_parse_priority(target_raw.get("priority")),
+                inventory_allowed=inventory_allowed,
+                maximum_inventory_or_credit_kg=maximum_inventory_or_credit_kg,
+            )
+        )
+
+    if mode == PRODUCTION_TARGETS_MODE_ROLLING_DEADLINE_ENVELOPE and not targets:
+        raise ValueError("production_targets.targets must be non-empty when production_targets.mode=rolling_deadline_envelope.")
+
+    return ProductionTargetsSettings(
+        mode=mode,
+        initial_inventory_kg=initial_inventory_kg,
+        max_inventory_kg=max_inventory_kg,
+        terminal_inventory_value_mode=terminal_inventory_value_mode,
+        targets=tuple(targets),
+    )
+
+
+def _parse_reserve_feasibility_proxy_settings(payload: dict[str, Any]) -> ReserveFeasibilityProxySettings:
+    raw = payload.get("reserve_feasibility_proxy", {})
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ValueError("Invalid config section: reserve_feasibility_proxy")
+
+    enabled = bool(raw.get("enabled", False))
+    mode = validate_reserve_feasibility_proxy_mode(raw.get("mode", RESERVE_FEASIBILITY_PROXY_MODE_NONE))
+    down_activation_duration_hours = float(raw.get("down_activation_duration_hours", 0.25))
+    if down_activation_duration_hours <= 0.0:
+        raise ValueError(
+            "reserve_feasibility_proxy.down_activation_duration_hours must be positive. "
+            f"Got: {down_activation_duration_hours!r}"
+        )
+    up_activation_duration_hours = float(raw.get("up_activation_duration_hours", 0.25))
+    if up_activation_duration_hours <= 0.0:
+        raise ValueError(
+            "reserve_feasibility_proxy.up_activation_duration_hours must be positive. "
+            f"Got: {up_activation_duration_hours!r}"
+        )
+    down_output_absorption_source = validate_reserve_feasibility_proxy_down_source(
+        raw.get(
+            "down_output_absorption_source",
+            RESERVE_FEASIBILITY_PROXY_DOWN_SOURCE_ROLLING_PRODUCTION_CREDIT_HEADROOM,
+        )
+    )
+    up_recovery_source = validate_reserve_feasibility_proxy_up_source(
+        raw.get(
+            "up_recovery_source",
+            RESERVE_FEASIBILITY_PROXY_UP_SOURCE_ROLLING_FUTURE_RECOVERABLE_PRODUCTION_HEADROOM,
+        )
+    )
+    if not enabled:
+        if mode != RESERVE_FEASIBILITY_PROXY_MODE_NONE:
+            raise ValueError(
+                "reserve_feasibility_proxy.mode must be 'none' when reserve_feasibility_proxy.enabled=false."
+            )
+    else:
+        if mode not in {
+            RESERVE_FEASIBILITY_PROXY_MODE_CONSERVATIVE_OUTPUT_ABSORPTION,
+            RESERVE_FEASIBILITY_PROXY_MODE_CONSERVATIVE_OUTPUT_ABSORPTION_AND_RECOVERY,
+        }:
+            raise ValueError(
+                "reserve_feasibility_proxy.mode must be a supported conservative mode when enabled."
+            )
+        if down_output_absorption_source != RESERVE_FEASIBILITY_PROXY_DOWN_SOURCE_ROLLING_PRODUCTION_CREDIT_HEADROOM:
+            raise ValueError(
+                "Unsupported reserve_feasibility_proxy.down_output_absorption_source for this implementation: "
+                f"{down_output_absorption_source!r}"
+            )
+        if up_recovery_source != RESERVE_FEASIBILITY_PROXY_UP_SOURCE_ROLLING_FUTURE_RECOVERABLE_PRODUCTION_HEADROOM:
+            raise ValueError(
+                "Unsupported reserve_feasibility_proxy.up_recovery_source for this implementation: "
+                f"{up_recovery_source!r}"
+            )
+
+    return ReserveFeasibilityProxySettings(
+        enabled=enabled,
+        mode=mode,
+        down_activation_duration_hours=down_activation_duration_hours,
+        up_activation_duration_hours=up_activation_duration_hours,
+        down_output_absorption_source=down_output_absorption_source,
+        up_recovery_source=up_recovery_source,
+    )
+
+
 def load_hydrogen_config(config_path: str | Path) -> HydrogenConfig:
     repo_root = _resolve_repo_root()
     config_file = _to_path(config_path, base=repo_root)
@@ -186,6 +415,8 @@ def load_hydrogen_config(config_path: str | Path) -> HydrogenConfig:
     if not isinstance(mfrr_raw, dict):
         raise ValueError("Invalid config section: mfrr_capacity_pilot")
     production_raw = _require_dict(payload, "production")
+    production_targets = _parse_production_targets_settings(payload)
+    reserve_feasibility_proxy = _parse_reserve_feasibility_proxy_settings(payload)
     hydrogen_raw = _require_dict(payload, "hydrogen_system")
     economics_raw = _require_dict(payload, "economics")
     solver_raw = _require_dict(payload, "solver")
@@ -279,6 +510,8 @@ def load_hydrogen_config(config_path: str | Path) -> HydrogenConfig:
         bidding=bidding,
         mfrr_capacity_pilot=mfrr_capacity_pilot,
         production=production,
+        production_targets=production_targets,
+        reserve_feasibility_proxy=reserve_feasibility_proxy,
         hydrogen_system=hydrogen_system,
         economics=economics,
         solver=solver,
