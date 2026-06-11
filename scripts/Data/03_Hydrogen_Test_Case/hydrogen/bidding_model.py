@@ -14,6 +14,7 @@ from .bidding_metrics import (
     compute_stochastic_scenario_clearing_metrics,
 )
 from .cvar import WeightedCvarResult, compute_weighted_cvar_from_frame
+from .mfrr_da_recourse import align_hourly_da_obligations_to_delivery_hours
 from .optimisation_model import (
     ModelStats,
     SolverResult,
@@ -65,6 +66,162 @@ class StochasticBiddingSolveResult:
     zeta_loss_eur: float | None
     cvar_loss_eur: float | None
     cvar_details: pd.DataFrame
+    reserve_diagnostics: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class PreparedReserveObligations:
+    aligned: pd.DataFrame
+    up_by_time_index: dict[int, float]
+    down_by_time_index: dict[int, float]
+    reserve_obligation_hours_count: int
+    reserve_constraints_added_count: int
+    max_required_up_reserve_mw: float
+    max_required_down_reserve_mw: float
+    energy_bid_obligation_hours_count: int
+    joint_up_down_hours_count: int
+
+
+def _empty_reserve_diagnostics() -> dict[str, Any]:
+    return {
+        "reserve_hook_active": False,
+        "electrical_reserve_preservation_only": True,
+        "reserve_obligation_hours_count": 0,
+        "reserve_constraints_added_count": 0,
+        "energy_bid_obligation_hours_count": 0,
+        "joint_up_down_hours_count": 0,
+        "max_required_up_reserve_mw": 0.0,
+        "max_required_down_reserve_mw": 0.0,
+        "min_available_up_reserve_mw": None,
+        "min_available_down_reserve_mw": None,
+    }
+
+
+def _prepare_reserve_obligations(
+    *,
+    reserve_obligations_by_hour: pd.DataFrame | None,
+    timestamps: pd.DatetimeIndex,
+    site_max_load_mw: float,
+    scenario_count: int,
+) -> PreparedReserveObligations | None:
+    if reserve_obligations_by_hour is None:
+        return None
+    if not isinstance(reserve_obligations_by_hour, pd.DataFrame):
+        raise TypeError("reserve_obligations_by_hour must be a pandas DataFrame when provided.")
+
+    aligned = align_hourly_da_obligations_to_delivery_hours(
+        reserve_obligations_by_hour,
+        delivery_timestamps_utc=timestamps,
+        site_max_load_mw=float(site_max_load_mw),
+    ).copy()
+    aligned["accepted_up_reserve_mw_for_da"] = pd.to_numeric(
+        aligned["accepted_up_reserve_mw_for_da"],
+        errors="raise",
+    )
+    aligned["accepted_down_reserve_mw_for_da"] = pd.to_numeric(
+        aligned["accepted_down_reserve_mw_for_da"],
+        errors="raise",
+    )
+    if (aligned["accepted_up_reserve_mw_for_da"] < -1e-9).any():
+        raise ValueError("accepted_up_reserve_mw_for_da must be nonnegative after alignment.")
+    if (aligned["accepted_down_reserve_mw_for_da"] < -1e-9).any():
+        raise ValueError("accepted_down_reserve_mw_for_da must be nonnegative after alignment.")
+    joint = (
+        aligned["accepted_up_reserve_mw_for_da"].astype(float)
+        + aligned["accepted_down_reserve_mw_for_da"].astype(float)
+    )
+    infeasible_joint = aligned.loc[joint > float(site_max_load_mw) + 1e-9, [
+        "delivery_timestamp",
+        "accepted_up_reserve_mw_for_da",
+        "accepted_down_reserve_mw_for_da",
+    ]]
+    if not infeasible_joint.empty:
+        raise ValueError(
+            "Accepted Up and Down reserve obligations exceed site_max_load_mw in the same delivery hour. "
+            f"Example rows={infeasible_joint.head(3).to_dict(orient='records')}"
+        )
+
+    up_by_time_index = {
+        int(idx): float(value)
+        for idx, value in enumerate(aligned["accepted_up_reserve_mw_for_da"].astype(float).tolist())
+    }
+    down_by_time_index = {
+        int(idx): float(value)
+        for idx, value in enumerate(aligned["accepted_down_reserve_mw_for_da"].astype(float).tolist())
+    }
+    positive_up_hours = int((aligned["accepted_up_reserve_mw_for_da"].astype(float) > 1e-9).sum())
+    positive_down_hours = int((aligned["accepted_down_reserve_mw_for_da"].astype(float) > 1e-9).sum())
+    reserve_hour_mask = (
+        (aligned["accepted_up_reserve_mw_for_da"].astype(float) > 1e-9)
+        | (aligned["accepted_down_reserve_mw_for_da"].astype(float) > 1e-9)
+    )
+    return PreparedReserveObligations(
+        aligned=aligned,
+        up_by_time_index=up_by_time_index,
+        down_by_time_index=down_by_time_index,
+        reserve_obligation_hours_count=int(reserve_hour_mask.sum()),
+        reserve_constraints_added_count=int(scenario_count * (positive_up_hours + positive_down_hours)),
+        max_required_up_reserve_mw=float(aligned["accepted_up_reserve_mw_for_da"].max()),
+        max_required_down_reserve_mw=float(aligned["accepted_down_reserve_mw_for_da"].max()),
+        energy_bid_obligation_hours_count=int(aligned["energy_bid_obligation_created"].astype(bool).sum()),
+        joint_up_down_hours_count=int(
+            (
+                (aligned["accepted_up_reserve_mw_for_da"].astype(float) > 1e-9)
+                & (aligned["accepted_down_reserve_mw_for_da"].astype(float) > 1e-9)
+            ).sum()
+        ),
+    )
+
+
+def _build_reserve_diagnostics(
+    prepared: PreparedReserveObligations | None,
+    *,
+    scenario_dispatch: pd.DataFrame | None = None,
+    site_max_load_mw: float | None = None,
+) -> dict[str, Any]:
+    diagnostics = _empty_reserve_diagnostics()
+    if prepared is None:
+        return diagnostics
+    diagnostics.update(
+        {
+            "reserve_hook_active": True,
+            "reserve_obligation_hours_count": int(prepared.reserve_obligation_hours_count),
+            "reserve_constraints_added_count": int(prepared.reserve_constraints_added_count),
+            "energy_bid_obligation_hours_count": int(prepared.energy_bid_obligation_hours_count),
+            "joint_up_down_hours_count": int(prepared.joint_up_down_hours_count),
+            "max_required_up_reserve_mw": float(prepared.max_required_up_reserve_mw),
+            "max_required_down_reserve_mw": float(prepared.max_required_down_reserve_mw),
+        }
+    )
+    if scenario_dispatch is None or site_max_load_mw is None:
+        return diagnostics
+
+    dispatch = scenario_dispatch.copy()
+    dispatch["delivery_start_utc"] = pd.to_datetime(dispatch["delivery_start_utc"], utc=True, errors="raise")
+    dispatch["site_load_mw"] = dispatch["P_el_mw"].astype(float) + dispatch["P_comp_mw"].astype(float)
+    dispatch["available_down_reserve_mw"] = float(site_max_load_mw) - dispatch["site_load_mw"].astype(float)
+
+    up_hours = set(
+        prepared.aligned.loc[
+            prepared.aligned["accepted_up_reserve_mw_for_da"].astype(float) > 1e-9,
+            "delivery_timestamp",
+        ].tolist()
+    )
+    down_hours = set(
+        prepared.aligned.loc[
+            prepared.aligned["accepted_down_reserve_mw_for_da"].astype(float) > 1e-9,
+            "delivery_timestamp",
+        ].tolist()
+    )
+    if up_hours:
+        diagnostics["min_available_up_reserve_mw"] = float(
+            dispatch.loc[dispatch["delivery_start_utc"].isin(list(up_hours)), "site_load_mw"].min()
+        )
+    if down_hours:
+        diagnostics["min_available_down_reserve_mw"] = float(
+            dispatch.loc[dispatch["delivery_start_utc"].isin(list(down_hours)), "available_down_reserve_mw"].min()
+        )
+    return diagnostics
 
 
 def build_toy_hourly_scenario_set(
@@ -804,6 +961,7 @@ def _solve_with_pyomo(
     terminal_reference_start_kg: float | None,
     firm_bid_floor_mw: list[float] | tuple[float, ...] | np.ndarray | None,
     emergency_import_price_eur_per_mwh: float | None,
+    reserve_obligations_by_hour: pd.DataFrame | None,
 ) -> StochasticBiddingSolveResult:
     if pyo is None:
         raise RuntimeError("Pyomo backend requested but Pyomo is not installed.")
@@ -822,11 +980,18 @@ def _solve_with_pyomo(
     total_probability = validate_toy_scenario_probabilities(scenarios)
     forecast_origin = pd.Timestamp(pd.to_datetime(scenarios["forecast_origin_utc"].iloc[0], utc=True, errors="raise"))
     scenario_model = str(scenarios["model_id"].dropna().iloc[0]) if "model_id" in scenarios.columns and not scenarios["model_id"].dropna().empty else "toy_artificial_phase4a"
-    site_max_bid_mw = float(config.hydrogen_system.electrolyser_nominal_mw + config.hydrogen_system.compressor_max_mw)
+    site_max_load_mw = float(config.hydrogen_system.electrolyser_nominal_mw + config.hydrogen_system.compressor_max_mw)
+    site_max_bid_mw = float(site_max_load_mw)
     firm_bid_floor_mw_values = _normalize_hourly_floor_mw(
         firm_bid_floor_mw,
         horizon_steps=len(timestamps),
         site_max_bid_mw=site_max_bid_mw,
+    )
+    prepared_reserve = _prepare_reserve_obligations(
+        reserve_obligations_by_hour=reserve_obligations_by_hour,
+        timestamps=timestamps,
+        site_max_load_mw=site_max_load_mw,
+        scenario_count=len(scenario_ids),
     )
     inventory_start_kg_value = float(config.hydrogen_system.storage_initial_kg if inventory_start_kg is None else inventory_start_kg)
     reserve_kg_value = float(config.hydrogen_system.reserve_kg if reserve_kg is None else reserve_kg)
@@ -860,6 +1025,16 @@ def _solve_with_pyomo(
     if str(risk_measure) == "cvar" and float(cvar_gamma) > 0.0:
         model.zeta = pyo.Var()
         model.xi = pyo.Var(model.S, domain=pyo.NonNegativeReals)
+    model.available_up_reserve_mw = pyo.Expression(
+        model.S,
+        model.T,
+        rule=lambda m, s, t: m.P_el[s, t] + m.P_comp[s, t],
+    )
+    model.available_down_reserve_mw = pyo.Expression(
+        model.S,
+        model.T,
+        rule=lambda m, s, t: site_max_load_mw - (m.P_el[s, t] + m.P_comp[s, t]),
+    )
 
     model.constraints = pyo.ConstraintList()
     for t in range(len(timestamps)):
@@ -906,6 +1081,13 @@ def _solve_with_pyomo(
                 )
             model.constraints.add(model.H_buf[scenario_id, t] >= reserve_kg_value)
             model.constraints.add(model.H_buf[scenario_id, t] <= config.hydrogen_system.storage_capacity_kg)
+            if prepared_reserve is not None:
+                required_up = float(prepared_reserve.up_by_time_index[int(t)])
+                required_down = float(prepared_reserve.down_by_time_index[int(t)])
+                if required_up > 1e-9:
+                    model.constraints.add(model.available_up_reserve_mw[scenario_id, t] >= required_up)
+                if required_down > 1e-9:
+                    model.constraints.add(model.available_down_reserve_mw[scenario_id, t] >= required_down)
 
     for scenario_id in scenario_ids:
         if str(production_target_mode).strip() in {"hard_daily_target", "weekly_hard_band_target"}:
@@ -1060,6 +1242,11 @@ def _solve_with_pyomo(
         cvar_result=cvar_result,
     )
     acceptance_table = build_scenario_acceptance_table(scenarios, bid_price_grid_eur_per_mwh)
+    reserve_diagnostics = _build_reserve_diagnostics(
+        prepared_reserve,
+        scenario_dispatch=scenario_dispatch,
+        site_max_load_mw=site_max_load_mw,
+    )
     return StochasticBiddingSolveResult(
         submitted_bids=submitted_bids,
         scenario_clearing=scenario_clearing,
@@ -1075,6 +1262,7 @@ def _solve_with_pyomo(
         zeta_loss_eur=float(cvar_result.zeta),
         cvar_loss_eur=float(cvar_result.cvar),
         cvar_details=scenario_economics[["scenario_id", "loss_eur", "xi_loss_excess_eur", "zeta_loss_eur", "cvar_loss_eur"]].copy(),
+        reserve_diagnostics=reserve_diagnostics,
     )
 
 
@@ -1099,6 +1287,7 @@ def _solve_with_pulp(
     terminal_reference_start_kg: float | None,
     firm_bid_floor_mw: list[float] | tuple[float, ...] | np.ndarray | None,
     emergency_import_price_eur_per_mwh: float | None,
+    reserve_obligations_by_hour: pd.DataFrame | None,
 ) -> StochasticBiddingSolveResult:
     if pulp is None:
         raise RuntimeError("PuLP backend requested but PuLP is not installed.")
@@ -1117,11 +1306,18 @@ def _solve_with_pulp(
     total_probability = validate_toy_scenario_probabilities(scenarios)
     forecast_origin = pd.Timestamp(pd.to_datetime(scenarios["forecast_origin_utc"].iloc[0], utc=True, errors="raise"))
     scenario_model = str(scenarios["model_id"].dropna().iloc[0]) if "model_id" in scenarios.columns and not scenarios["model_id"].dropna().empty else "toy_artificial_phase4a"
-    site_max_bid_mw = float(config.hydrogen_system.electrolyser_nominal_mw + config.hydrogen_system.compressor_max_mw)
+    site_max_load_mw = float(config.hydrogen_system.electrolyser_nominal_mw + config.hydrogen_system.compressor_max_mw)
+    site_max_bid_mw = float(site_max_load_mw)
     firm_bid_floor_mw_values = _normalize_hourly_floor_mw(
         firm_bid_floor_mw,
         horizon_steps=len(timestamps),
         site_max_bid_mw=site_max_bid_mw,
+    )
+    prepared_reserve = _prepare_reserve_obligations(
+        reserve_obligations_by_hour=reserve_obligations_by_hour,
+        timestamps=timestamps,
+        site_max_load_mw=site_max_load_mw,
+        scenario_count=len(scenario_ids),
     )
     inventory_start_kg_value = float(config.hydrogen_system.storage_initial_kg if inventory_start_kg is None else inventory_start_kg)
     reserve_kg_value = float(config.hydrogen_system.reserve_kg if reserve_kg is None else reserve_kg)
@@ -1176,6 +1372,13 @@ def _solve_with_pulp(
                 model += p_el[(scenario_id, t - 1)] - p_el[(scenario_id, t)] <= config.hydrogen_system.electrolyser_ramp_mw_per_h * timestep_hours, f"ramp_down_{scenario_id}_{t}"
             model += h_buf[(scenario_id, t)] >= reserve_kg_value, f"reserve_{scenario_id}_{t}"
             model += h_buf[(scenario_id, t)] <= config.hydrogen_system.storage_capacity_kg, f"storage_cap_{scenario_id}_{t}"
+            if prepared_reserve is not None:
+                required_up = float(prepared_reserve.up_by_time_index[int(t)])
+                required_down = float(prepared_reserve.down_by_time_index[int(t)])
+                if required_up > 1e-9:
+                    model += p_el[(scenario_id, t)] + p_comp[(scenario_id, t)] >= required_up, f"reserve_up_{scenario_id}_{t}"
+                if required_down > 1e-9:
+                    model += site_max_load_mw - (p_el[(scenario_id, t)] + p_comp[(scenario_id, t)]) >= required_down, f"reserve_down_{scenario_id}_{t}"
 
     for scenario_id in scenario_ids:
         if str(production_target_mode).strip() in {"hard_daily_target", "weekly_hard_band_target"}:
@@ -1324,6 +1527,11 @@ def _solve_with_pulp(
         cvar_result=cvar_result,
     )
     acceptance_table = build_scenario_acceptance_table(scenarios, bid_price_grid_eur_per_mwh)
+    reserve_diagnostics = _build_reserve_diagnostics(
+        prepared_reserve,
+        scenario_dispatch=scenario_dispatch,
+        site_max_load_mw=site_max_load_mw,
+    )
     return StochasticBiddingSolveResult(
         submitted_bids=submitted_bids,
         scenario_clearing=scenario_clearing,
@@ -1339,6 +1547,7 @@ def _solve_with_pulp(
         zeta_loss_eur=float(cvar_result.zeta),
         cvar_loss_eur=float(cvar_result.cvar),
         cvar_details=scenario_economics[["scenario_id", "loss_eur", "xi_loss_excess_eur", "zeta_loss_eur", "cvar_loss_eur"]].copy(),
+        reserve_diagnostics=reserve_diagnostics,
     )
 
 
@@ -1363,6 +1572,7 @@ def solve_stochastic_hourly_bidding(
     terminal_reference_start_kg: float | None = None,
     firm_bid_floor_mw: list[float] | tuple[float, ...] | np.ndarray | None = None,
     emergency_import_price_eur_per_mwh: float | None = None,
+    reserve_obligations_by_hour: pd.DataFrame | None = None,
 ) -> StochasticBiddingSolveResult:
     _ensure_solver_package(config.solver)
     _apply_gurobi_license_env(config.solver)
@@ -1399,6 +1609,7 @@ def solve_stochastic_hourly_bidding(
                 terminal_reference_start_kg=terminal_reference_start_kg,
                 firm_bid_floor_mw=firm_bid_floor_mw,
                 emergency_import_price_eur_per_mwh=emergency_import_price_eur_per_mwh,
+                reserve_obligations_by_hour=reserve_obligations_by_hour,
             )
         except RuntimeError:
             if preference == "pyomo":
@@ -1423,6 +1634,7 @@ def solve_stochastic_hourly_bidding(
         terminal_reference_start_kg=terminal_reference_start_kg,
         firm_bid_floor_mw=firm_bid_floor_mw,
         emergency_import_price_eur_per_mwh=emergency_import_price_eur_per_mwh,
+        reserve_obligations_by_hour=reserve_obligations_by_hour,
     )
 
 
