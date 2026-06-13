@@ -204,6 +204,22 @@ This is why the repository now contains both:
 - optimisation code and tests;
 - a substantial governance/reporting layer around selected weeks, run contracts, and command-centre options.
 
+## Hydrogen mFRR/DAM sandbox freeze, June 2026
+
+The hydrogen `mFRR` / DAM integration work is now frozen as a sandbox handoff rather than extended toward a full activation model before the steel process model exists.
+
+The compact handoff record is:
+
+- `docs/optimisation/mfrr_dam_integration_handoff_v1.md`
+
+This freeze preserves:
+
+- the accepted/rejected capacity-result interface;
+- `EUR/MW/ISP` plus `contract_isp_count` handling;
+- ISP-to-hourly reserve-obligation mapping;
+- the DAM reserve-obligation hook in the stochastic hourly bidding model;
+- the boundary that future steel work should reuse the market interfaces and validation logic, but not the hydrogen-specific production or activation physics.
+
 ## Stage 7: CVaR And Risk-Aversion Work
 
 CVaR is not missing from the repository. It exists as an implemented branch with:
