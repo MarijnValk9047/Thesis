@@ -236,6 +236,113 @@ Wave D still does not approve or resolve:
 - detailed ETS or free-allocation treatment;
 - DA bidding, stochastic DA, CVaR, quarter-hour, `D_plus_4`, and `mFRR`.
 
+## Wave E Update
+
+Wave E adds the first governed financial, policy, tariff, infrastructure, and market-parameter scaffold.
+
+The main conclusions are:
+
+- the next defensible economic layer is narrow and transparent rather than a full market-optimisation stack;
+- the base objective remains fixed production target plus cost minimisation;
+- steel output value or product margin is reporting-only or sensitivity-only unless stronger product or order-book evidence is added;
+- gross ETS cost must be visible;
+- free allocation must remain a separate credit or sensitivity module;
+- CBAM remains postponed;
+- the initial network treatment is `N1`, a generic Dutch proxy structure clearly labelled as proxy;
+- technical connection capacity, contracted transport capacity, and average-demand validation anchors must remain separate;
+- hydrogen and CCS must be represented through explicit availability or timing flags;
+- DA, `mFRR`, 15-minute, `D_plus_4`, and CVaR remain sequenced later.
+
+### Wave E Source Hierarchy Rule
+
+For Wave E financial and policy work, use this order:
+
+1. formal EU policy and legal sources for ETS, free allocation, and CBAM;
+2. official infrastructure, tariff, and market-operator pages for hydrogen, CCS, tariffs, and DA market structure;
+3. public commodity-reference sources for timestamped scenario design;
+4. public Tata financial or transition context only as cautionary reporting context;
+5. research memos as discovery aids only.
+
+### Wave E ETS And Carbon-Cost Treatment
+
+Wave E freezes the following policy direction:
+
+- physical emissions stay explicit;
+- gross ETS cost is a visible objective term;
+- free allocation is a separate later credit or sensitivity;
+- no net emissions-factor shortcut is allowed;
+- no automatic ETS revenue rule is allowed in the base case;
+- CBAM stays outside the base objective.
+
+### Wave E Network, Tariff, And Connection Treatment
+
+Wave E distinguishes:
+
+- technical connection capacity;
+- contracted transport capacity;
+- network tariff or peak-cost parameters;
+- average-demand validation anchors.
+
+The initial network policy is `N1`, which means a public Dutch tariff proxy may be used as transparent structure or sensitivity, but not as Tata contract truth.
+
+### Wave E Gas, Hydrogen, And CCS Infrastructure Flags
+
+Wave E now requires explicit flags or timing treatment for:
+
+- hydrogen availability;
+- hydrogen backbone connection;
+- CCS availability;
+- CO2 transport and storage access.
+
+Infrastructure presence is therefore not assumed by default merely because a public project exists.
+
+### Wave E Steel Output Value Policy
+
+Wave E keeps steel output value out of the base objective.
+
+Allowed now:
+
+- fixed production target plus cost minimisation;
+- ex-post margin reporting;
+- explicit later sensitivity work.
+
+Not allowed now:
+
+- flexible production driven by product revenue in the base case;
+- ad hoc green-steel premium assumptions inside the core objective.
+
+### Wave E DA, `mFRR`, And CVaR Sequencing
+
+Wave E makes the later sequence explicit:
+
+- deterministic hourly DA price-taking dispatch before bidding;
+- DA bidding and settlement before stochastic DA;
+- risk-neutral stochastic DA before reserve or risk-aversion layers where appropriate;
+- `mFRR` as `S7`;
+- 15-minute and or `D_plus_4` as `S8`;
+- CVaR as `S9` or later.
+
+### Wave E Minimal Economic Layer
+
+The minimal economic layer above the physical model now consists of:
+
+- electricity import price;
+- natural-gas price;
+- optional hydrogen price scenario with explicit availability flags;
+- gross ETS cost;
+- transparent network or capacity-cost proxy;
+- other explicit candidate cost families where needed;
+- fixed production target and cost minimisation.
+
+It does not require:
+
+- endogenous product-revenue maximisation;
+- CBAM;
+- imbalance settlement;
+- `mFRR`;
+- CVaR;
+- 15-minute or `D_plus_4`.
+
 ## Modelling Layers
 
 ### Time And Market Structure

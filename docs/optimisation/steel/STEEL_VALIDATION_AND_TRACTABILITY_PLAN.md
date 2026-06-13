@@ -191,6 +191,34 @@ When S3 is later implemented, its reporting must state:
 - which emissions architecture was used to avoid double counting;
 - which candidate or sensitivity-only terms remained unresolved.
 
+## Wave E Economic And Policy Validation Plan
+
+For the future Wave E economic and policy layer, validation should explicitly include:
+
+- production target met under the chosen fixed-target policy;
+- no product-revenue objective active in the base case;
+- gross ETS cost and any free-allocation credit reported separately;
+- average-demand anchors not reused as technical or contracted connection capacity;
+- tariff proxy labelled clearly as proxy rather than site contract truth;
+- hydrogen and CCS flags active only when explicitly configured;
+- DA, `mFRR`, and CVaR layers inactive before their scheduled stages;
+- every volatile commodity or energy price input carrying timestamp, source, and scenario tags;
+- production policy unchanged across forecast-quality comparisons unless the experiment explicitly studies policy sensitivity.
+
+These are defined as future checks and governance gates, not as already implemented code.
+
+## Wave E Reporting Rule
+
+When the minimal economic layer is later implemented, its reporting must state:
+
+- whether fixed-target cost minimisation was active;
+- whether any ex-post margin was reporting-only;
+- whether gross ETS cost was visible;
+- whether any free-allocation credit was inactive, active, or sensitivity-only;
+- whether `N1` proxy tariff structure was active;
+- whether hydrogen or CCS availability flags were active;
+- which price-series timestamp and scenario tags were used.
+
 ## Tractability Sequence
 
 The default sequence is:

@@ -1,0 +1,11 @@
+parameter_id,description,unit,source_id,model_role,suitable_phase,approval_status,scenario_flag_required,caveat,notes
+INF_NATURAL_GAS_IMPORT_CAP,Natural gas import capacity,MWth_or_Nm3_per_h,WE05,constraint,S3,candidate_not_approved,no,Exact site capacity still needs stronger evidence,Keep separate from gas price
+INF_NATURAL_GAS_TRANSPORT_TARIFF,Natural gas transport tariff,EUR_per_period_or_capacity_unit,WE05,cost_input,S3,candidate_not_approved,no,Public tariff sheet is a structure proxy only,Separate from commodity gas price
+INF_HYDROGEN_PRICE,Hydrogen price scenario,EUR_per_kg_or_EUR_per_MWh_H2,WE08;WE10;WE11,cost_input,S3,sensitivity_only,yes,Price without availability flag is not enough,Hydrogen enters only as explicit scenario
+INF_HYDROGEN_AVAILABILITY_FLAG,Hydrogen availability flag,flag,WE08,constraint_or_configuration,S3,candidate_not_approved,yes,Must not default to always available,Core Wave E infrastructure rule
+INF_HYDROGEN_BACKBONE_CONNECTED,Hydrogen backbone connected flag,flag,WE08,configuration_flag,S3,candidate_not_approved,yes,Connection timing may move with project phasing,Separate from price and availability
+INF_HYDROGEN_CONNECTION_START_DATE,Hydrogen connection start date,date,WE08,configuration_flag,S3,candidate_not_approved,yes,Project timing can change,Useful for phased scenario design
+INF_CCS_AVAILABILITY_FLAG,CCS availability flag,flag,WE09,configuration_flag,S3,sensitivity_only,yes,Must not default to always available,Core Wave E infrastructure rule
+INF_CO2_TRANSPORT_CAPACITY,CO2 transport capacity,tCO2_per_h_or_tCO2_per_y,WE09,constraint,S3,candidate_not_approved,yes,Needs site or project detail before promotion,Separate from CCS availability itself
+INF_CO2_TRANSPORT_STORAGE_COST,CO2 transport and storage cost,EUR_per_tCO2,WE09,cost_input,S3,sensitivity_only,yes,Public exact fee support is weak without contracts,Keep explicit and scenario tagged
+INF_CCS_START_DATE,CCS start date,date,WE09,configuration_flag,S3,candidate_not_approved,yes,Infrastructure readiness is not guaranteed,Useful for staged scenarios

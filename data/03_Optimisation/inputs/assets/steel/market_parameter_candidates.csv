@@ -1,0 +1,19 @@
+parameter_id,market_layer,description,unit,source_id,model_role,suitable_phase,approval_status,caveat,notes
+MKT_DA_BIDDING_ZONE,day_ahead,Day-ahead bidding zone identifier,zone_id,WE06;WE07,market_definition,S4,candidate_not_approved,Not implemented yet in current governance stage,Needed once DA market layer starts
+MKT_DA_GRANULARITY,day_ahead,Day-ahead market granularity,hour_or_15min,WE06;WE07,market_definition,S8,later_only,15-minute extension is postponed to S8,Hour remains current thesis simplification
+MKT_DA_PRICE_SOURCE,day_ahead,Source definition for DA price time series,source_reference,WE06;WE07,market_input_definition,S4,candidate_not_approved,Requires explicit source and market zone,No bidding implementation implied
+MKT_FORECAST_ORIGIN,market_timing,Forecast origin timestamp convention,timestamp_rule,WE06,information_timing,S4,candidate_not_approved,Must stay aligned with broader thesis timing policy,Later DA layers only
+MKT_DELIVERY_HORIZON,market_timing,Delivery horizon convention such as D_only and later D_plus_4,hours_or_days,WE06;WE07,information_timing,S8,later_only,D_plus_4 remains postponed to S8,Base governance remains D_only-first for steel
+MKT_GATE_CLOSURE,market_timing,Gate closure timing,timestamp,WE06,information_timing,S4,candidate_not_approved,Later market layer only,Needed for DA timing discipline
+MKT_RESULT_PUBLICATION,market_timing,Result publication timing,timestamp,WE06,information_timing,S4,candidate_not_approved,Later market layer only,Useful for schedule certainty logic
+MKT_PRICE_TAKING_ASSUMPTION,day_ahead,Price-taking assumption for deterministic dispatch,rule,WE06;WE07,assumption,S4,candidate_not_approved,No bidding logic in S4,Current agreed DA entry point
+MKT_BID_VOLUME_BOUNDS,day_ahead,Bound on submitted bid volume,MW_or_MWh,WE06,constraint,S5,later_only,Requires explicit bidding model and physical linkage,Not active before S5
+MKT_SETTLEMENT_REALISED_DA,day_ahead,Settlement against realised DA price,rule,WE06,settlement_rule,S5,later_only,Requires later DA settlement layer,Keep distinct from optimisation-stage expectations
+MKT_REDISPATCH_AFTER_CLEARING,day_ahead,Redispatch or physical adjustment after clearing,rule,WE06;WE07,market_structure,S5,later_only,Not part of current governance stage,Later dispatch and settlement refinement
+MKT_IMBALANCE_SETTLEMENT_LATER,imbalance,Imbalance settlement parameters later,EUR_per_MWh_or_rule,WE06;WE07,later_market_layer,S5,later_only,Separate market layer required,Do not mix into S3 or S4
+MKT_BENCHMARK_DEFINITIONS,benchmark,Definitions of deterministic and later stochastic benchmarks,rule_set,WE06;WE07,reporting_and_governance,S4,candidate_not_approved,Benchmarks must stay constant across forecast-quality comparisons,Machine-readable benchmark policy later
+MKT_MFRR_CAPACITY_LATER,mfrr,mFRR reserve capacity parameters later,MW,WE07,later_market_layer,S7,later_only,mFRR is postponed until DA-only is stable,Market-scope extension not current implementation
+MKT_MFRR_ACTIVATION_LATER,mfrr,mFRR activation parameters later,rule_or_price,WE07,later_market_layer,S7,later_only,mFRR is postponed until DA-only is stable,Later reserve layer only
+MKT_BASELINE_REBOUND_LATER,mfrr,Baseline and rebound logic later,rule,WE07,later_market_layer,S7,later_only,Needs separate reserve-deliverability design,Do not implement now
+MKT_RESERVE_NONDELIVERY_PENALTY_LATER,mfrr,Reserve non-delivery penalties later,EUR_per_MWh_or_rule,WE07,later_market_layer,S7,later_only,Needs reserve market rules and deliverability logic,Do not implement now
+MKT_CVAR_POLICY_LATER,risk,CVaR or risk-aversion policy later,rule,WE06;WE07,policy_boundary,S9,later_only,CVaR is postponed to S9 or later,Not part of current priority

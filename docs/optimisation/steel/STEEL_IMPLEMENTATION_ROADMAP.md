@@ -84,7 +84,7 @@ Create the steel data-governance surface before coding parameters into loaders.
 
 **Goal**
 
-Build the steel skeleton process-network LP without market complexity.
+Build the deterministic hourly metallic material-flow LP without market complexity.
 
 **Files Likely To Inspect Or Modify**
 
@@ -114,11 +114,11 @@ Build the steel skeleton process-network LP without market complexity.
 - missing route constraints creating fake feasibility;
 - hidden inventory assumptions acting as slack.
 
-### S3 Energy, Cost, And Emissions Layer
+### S3 WAG, Internal Energy, Emissions, And Economic Layer
 
 **Goal**
 
-Add electricity, cost, and ETS logic to the skeleton LP.
+Add the minimal economic layer with WAG, internal-energy, emissions, fixed production, gross ETS cost, and `N1` tariff proxy treatment.
 
 **Files Likely To Inspect Or Modify**
 
@@ -130,13 +130,17 @@ Add electricity, cost, and ETS logic to the skeleton LP.
 
 - deterministic hourly costed model;
 - route-level energy and emissions summaries;
-- explicit ETS accounting convention.
+- explicit ETS accounting convention;
+- explicit statement that production remains fixed-target plus cost minimisation.
 
 **Validation Checks**
 
 - energy-scale plausibility;
 - emissions plausibility;
-- cost-term reconciliation against hand checks.
+- cost-term reconciliation against hand checks;
+- gross ETS and any later free-allocation credit kept separate;
+- tariff proxy clearly labelled;
+- average-demand target not used as connection capacity.
 
 **Stop/Go Criteria**
 
@@ -147,38 +151,38 @@ Add electricity, cost, and ETS logic to the skeleton LP.
 - unit mismatches;
 - ETS treatment quietly changing route ranking.
 
-### S4 Phase 1 Flexibility
+### S4 Deterministic Hourly DA Price-Taking Dispatch
 
 **Goal**
 
-Represent the main hybrid-route flexibility, especially DRP-EAF and relevant buffers.
+Add deterministic hourly DA price-taking dispatch without bidding logic.
 
 **Files Likely To Inspect Or Modify**
 
-- process-unit tables
-- store tables
-- route constraints
-- assumption register entries tied to EAF and DRI flexibility
+- future DA price adapters
+- dispatch and settlement modules
+- reporting and metrics definitions
+- timing and market-parameter docs
 
 **Expected Outputs**
 
-- hybrid configuration model;
-- flexibility reports showing where optionality comes from.
+- deterministic DA-aware dispatch layer;
+- explicit realised-price settlement logic without submitted bidding.
 
 **Validation Checks**
 
-- flexibility realism validation;
-- buffer-boundedness checks;
-- comparison against baseline rigidity assumptions.
+- timing consistency with market parameters;
+- price-taking assumption explicit;
+- physical feasibility preserved under exogenous DA prices.
 
 **Stop/Go Criteria**
 
-- do not move to DA bidding until flexibility comes from explicit process logic.
+- do not move to DA bidding until deterministic DA dispatch is explainable and reportable.
 
 **Risks**
 
-- over-crediting storage;
-- over-crediting EAF ramping without supporting evidence.
+- schedule logic being mislabeled as bidding;
+- physical or economic instability being mistaken for market behaviour.
 
 ### S5 DA Bidding And Settlement
 
@@ -214,78 +218,43 @@ Add DA participation logic to the steel model.
 - reusing hydrogen logic in ways that ignore steel process constraints;
 - schedule-and-settle being mislabeled as bidding.
 
-### S6 Stochastic DA And CVaR
+### S6 Stochastic DA, Risk-Neutral
 
 **Goal**
 
-Introduce scenario-based DA optimisation and risk aversion.
+Introduce risk-neutral scenario-based DA optimisation for forecast and scenario comparison.
 
 **Files Likely To Inspect Or Modify**
 
 - scenario adapters
 - stochastic model builders
-- CVaR modules
 - validation-period experiment configs
 
 **Expected Outputs**
 
 - scenario-aware steel runner;
-- CVaR sweep configs;
 - risk metrics and scenario diagnostics in reporting.
 
 **Validation Checks**
 
 - explicit probabilities;
 - non-anticipativity;
-- validation-only CVaR selection;
 - scenario diagnostics stored with results.
 
 **Stop/Go Criteria**
 
-- do not use test-period results for scenario or gamma selection.
+- do not introduce risk aversion or reserve logic before risk-neutral stochastic DA is coherent.
 
 **Risks**
 
 - scenario undercoverage giving false confidence;
 - scenario-specific first-stage decisions.
 
-### S7 Hourly Vs Quarter-Hour And `D_only` Vs `D_plus_4`
+### S7 `mFRR` Extension After DA-Only Stability
 
 **Goal**
 
-Compare granularity and horizon once the hourly deterministic and stochastic surfaces are stable.
-
-**Files Likely To Inspect Or Modify**
-
-- granularity-aware adapters
-- horizon-aware config and validation logic
-- reporting tables and comparability checks
-
-**Expected Outputs**
-
-- controlled comparison experiments;
-- explicit caveats on observed vs synthetic quarter-hour truth where relevant.
-
-**Validation Checks**
-
-- DST-safe horizon handling;
-- same asset assumptions across granularity cases;
-- same benchmark definitions across horizon cases.
-
-**Stop/Go Criteria**
-
-- do not compare hourly and quarter-hour if other assumptions moved.
-
-**Risks**
-
-- changing both horizon and asset policy in one experiment;
-- treating synthetic quarter-hour paths as observed truth.
-
-### S8 `mFRR` Extension Later
-
-**Goal**
-
-Add reserve participation only after DA-only steel is already explainable.
+Add reserve participation only after DA-only steel is explainable and trusted.
 
 **Files Likely To Inspect Or Modify**
 
@@ -301,16 +270,81 @@ Add reserve participation only after DA-only steel is already explainable.
 
 - reserve deliverability;
 - sign-convention correctness;
-- incremental value vs DA-only.
+- incremental value vs `DA_only`.
 
 **Stop/Go Criteria**
 
-- blocked until DA-only steel is stable and trusted.
+- blocked until `DA_only` steel is stable and trusted.
 
 **Risks**
 
-- adding market complexity before physical flexibility is credible;
+- adding market-scope complexity before physical flexibility is credible;
 - using reserve revenue to hide feasibility problems.
+
+### S8 15-Minute And Or `D_plus_4` Extensions
+
+**Goal**
+
+Compare granularity and horizon once hourly deterministic, DA, and reserve sequencing decisions are already stable.
+
+**Files Likely To Inspect Or Modify**
+
+- granularity-aware adapters
+- horizon-aware config and validation logic
+- reporting tables and comparability checks
+
+**Expected Outputs**
+
+- controlled comparison experiments;
+- explicit caveats on observed vs synthetic quarter-hour truth where relevant.
+
+**Validation Checks**
+
+- DST-safe horizon handling;
+- one dimension changed at a time;
+- same asset assumptions across comparison cases.
+
+**Stop/Go Criteria**
+
+- do not compare hourly and quarter-hour or `D_only` and `D_plus_4` if other assumptions moved at the same time.
+
+**Risks**
+
+- changing both horizon and asset policy in one experiment;
+- treating synthetic quarter-hour paths as observed truth.
+
+### S9 CVaR And Risk Aversion
+
+**Goal**
+
+Introduce CVaR or other risk-aversion logic only after deterministic and risk-neutral layers are stable.
+
+**Files Likely To Inspect Or Modify**
+
+- CVaR modules
+- stochastic reporting
+- validation-period selection configs
+
+**Expected Outputs**
+
+- explicit risk-aversion layer;
+- CVaR sensitivity runs;
+- clear risk-return reporting.
+
+**Validation Checks**
+
+- validation-only parameter selection;
+- downside metric clearly defined;
+- no contamination of earlier benchmark logic.
+
+**Stop/Go Criteria**
+
+- do not use test-period outcomes to tune CVaR settings.
+
+**Risks**
+
+- using risk aversion to paper over weak scenarios;
+- introducing CVaR before base deterministic and risk-neutral behaviour is trusted.
 
 ## Future Structure Recommendation
 
