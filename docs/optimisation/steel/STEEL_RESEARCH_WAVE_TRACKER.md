@@ -23,7 +23,8 @@ This file is a governance tracker, not a modelling artifact.
 - `Wave C` is complete and covers generic technology ranges, annual-to-hourly translation methodology, and S2 validation-check definitions.
 - `Wave D` is complete as candidate evidence and covers WAG carriers, internal-energy topology, valuation hierarchy, first emissions-accounting architecture, and S3 validation definitions.
 - `Wave E` is complete as candidate evidence and covers financial parameters, carbon policy structure, tariff proxies, infrastructure flags, product-value policy, and stage-sequencing policy.
-- The next milestone is a cross-wave synthesis and an approved `S2` and `S3` implementation-scope decision before any Pyomo steel implementation starts.
+- Waves `A` through `E` are now incorporated into `STEEL_IMPLEMENTATION_FREEZE_V1.md`.
+- The next milestone is the first implementation task: `S2` deterministic hourly metallic material-flow LP scaffold, only after the freeze docs are committed.
 
 ## Guardrail
 

@@ -17,36 +17,7 @@ This roadmap is intentionally restrictive. It exists to stop future chats from j
 
 ## Phase Roadmap
 
-### S0 Steel Scope Freeze
-
-**Goal**
-
-Freeze the first steel research scope and comparison logic.
-
-**Files Likely To Inspect Or Modify**
-
-- `docs/optimisation/steel/`
-- `docs/optimisation/PROJECT_DECISIONS.md` if later cross-linking is needed
-
-**Expected Outputs**
-
-- accepted steel planning docs;
-- explicit statement of baseline and main case;
-- explicit statement of deferred features.
-
-**Validation Checks**
-
-- baseline BF-BOF and Phase 1 hybrid definitions are distinguishable;
-- first implementation is deterministic, hourly, and `DA_only`.
-
-**Stop/Go Criteria**
-
-- go only when scope and deferrals are explicit.
-
-**Risks**
-
-- steel scope drifting into a digital-twin request;
-- forecast comparisons polluted by hidden asset-policy changes.
+This roadmap now follows the frozen `S1` through `S9` sequence in `STEEL_IMPLEMENTATION_FREEZE_V1.md`.
 
 ### S1 Data, Source-Card, And Register Setup
 
@@ -73,14 +44,14 @@ Create the steel data-governance surface before coding parameters into loaders.
 
 **Stop/Go Criteria**
 
-- go to modelling only when at least a minimal approved baseline parameter set exists.
+- go to modelling only when the freeze docs, assumption surface, and candidate layers are accepted and the first `S2` and `S3` scope is frozen.
 
 **Risks**
 
 - public sources disagreeing materially;
 - redacted values silently becoming fixed model truth.
 
-### S2 Deterministic Material-Flow LP
+### S2 Deterministic Hourly Metallic Material-Flow LP
 
 **Goal**
 
@@ -256,6 +227,10 @@ Introduce risk-neutral scenario-based DA optimisation for forecast and scenario 
 
 Add reserve participation only after DA-only steel is explainable and trusted.
 
+This is an important planned thesis stage.
+
+It is a market-scope extension, not a forecast-granularity test.
+
 **Files Likely To Inspect Or Modify**
 
 - reserve interface docs
@@ -286,6 +261,10 @@ Add reserve participation only after DA-only steel is explainable and trusted.
 **Goal**
 
 Compare granularity and horizon once hourly deterministic, DA, and reserve sequencing decisions are already stable.
+
+This is an important planned thesis stage.
+
+It is the forecast granularity and horizon extension stage.
 
 **Files Likely To Inspect Or Modify**
 
@@ -370,5 +349,6 @@ This avoids mixing steel code, generated runs, and asset facts into the hydrogen
 A future Codex session may start steel code scaffolding only after:
 
 - these planning docs are accepted;
+- implementation freeze `V1` and the `S2` or `S3` scope docs are accepted;
 - initial steel input-table schemas are accepted;
-- the first steel asset boundary and target policy are frozen for Phase S2.
+- the first steel asset boundary and target policy are frozen for `S2`.

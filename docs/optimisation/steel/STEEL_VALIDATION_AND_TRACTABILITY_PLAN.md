@@ -6,6 +6,13 @@ Define the validation gates and tractability rules that must be passed before st
 
 The steel model should fail loudly when structure, units, balances, or reporting are wrong. Solver success alone is not validation.
 
+This document now serves as the high-level validation summary.
+
+Detailed stage gates and tractability or change-control rules are frozen in:
+
+- `STEEL_STAGE_GATE_VALIDATION_PLAN.md`
+- `STEEL_TRACTABILITY_AND_CHANGE_CONTROL.md`
+
 ## Validation Gates
 
 ### 1. Structure Validation
@@ -232,6 +239,8 @@ The default sequence is:
 
 Do not skip ahead unless a previous gate is already passed and documented.
 
+For the controlling tractability and change-control rules, use `STEEL_TRACTABILITY_AND_CHANGE_CONTROL.md`.
+
 ## Engineering Vs Methodological Simplifications
 
 These two categories must not be mixed.
@@ -282,7 +291,9 @@ Allowed only if:
 - scope blueprint is frozen;
 - parameter plan is frozen;
 - assumption register exists;
-- validation targets are defined at least in outline.
+- validation targets are defined at least in outline;
+- `STEEL_IMPLEMENTATION_FREEZE_V1.md` is accepted;
+- `STEEL_S2_S3_IMPLEMENTATION_SCOPE.md` is accepted.
 
 ### Go From Skeleton LP To Costed Deterministic Model
 
@@ -291,6 +302,8 @@ Allowed only if:
 - mass balances close;
 - configuration topology is stable;
 - production metric is frozen for the phase.
+
+For detailed gate-by-gate checks from `S2` through `S9`, use `STEEL_STAGE_GATE_VALIDATION_PLAN.md`.
 
 ### Go From Deterministic To Stochastic
 

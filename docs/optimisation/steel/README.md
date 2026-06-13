@@ -17,6 +17,12 @@ Hydrogen remains the current verified optimisation baseline. Steel is the next w
 | `STEEL_ASSUMPTION_REGISTER.md` | Records uncertain or disputed site/model assumptions that must be exposed and versioned. |
 | `STEEL_VALIDATION_AND_TRACTABILITY_PLAN.md` | Defines validation gates, solver reporting, and tractability rules before thesis use. |
 | `STEEL_IMPLEMENTATION_ROADMAP.md` | Gives the practical implementation sequence for future Codex sessions. |
+| `STEEL_MODEL_POLICY_DECISIONS.md` | Freezes production, carbon, tariff, and stage-sequencing policy decisions. |
+| `STEEL_IMPLEMENTATION_FREEZE_V1.md` | Versioned cross-wave freeze that turns Waves `A` through `E` into a controlled implementation path. |
+| `STEEL_S2_S3_IMPLEMENTATION_SCOPE.md` | Freezes the first coding scope for `S2` and `S3`. |
+| `STEEL_STAGE_GATE_VALIDATION_PLAN.md` | Gives the detailed stage-gate validation contract for `S2` through `S9`. |
+| `STEEL_TRACTABILITY_AND_CHANGE_CONTROL.md` | Separates methodological versus engineering changes and freezes tractability rules. |
+| `STEEL_THESIS_WRITING_PLAN.md` | Maps implementation stages to thesis writing outputs and wording rules. |
 
 ## Placement Choice
 

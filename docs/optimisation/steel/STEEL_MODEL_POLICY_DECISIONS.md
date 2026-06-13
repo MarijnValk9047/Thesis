@@ -95,14 +95,17 @@ Average MW demand is validation-only and must never be used as connection capaci
 
 The steel model sequence is:
 
-1. `S2`: deterministic hourly material-flow LP for the metallic network.
-2. `S3`: WAG, internal-energy, emissions, and economic layer with fixed production and cost minimisation.
-3. `S4`: deterministic hourly day-ahead price-taking dispatch, without bidding logic.
-4. `S5`: day-ahead bidding and settlement.
-5. `S6`: stochastic day-ahead, risk-neutral, comparing `XGBoost_FS3`, `LEAR_FS3`, and `LEAR_Strict`.
-6. `S7`: `mFRR` extension, only after `DA_only` behaviour is stable.
-7. `S8`: 15-minute and or `D_plus_4` extensions, changing one dimension at a time.
-8. `S9`: CVaR or risk-aversion layer.
+1. `S1`: evidence, source cards, parameter universe, and candidate layers only.
+2. `S2`: deterministic hourly material-flow LP for the metallic network.
+3. `S3`: WAG, internal-energy, emissions, and economic layer with fixed production and cost minimisation.
+4. `S4`: deterministic hourly day-ahead price-taking dispatch, without bidding logic.
+5. `S5`: day-ahead bidding and settlement.
+6. `S6`: stochastic day-ahead, risk-neutral, comparing `XGBoost_FS3`, `LEAR_FS3`, and `LEAR_Strict`.
+7. `S7`: `mFRR` extension, only after `DA_only` behaviour is stable.
+8. `S8`: 15-minute and or `D_plus_4` extensions, changing one dimension at a time.
+9. `S9`: CVaR or risk-aversion layer.
+
+`S7` and `S8` are thesis-important planned stages, but both remain gated.
 
 `mFRR` before 15-minute or `D_plus_4` is treated as a market-scope extension, not as a forecast-granularity test.
 
@@ -144,6 +147,14 @@ Review these policies only when at least one of the following is true:
 - approved free-allocation evidence is strong enough for a separate module;
 - the deterministic S2 and S3 layers are stable and validated;
 - a dedicated experiment explicitly studies policy sensitivity instead of forecast quality.
+
+Review is also required if a later stage would change:
+
+- market scope;
+- granularity;
+- horizon;
+- scenario family;
+- risk treatment.
 
 Policy changes must be reflected in:
 
