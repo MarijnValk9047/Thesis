@@ -20,7 +20,7 @@ DEFAULT_REVIEW_ROOT = Path(__file__).resolve().parents[3] / "data" / "03_Optimis
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Dry-run validator for steel S2.4 input governance artifacts.")
+    parser = argparse.ArgumentParser(description="Dry-run validator for steel S2.5 input governance artifacts.")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--schema-root", type=Path, default=DEFAULT_SCHEMA_ROOT)
     parser.add_argument("--mapping-root", type=Path, default=DEFAULT_MAPPING_ROOT)

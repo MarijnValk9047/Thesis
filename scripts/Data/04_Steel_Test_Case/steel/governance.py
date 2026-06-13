@@ -109,6 +109,12 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "unit_review_complete",
         "sign_review_complete",
         "source_review_complete",
+        "structural_review_complete",
+        "numerical_review_complete",
+        "structural_ready_for_structure_only_use",
+        "numerical_ready_for_approved_input",
+        "thesis_grade_numerical_ready",
+        "candidate_review_executable",
         "approval_ready",
         "approval_blocker",
         "next_review_action",
@@ -122,7 +128,26 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "missing_evidence_rows",
         "postponed_rows",
         "approved_rows",
+        "structural_only_rows",
+        "numerical_candidate_rows",
+        "thesis_grade_numerical_rows",
+        "candidate_review_executable_rows",
         "key_blockers",
+    ],
+    "s2_structural_numerical_classification.csv": [
+        "table_name",
+        "category",
+        "structural_status",
+        "numerical_status",
+        "model_role",
+        "approval_status",
+        "executable_status",
+        "thesis_grade_numerical_eligibility",
+        "annual_value_status",
+        "constraint_driver_status",
+        "allowed_use",
+        "approval_blocker",
+        "notes",
     ],
 }
 
@@ -141,6 +166,7 @@ REVIEW_DATA_FILES = [
 
 FORBIDDEN_REVIEW_TOKENS = ("wag", "bfg", "cog", "ets", "tariff", "da_", "market", "mfrr", "cvar", "revenue")
 APPROVAL_BANNED_VALUES = {"approved", "approved_model_input", "thesis_grade", "base_case_truth"}
+EXECUTABLE_BANNED_VALUES = {"s2_executable", "approved_model_input_executable", "thesis_grade_executable"}
 REQUIRED_PROMOTION_TABLES = {
     "process_units_schema.csv",
     "carriers_schema.csv",
@@ -152,6 +178,13 @@ REQUIRED_PROMOTION_TABLES = {
     "terminal_inventory_rules_schema.csv",
     "topology_routes_schema.csv",
     "validation_targets_schema.csv",
+}
+RISKY_NUMERICAL_CATEGORIES = {
+    "process_bounds",
+    "conversion_coefficients",
+    "production_targets",
+    "initial_inventories",
+    "terminal_inventory_rules",
 }
 
 
@@ -211,6 +244,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     tables = review_bundle.tables
     summary = tables["s2_review_summary.csv"]
     checklist = tables["s2_promotion_checklist.csv"]
+    classification = tables["s2_structural_numerical_classification.csv"]
 
     approved_rows = 0
     for filename in REVIEW_DATA_FILES:
@@ -252,6 +286,16 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
 
     if checklist["approval_ready"].astype(str).str.strip().str.lower().eq("true").any():
         raise ValueError("s2_promotion_checklist.csv must not mark any category approval_ready=true at S2.4.")
+    if checklist["thesis_grade_numerical_ready"].astype(str).str.strip().str.lower().eq("true").any():
+        raise ValueError("s2_promotion_checklist.csv must not mark any category thesis_grade_numerical_ready=true at S2.5.")
+    if checklist["candidate_review_executable"].astype(str).str.strip().str.lower().eq("true").any():
+        raise ValueError("s2_promotion_checklist.csv must not mark any category candidate_review_executable=true at S2.5.")
+
+    risky_rows = checklist[checklist["input_category"].isin(RISKY_NUMERICAL_CATEGORIES)]
+    if risky_rows.empty or set(risky_rows["input_category"]) != RISKY_NUMERICAL_CATEGORIES:
+        raise ValueError("s2_promotion_checklist.csv must cover every risky numerical S2 category.")
+    if risky_rows["numerical_ready_for_approved_input"].astype(str).str.strip().str.lower().eq("true").any():
+        raise ValueError("Risky numerical categories must remain blocked from approved numerical use at S2.5.")
 
     summary_rows = {str(row["review_table"]): row for row in summary.to_dict(orient="records")}
     for filename in REVIEW_DATA_FILES:
@@ -272,6 +316,12 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
             actual_value = int(row[key])
             if actual_value != expected_value:
                 raise ValueError(f"s2_review_summary.csv mismatch for {filename} field {key}: expected {expected_value}, found {actual_value}")
+        if int(row["thesis_grade_numerical_rows"]) != 0:
+            raise ValueError(f"{filename} must report zero thesis-grade numerical rows at S2.5.")
+        if int(row["candidate_review_executable_rows"]) != 0:
+            raise ValueError(f"{filename} must report zero candidate-review executable rows at S2.5.")
+        if int(row["structural_only_rows"]) + int(row["numerical_candidate_rows"]) != int(row["row_count"]):
+            raise ValueError(f"{filename} must partition row_count into structural_only_rows + numerical_candidate_rows.")
 
     total_row = summary_rows.get("TOTAL")
     if total_row is None:
@@ -288,6 +338,44 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     for key, expected_value in total_expected.items():
         if int(total_row[key]) != expected_value:
             raise ValueError(f"s2_review_summary.csv TOTAL mismatch for {key}: expected {expected_value}, found {total_row[key]}")
+    if int(total_row["thesis_grade_numerical_rows"]) != 0:
+        raise ValueError("s2_review_summary.csv TOTAL must report zero thesis-grade numerical rows at S2.5.")
+    if int(total_row["candidate_review_executable_rows"]) != 0:
+        raise ValueError("s2_review_summary.csv TOTAL must report zero candidate-review executable rows at S2.5.")
+
+    classification_approval_values = set(classification["approval_status"].astype(str).str.strip().str.lower())
+    if classification_approval_values & APPROVAL_BANNED_VALUES:
+        raise ValueError(
+            "s2_structural_numerical_classification.csv contains forbidden approval-style values: "
+            f"{sorted(classification_approval_values & APPROVAL_BANNED_VALUES)}"
+        )
+    if classification["thesis_grade_numerical_eligibility"].astype(str).str.strip().str.lower().eq("true").any():
+        raise ValueError("s2_structural_numerical_classification.csv must report zero thesis-grade numerical rows.")
+    if classification["executable_status"].astype(str).str.strip().str.lower().isin(EXECUTABLE_BANNED_VALUES).any():
+        raise ValueError("s2_structural_numerical_classification.csv contains forbidden executable S2 rows.")
+    validation_class_rows = classification["model_role"].astype(str).str.strip().str.lower().eq("validation_target")
+    if validation_class_rows.any():
+        bad = classification.loc[validation_class_rows, "constraint_driver_status"].astype(str).str.strip().str.lower() != "cannot_drive_constraints"
+        if bad.any():
+            raise ValueError("Validation-target classification rows must be marked cannot_drive_constraints.")
+    if classification["annual_value_status"].astype(str).str.strip().str.lower().eq("may_become_hourly_cap").any():
+        raise ValueError("Annual public values must not be classified as hourly caps.")
+    structural_approved_mask = classification["structural_status"].astype(str).str.contains(
+        r"(?:^|_)approved(?:$|_)",
+        case=False,
+        regex=True,
+    )
+    if structural_approved_mask.any():
+        bad_numeric = ~classification.loc[structural_approved_mask, "numerical_status"].astype(str).str.contains("not_approved|not_applicable|blocked", case=False, regex=True)
+        if bad_numeric.any():
+            raise ValueError("Structural approval language cannot imply approved numerical status.")
+    later_stage_mask = classification["category"].astype(str).str.lower().str.contains(
+        "wag|internal_energy|emissions|ets|tariff|da|market|mfrr|cvar|revenue|15_minute|d_plus_4",
+        regex=True,
+    )
+    if later_stage_mask.any():
+        if classification.loc[later_stage_mask, "executable_status"].astype(str).str.strip().str.lower().isin({"s2_executable"}).any():
+            raise ValueError("Later-stage categories must not be classified as S2 executable.")
 
     return {
         "candidate_review_files_checked": len(REVIEW_FILE_SPECS),
@@ -299,6 +387,15 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
         "missing_evidence_rows": total_expected["missing_evidence_rows"],
         "postponed_rows": total_expected["postponed_rows"],
         "approved_rows": approved_rows,
+        "classification_rows_checked": int(len(classification)),
+        "thesis_grade_numerical_rows": int(classification["thesis_grade_numerical_eligibility"].astype(str).str.strip().str.lower().eq("true").sum()),
+        "candidate_review_executable_rows": int(classification["executable_status"].astype(str).str.strip().str.lower().isin(EXECUTABLE_BANNED_VALUES).sum()),
+        "later_stage_s2_executable_rows": int(
+            classification.loc[
+                later_stage_mask,
+                "executable_status",
+            ].astype(str).str.strip().str.lower().isin({"s2_executable"}).sum()
+        ),
     }
 
 

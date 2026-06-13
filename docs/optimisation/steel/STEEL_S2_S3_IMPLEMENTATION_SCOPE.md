@@ -178,3 +178,5 @@ The following must remain candidate or sensitivity only through the first coding
 In `S2.3`, candidate categories may be mapped into the future deterministic `S2` schema surface for review purposes, but they still may not be treated as approved executable model inputs.
 
 In `S2.4`, selected deterministic `S2` candidate categories may be normalised into non-executable candidate-review tables with unit, sign, evidence, and promotion-blocker fields. This still does not approve any executable steel input row.
+
+In `S2.5`, structural support and numerical approval are separated explicitly. Route, carrier, and buffer structure may be review-supported while the related numerical categories remain blocked from executable `S2` use.

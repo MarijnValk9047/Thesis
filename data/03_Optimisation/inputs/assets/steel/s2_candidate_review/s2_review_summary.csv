@@ -1,12 +1,12 @@
-review_table,row_count,candidate_not_approved_rows,validation_only_rows,sensitivity_only_rows,missing_evidence_rows,postponed_rows,approved_rows,key_blockers
-process_units_candidate_review.csv,11,11,0,0,0,0,0,Hourly envelopes route activation rules and process-role calibration remain unresolved.
-carriers_candidate_review.csv,9,9,0,0,0,0,0,Carrier dictionary target units and sign conventions are not yet frozen.
-stores_candidate_review.csv,2,1,0,0,1,0,0,DRI and slab-buffer classes lack reviewed capacities and slab or WIP abstraction remains open.
-conversion_coefficients_candidate_review.csv,4,4,0,0,0,0,0,Generic recipe ranges are not site-calibrated and signed loader conventions are not frozen.
-process_bounds_candidate_review.csv,7,3,0,0,0,0,0,Annual anchors need explicit annual-to-hourly translation and methodology freeze.
-production_targets_candidate_review.csv,4,0,4,0,0,0,0,Annual public target anchors must stay outside executable constraints.
-initial_inventories_candidate_review.csv,2,0,0,0,2,0,0,Only toy placeholders exist and no reviewed opening-inventory evidence is available.
-terminal_inventory_rules_candidate_review.csv,2,0,0,0,0,0,0,Only structural endpoint-rule support exists and no numeric terminal policy is reviewed.
-topology_routes_candidate_review.csv,13,13,0,0,0,0,0,Configuration activation and route-membership interpretation still require review.
-validation_targets_candidate_review.csv,8,0,8,0,0,0,0,Validation anchors must remain non-executable and non-constraint rows.
-TOTAL,62,41,12,0,3,0,0,No review table is approval-ready and zero approved executable rows are allowed at S2.4.
+review_table,row_count,candidate_not_approved_rows,validation_only_rows,sensitivity_only_rows,missing_evidence_rows,postponed_rows,approved_rows,structural_only_rows,numerical_candidate_rows,thesis_grade_numerical_rows,candidate_review_executable_rows,key_blockers
+process_units_candidate_review.csv,11,11,0,0,0,0,0,11,0,0,0,Structural topology support exists but no numerical throughput approval exists.
+carriers_candidate_review.csv,9,9,0,0,0,0,0,9,0,0,0,Carrier definitions are structurally useful but unit and sign conventions are not numerically frozen.
+stores_candidate_review.csv,2,1,0,0,1,0,0,2,0,0,0,Store classes are structurally visible while numerical capacities remain unresolved.
+conversion_coefficients_candidate_review.csv,4,4,0,0,0,0,0,0,4,0,0,Generic recipe ranges and sign conventions remain blocked from executable use.
+process_bounds_candidate_review.csv,7,3,0,0,0,0,0,4,3,0,0,Method rows are structural support only and annual anchors remain non-hourly and non-executable.
+production_targets_candidate_review.csv,4,0,4,0,0,0,0,0,4,0,0,Annual public targets remain validation or candidate anchors and cannot become active constraints.
+initial_inventories_candidate_review.csv,2,0,0,0,2,0,0,0,2,0,0,Only placeholders exist and no reviewed opening-inventory evidence is available.
+terminal_inventory_rules_candidate_review.csv,2,0,0,0,0,0,0,2,0,0,0,Endpoint-rule support is structural only and no numeric terminal-policy values are reviewed.
+topology_routes_candidate_review.csv,13,13,0,0,0,0,0,13,0,0,0,Route membership is structurally supported but cannot imply numerical route-cap approval.
+validation_targets_candidate_review.csv,8,0,8,0,0,0,0,0,8,0,0,Validation anchors remain non-executable and cannot drive constraints.
+TOTAL,62,41,12,0,3,0,0,41,21,0,0,Structural support and numerical approval remain separate and zero candidate-review rows are executable.

@@ -114,12 +114,22 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert payload["candidate_review_data_files_checked"] == 10
     assert payload["approved_rows"] == 0
     assert payload["candidate_review_total_rows"] > 0
+    assert payload["thesis_grade_numerical_rows"] == 0
+    assert payload["candidate_review_executable_rows"] == 0
+    assert payload["later_stage_s2_executable_rows"] == 0
 
     checklist = review_bundle.tables["s2_promotion_checklist.csv"]
     assert checklist["approval_ready"].str.lower().eq("false").all()
+    assert checklist["thesis_grade_numerical_ready"].str.lower().eq("false").all()
+    assert checklist["candidate_review_executable"].str.lower().eq("false").all()
 
     summary = review_bundle.tables["s2_review_summary.csv"]
     assert "TOTAL" in set(summary["review_table"])
+
+    classification = review_bundle.tables["s2_structural_numerical_classification.csv"]
+    assert classification["approval_status"].str.lower().isin({"candidate_not_approved", "validation_only", "postponed"}).all()
+    assert classification["thesis_grade_numerical_eligibility"].str.lower().eq("false").all()
+    assert classification["annual_value_status"].str.lower().ne("may_become_hourly_cap").all()
 
 
 def test_candidate_review_mode_is_non_thesis_usable():
@@ -137,8 +147,10 @@ def test_candidate_review_mode_is_non_thesis_usable():
     assert payload["thesis_usable"] is False
     assert payload["schema_files_checked"] >= 10
     assert payload["mapping_files_checked"] == 4
-    assert payload["candidate_review_files_checked"] == 12
+    assert payload["candidate_review_files_checked"] == 13
     assert payload["approved_rows"] == 0
+    assert payload["thesis_grade_numerical_rows"] == 0
+    assert payload["candidate_review_executable_rows"] == 0
 
 
 def test_approved_model_input_mode_rejects_toy_rows(tmp_path: Path):

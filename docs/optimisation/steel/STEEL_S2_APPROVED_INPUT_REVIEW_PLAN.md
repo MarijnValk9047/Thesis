@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the `S2.3` and `S2.4` governance steps for future deterministic steel `S2` inputs.
+This document defines the `S2.3`, `S2.4`, and `S2.5` governance steps for future deterministic steel `S2` inputs.
 
 It does not approve any steel value table. It defines:
 
@@ -11,7 +11,8 @@ It does not approve any steel value table. It defines:
 - how candidate evidence categories map into that future schema;
 - why validation targets must stay distinct from executable constraints;
 - what remains postponed until `S3` or later;
-- how reviewed candidate-register rows are normalised before any promotion decision.
+- how reviewed candidate-register rows are normalised before any promotion decision;
+- how structural support is kept separate from numerical approval.
 
 Read this together with:
 
@@ -140,6 +141,29 @@ It may not contain:
 - thesis-grade base-case truth claims;
 - hidden promotion of annual validation anchors into active constraints.
 
+## S2.5 Structural Versus Numerical Separation
+
+`S2.5` adds:
+
+- `STEEL_S2_STRUCTURAL_NUMERICAL_SEPARATION.md`
+- `s2_promotion_memos/`
+- `s2_structural_numerical_classification.csv`
+
+The key rule is:
+
+- structural support may justify a schema row, route member, or buffer class;
+- it may not justify executable numerical approval.
+
+This matters especially for:
+
+- `process_bounds`
+- `conversion_coefficients`
+- `production_targets`
+- `initial_inventories`
+- `terminal_inventory_rules`
+
+These categories remain numerically blocked even where structural support exists.
+
 ## Validation Targets Versus Constraints
 
 Validation targets are external plausibility anchors.
@@ -203,4 +227,4 @@ After `S2.4`, thesis-grade quantitative claims are still not allowed for the ste
 - candidate evidence is only mapped, normalised, and reviewed, not promoted;
 - approved deterministic `S2` value tables do not yet exist.
 
-`S2.3` and `S2.4` improve governance and misuse prevention. They do not create approved steel operating inputs.
+`S2.3`, `S2.4`, and `S2.5` improve governance and misuse prevention. They do not create approved steel operating inputs.

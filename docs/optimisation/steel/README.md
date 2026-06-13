@@ -111,3 +111,19 @@ Current boundary:
 - no value is promoted to `approved_model_input`;
 - annual public values remain validation or candidate anchors and must not become hourly caps;
 - candidate-review rows remain non-thesis-usable and non-executable as approved steel inputs.
+
+## S2.5 Structural Versus Numerical Separation
+
+`S2.5` adds:
+
+- a formal structural-versus-numerical separation note;
+- category-specific promotion memos for the risky numerical `S2` families;
+- a machine-readable structural-versus-numerical classification artifact;
+- validator checks that block any drift from structural support into executable numerical approval.
+
+Current boundary remains unchanged:
+
+- structural support may justify route, carrier, buffer, or topology review rows;
+- structural support does not approve capacities, coefficients, production targets, opening inventories, or terminal quantities;
+- validation-only rows remain non-constraint and non-executable;
+- candidate-review mode remains non-thesis-usable.
