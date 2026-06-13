@@ -35,6 +35,43 @@ Keep these objects separate:
 5. Validation targets must stay distinct from approved operating inputs.
 6. Non-authoritative research memo content must never be represented as stable source evidence.
 
+## Wave B Update
+
+Wave B adds the first stable public-source layer for the Tata IJmuiden-inspired topology and validation scaffold.
+
+The main conclusions are:
+
+- stable public topology categories now exist for the current BF-BOF baseline and the default Phase 1 hybrid BF-BOF plus DRI-EAF case;
+- validation-target classes now include site-level annual production, route-level annual production, scrap-share ranges, public emissions anchors, public energy-scale anchors, downstream sink anchors, and utility-buffer evidence;
+- the default public closure-pair decision is BF7 plus KGF2 in Phase 1, with KGF1 retained in the default Phase 1 case;
+- early closure of KGF1 and KGF2 is tracked only as an exogenous scenario flag, not as the default future topology;
+- MER Deel B is the controlling public technical source when simplified Tata webpages conflict with it.
+
+### Wave B Source Hierarchy Rule
+
+For Wave B topology and validation work, use this order:
+
+1. MER Deel B and closely linked formal public reports;
+2. annual reports and realised public reporting;
+3. JLOI / basic-engineering / formal project-status pages;
+4. general Tata explainer webpages;
+5. research memos as discovery aids only.
+
+### Wave B Unresolved Categories
+
+Wave B does not resolve:
+
+- exact recipes and yields;
+- quality windows and product-mix routing;
+- annual-to-hourly translation methodology;
+- internal WAG valuation and dispatch rules;
+- ETS and free-allocation treatment;
+- contracted connection capacity and network tariffs;
+- CCS operational availability;
+- market-layer inputs for DA, stochastic, CVaR, or later reserve work.
+
+Those remain for Waves C, D, and E.
+
 ## Modelling Layers
 
 ### Time And Market Structure
