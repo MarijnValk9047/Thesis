@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,13 +12,39 @@ import pandas as pd
 from .fingerprinting import stable_json_dumps
 
 
+_WINDOWS_SAFE_PATH_LIMIT = 240
+
+
+def _frame_output_path(path: Path, suffix: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    candidate = path.with_suffix(suffix)
+    if len(str(candidate)) <= _WINDOWS_SAFE_PATH_LIMIT:
+        return candidate
+    digest = hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:12]
+    stem = path.stem
+    shortened_stem = f"{stem[:48]}__{digest}"
+    shortened = path.parent / f"{shortened_stem}{suffix}"
+    if len(str(shortened)) <= _WINDOWS_SAFE_PATH_LIMIT:
+        return shortened
+    fallback_stem = f"frame__{digest}"
+    return path.parent / f"{fallback_stem}{suffix}"
+
+
 def _write_frame(path: Path, frame: pd.DataFrame) -> dict[str, str]:
+    parquet_path = _frame_output_path(path, ".parquet")
     try:
-        frame.to_parquet(path.with_suffix(".parquet"), index=False)
-        return {"filename": path.with_suffix(".parquet").name, "format": "parquet"}
-    except Exception:
-        frame.to_pickle(path.with_suffix(".pkl"))
-        return {"filename": path.with_suffix(".pkl").name, "format": "pickle"}
+        frame.to_parquet(parquet_path, index=False)
+        return {"filename": parquet_path.name, "format": "parquet"}
+    except Exception as parquet_error:
+        pickle_path = _frame_output_path(path, ".pkl")
+        try:
+            frame.to_pickle(pickle_path)
+            return {"filename": pickle_path.name, "format": "pickle"}
+        except Exception as pickle_error:
+            raise RuntimeError(
+                f"Failed to write cache frame '{path.name}' as parquet or pickle. "
+                f"parquet_path='{parquet_path}', pickle_path='{pickle_path}'"
+            ) from pickle_error
 
 
 def _read_frame(path: Path, frame_format: str) -> pd.DataFrame:

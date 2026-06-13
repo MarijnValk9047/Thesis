@@ -73,6 +73,38 @@ The active hourly interpretation layer appears to culminate in:
 
 Those notebooks should be treated as interpretation layers on top of the code-first hourly package, not as the canonical implementation by themselves.
 
+## Hourly D-only DA model selection and scenario-count sensitivity, June 2026
+
+The hourly `D_only` day-ahead forecasting stage was frozen in June 2026 for downstream optimisation reuse. The final selected model is:
+
+- `LEAR Strict D-only 1092 repaired anchor`
+
+The frozen main scenario setting is:
+
+- `30` scenarios per model-origin-day
+- common observed support from `2024-10-01` to `2025-09-25`
+- `307` complete delivery days
+
+The key evidence locations are:
+
+- three-model model-selection bundle:
+  `data/02_Forecasting/01_DA_prices/hourly_da/model_selection_evidence/model_selection_3model_common_observed_20260611_150137/`
+- governed economic comparison run:
+  `scripts/Data/03_Hydrogen_Test_Case/runs/20260611_135643_common_observed_3model_30scen_dam_only/`
+- LEAR Strict `30`-vs-`75` scenario-count sensitivity:
+  `data/03_Hydrogen_Test_Case/dam_only_sensitivity/lear_strict_scenario_count_sensitivity_20260611_172625/`
+
+The compact handoff record is:
+
+- `docs/forecasting/hourly_donly_da_model_selection_handoff_v1.md`
+
+Final caveat:
+
+- `30` scenarios remain the main tractability setting for thesis workflow continuity.
+- `75` scenarios improve scenario coverage and realised economics for LEAR Strict on the same support, but they are materially heavier computationally and do not reopen the three-model ranking.
+
+This freeze closes the hourly `D_only` model-selection stage as the upstream input choice for the next research stage: steel-plant MILP model development.
+
 ## Why FS0 / FS1 / FS2 / FS3 Still Matter
 
 The FS ladder is not only historical naming. It explains why many files still exist:
