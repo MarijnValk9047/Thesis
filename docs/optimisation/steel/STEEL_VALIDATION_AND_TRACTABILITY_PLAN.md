@@ -136,6 +136,35 @@ Every meaningful steel optimisation run should report:
 
 This is mandatory even for deterministic baseline runs.
 
+## Wave C S2 Validation Plan
+
+For the future S2 deterministic hourly material-flow LP, validation should explicitly include:
+
+- annualised BF hot-metal reconciliation;
+- annualised DRP DRI reconciliation;
+- annualised BOF liquid-steel reconciliation;
+- annualised EAF liquid-steel reconciliation;
+- total finished-output or slab-plus-flat reconciliation against the chosen target policy;
+- BOF versus EAF route-share reconciliation where the hybrid case is active;
+- DRI inventory endpoint-neutrality checks;
+- slab or WIP endpoint-neutrality checks;
+- no-free-battery DRI cycling checks;
+- no-free-battery slab or WIP cycling checks;
+- downstream bottleneck detection;
+- infeasibility classification into at least iron-unit shortage, BOF mix infeasibility, EAF metallic-feed shortage, downstream bottleneck, and terminal-inventory violation.
+
+These are defined as future checks and diagnostic labels, not as already implemented code.
+
+## Wave C Reporting Rule
+
+When S2 is later implemented, its reporting must state:
+
+- which annual-to-hourly translation method was used;
+- which availability and utilisation assumptions defined the hourly envelopes;
+- which envelope choices remained candidate or sensitivity material;
+- which inventory endpoint rules were active;
+- which infeasibility class applied if the model failed.
+
 ## Tractability Sequence
 
 The default sequence is:

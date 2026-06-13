@@ -72,6 +72,84 @@ Wave B does not resolve:
 
 Those remain for Waves C, D, and E.
 
+## Wave C Update
+
+Wave C adds the generic technology-range and annual-to-hourly methodology layer needed before any S2 steel LP can be scoped credibly.
+
+The main conclusions are:
+
+- S2 remains a deterministic hourly material-flow LP for the metallic network, not an energy, market, or risk model;
+- public annual values stay as validation anchors or candidate ranges and do not become direct hourly operating truth;
+- annual-to-hourly translation requires explicit availability and utilisation assumptions;
+- BF and DRP are continuity-driven assets in S2 and therefore use narrow hourly envelopes;
+- BOF and EAF are batch-equivalent assets in S2 and must not be treated as fully continuous dimmers;
+- HDRI is a short-transfer class, while CDRI or HBI can be more storage-like only with explicit physical caveats;
+- slab and WIP treatment requires endpoint rules and, where relevant, reheating or loss proxies;
+- detailed WAG dispatch, ETS, internal transfer values, energy-cost-emissions, DA bidding, stochastic/CVaR, quarter-hour, `D_plus_4`, and `mFRR` remain postponed.
+
+### Wave C Source Hierarchy Rule
+
+For Wave C technology and methodology work, use this order:
+
+1. high-quality public technical references and sector studies;
+2. generic technology documents and established industry references;
+3. educational or vendor material only as supporting context for handling classes or broad ranges;
+4. research memos as discovery aids only.
+
+### Wave C Candidate Range Categories
+
+Wave C candidate evidence is organised around:
+
+- BF hourly-envelope families;
+- BOF metallic-mix envelope families;
+- DRP quality bands and continuity-driven envelope families;
+- EAF charge-envelope and batch-equivalent logic families;
+- HDRI versus CDRI or HBI handling classes;
+- downstream hot-route versus cold-route penalty or proxy families;
+- annual-to-hourly translation methods;
+- S2 validation-check definitions and infeasibility-diagnostic definitions.
+
+### Wave C Annual-To-Hourly Translation Rule
+
+Every annual public value used in S2 design must be interpreted through explicit method rows such as:
+
+- calendar average throughput;
+- available-hours calculation;
+- online-average throughput;
+- central, conservative, and flexible envelope variants;
+- continuity-driven versus batch-equivalent translation rules;
+- terminal-inventory neutrality rules.
+
+Without those translation assumptions, an annual public value is not eligible to become an hourly candidate envelope.
+
+### Wave C Minimum S2 Parameter Set
+
+The minimum S2 material-flow LP parameter set now requires:
+
+- topology and route configuration from Wave B;
+- production target policy;
+- continuity-driven BF and DRP envelope methodology;
+- batch-equivalent BOF and EAF treatment;
+- metallic-mix and route-share candidate logic;
+- DRI and slab or WIP buffer classes;
+- terminal-inventory neutrality rules;
+- coarse downstream sink treatment;
+- validation-check definitions and infeasibility-diagnostic definitions.
+
+### Wave C Explicitly Postponed Layers
+
+Wave C still does not approve or resolve:
+
+- site-specific recipes and yields;
+- detailed WAG dispatch;
+- energy-cost-emissions accounting;
+- ETS or free-allocation logic;
+- internal gas or utility valuation;
+- DA bidding and settlement;
+- stochastic DA and CVaR;
+- quarter-hour and `D_plus_4`;
+- `mFRR`.
+
 ## Modelling Layers
 
 ### Time And Market Structure
