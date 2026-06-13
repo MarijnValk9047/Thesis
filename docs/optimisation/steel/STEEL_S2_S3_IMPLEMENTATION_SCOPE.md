@@ -176,3 +176,5 @@ The following must remain candidate or sensitivity only through the first coding
 - any free-allocation credit values.
 
 In `S2.3`, candidate categories may be mapped into the future deterministic `S2` schema surface for review purposes, but they still may not be treated as approved executable model inputs.
+
+In `S2.4`, selected deterministic `S2` candidate categories may be normalised into non-executable candidate-review tables with unit, sign, evidence, and promotion-blocker fields. This still does not approve any executable steel input row.

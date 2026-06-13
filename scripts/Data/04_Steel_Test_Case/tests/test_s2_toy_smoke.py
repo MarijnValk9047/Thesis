@@ -13,7 +13,13 @@ if str(TEST_CASE_ROOT) not in sys.path:
     sys.path.insert(0, str(TEST_CASE_ROOT))
 
 from steel.config import load_config
-from steel.governance import dry_run_validate_input_governance, load_s2_candidate_mapping, load_s2_schema
+from steel.governance import (
+    dry_run_validate_input_governance,
+    load_s2_candidate_mapping,
+    load_s2_candidate_review,
+    load_s2_schema,
+    validate_s2_candidate_review,
+)
 from steel.input_tables import load_governed_toy_tables
 from steel.model import build_model, choose_solver
 from steel.runner import run_from_config
@@ -26,6 +32,7 @@ TERMINAL_CONFIG_PATH = TEST_CASE_ROOT / "configs" / "terminal_inventory_infeasib
 FEED_CONFIG_PATH = TEST_CASE_ROOT / "configs" / "route_feed_shortage_or_buffer_bottleneck.yaml"
 SCHEMA_ROOT = TEST_CASE_ROOT.parents[2] / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_schema"
 MAPPING_ROOT = TEST_CASE_ROOT.parents[2] / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_mapping"
+REVIEW_ROOT = TEST_CASE_ROOT.parents[2] / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review"
 
 
 def test_model_builds_with_zero_binaries():
@@ -101,19 +108,37 @@ def test_s2_schema_and_mapping_files_parse():
     assert len(mapping_bundle.tables) == 4
 
 
+def test_candidate_review_files_parse_and_have_zero_approved_rows():
+    review_bundle = load_s2_candidate_review(REVIEW_ROOT)
+    payload = validate_s2_candidate_review(review_bundle)
+    assert payload["candidate_review_data_files_checked"] == 10
+    assert payload["approved_rows"] == 0
+    assert payload["candidate_review_total_rows"] > 0
+
+    checklist = review_bundle.tables["s2_promotion_checklist.csv"]
+    assert checklist["approval_ready"].str.lower().eq("false").all()
+
+    summary = review_bundle.tables["s2_review_summary.csv"]
+    assert "TOTAL" in set(summary["review_table"])
+
+
 def test_candidate_review_mode_is_non_thesis_usable():
     config = load_config(CANDIDATE_REVIEW_CONFIG_PATH)
     schema_bundle = load_s2_schema(SCHEMA_ROOT)
     mapping_bundle = load_s2_candidate_mapping(MAPPING_ROOT)
+    review_bundle = load_s2_candidate_review(REVIEW_ROOT)
     payload = dry_run_validate_input_governance(
         config=config,
         schema_bundle=schema_bundle,
         mapping_bundle=mapping_bundle,
+        review_bundle=review_bundle,
     )
     assert payload["input_mode"] == "candidate_review"
     assert payload["thesis_usable"] is False
     assert payload["schema_files_checked"] >= 10
     assert payload["mapping_files_checked"] == 4
+    assert payload["candidate_review_files_checked"] == 12
+    assert payload["approved_rows"] == 0
 
 
 def test_approved_model_input_mode_rejects_toy_rows(tmp_path: Path):

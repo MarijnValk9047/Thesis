@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the `S2.3` governance step for future deterministic steel `S2` inputs.
+This document defines the `S2.3` and `S2.4` governance steps for future deterministic steel `S2` inputs.
 
 It does not approve any steel value table. It defines:
 
@@ -10,7 +10,8 @@ It does not approve any steel value table. It defines:
 - the future deterministic `S2` input-table schema surface;
 - how candidate evidence categories map into that future schema;
 - why validation targets must stay distinct from executable constraints;
-- what remains postponed until `S3` or later.
+- what remains postponed until `S3` or later;
+- how reviewed candidate-register rows are normalised before any promotion decision.
 
 Read this together with:
 
@@ -112,6 +113,33 @@ It records:
 
 This layer is a review scaffold only. It must not be treated as approved numerical input.
 
+## S2.4 Candidate-Review Tables
+
+`S2.4` adds the non-executable review bundle under:
+
+- `data/03_Optimisation/inputs/assets/steel/s2_candidate_review/`
+
+These files are not approved model inputs. They exist to:
+
+- normalise selected `S2` candidate evidence into schema-aligned review rows;
+- record unit and sign conventions explicitly;
+- surface missing evidence before approval;
+- maintain promotion checklists and blockers;
+- stop annual public anchors from being misused as hourly executable caps.
+
+The review bundle may contain:
+
+- candidate rows;
+- validation-only rows;
+- structural assumption-support rows;
+- placeholder rows where only toy scaffolds exist.
+
+It may not contain:
+
+- approved executable rows;
+- thesis-grade base-case truth claims;
+- hidden promotion of annual validation anchors into active constraints.
+
 ## Validation Targets Versus Constraints
 
 Validation targets are external plausibility anchors.
@@ -128,6 +156,8 @@ They may not:
 - be translated into hourly caps without explicit translation methodology and approval;
 - be used as approved model-input rows while still labelled validation-only.
 
+This rule also applies to the `S2.4` candidate-review tables. Validation rows remain review-only even when they are schema-aligned.
+
 ## Promotion Requirements Before Approval
 
 Before a candidate category can become `approved_model_input`, the following must be explicit:
@@ -139,6 +169,14 @@ Before a candidate category can become `approved_model_input`, the following mus
 5. distinction from validation targets and sensitivity-only assumptions;
 6. freeze-compatible phase scope;
 7. review decision recorded in the steel governance documents.
+
+`S2.4` makes these blockers explicit through:
+
+- unit-review fields;
+- sign-review fields;
+- source and public-reportability fields;
+- approval-blocker fields;
+- promotion checklist rows per required `S2` category.
 
 ## Explicitly Postponed Beyond S2
 
@@ -158,11 +196,11 @@ Before a candidate category can become `approved_model_input`, the following mus
 Those remain postponed in line with the frozen implementation sequence.
 
 ## Thesis Claim Boundary After S2.3
-
-After `S2.3`, thesis-grade quantitative claims are still not allowed for the steel runs because:
+ 
+After `S2.4`, thesis-grade quantitative claims are still not allowed for the steel runs because:
 
 - the executable runs still use toy scaffold values;
-- candidate evidence is only mapped and reviewed, not promoted;
+- candidate evidence is only mapped, normalised, and reviewed, not promoted;
 - approved deterministic `S2` value tables do not yet exist.
 
-`S2.3` improves governance and misuse prevention. It does not create approved steel operating inputs.
+`S2.3` and `S2.4` improve governance and misuse prevention. They do not create approved steel operating inputs.

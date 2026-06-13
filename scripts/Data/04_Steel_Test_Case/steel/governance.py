@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any
 
 import pandas as pd
@@ -60,6 +61,99 @@ MAPPING_FILE_SPECS: dict[str, list[str]] = {
     ],
 }
 
+COMMON_REVIEW_COLUMNS = [
+    "input_id",
+    "input_value_raw",
+    "input_unit_raw",
+    "target_unit",
+    "unit_conversion_needed",
+    "hourly_cap_guard",
+    "sign_convention",
+    "sign_check_status",
+    "unit_check_status",
+    "source_id",
+    "source_class",
+    "candidate_source_file",
+    "evidence_quality",
+    "public_reportability",
+    "source_status",
+    "approval_status",
+    "intended_use",
+    "required_phase",
+    "review_status",
+    "promotion_status",
+    "missing_evidence_before_approval",
+    "approval_blocker",
+    "reviewer_notes",
+    "notes",
+]
+
+REVIEW_FILE_SPECS: dict[str, list[str]] = {
+    "process_units_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["process_id", "configuration", "process_name", "route_id"],
+    "carriers_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["carrier_id", "configuration", "carrier_group"],
+    "stores_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["store_id", "configuration", "carrier_id", "store_class"],
+    "conversion_coefficients_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["process_id", "configuration", "carrier_id", "coefficient_role"],
+    "process_bounds_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["process_id", "configuration", "bound_name", "bound_interpretation"],
+    "production_targets_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["target_id", "configuration", "carrier_id", "target_name"],
+    "initial_inventories_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["store_id", "configuration", "carrier_id"],
+    "terminal_inventory_rules_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["store_id", "configuration", "carrier_id", "rule_type"],
+    "topology_routes_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["route_id", "configuration", "process_id", "route_sequence"],
+    "validation_targets_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["validation_target_id", "configuration", "metric"],
+    "s2_promotion_checklist.csv": [
+        "input_category",
+        "target_schema_table",
+        "required_for_s2",
+        "current_review_status",
+        "candidate_rows_available",
+        "validation_target_available",
+        "unit_review_complete",
+        "sign_review_complete",
+        "source_review_complete",
+        "approval_ready",
+        "approval_blocker",
+        "next_review_action",
+    ],
+    "s2_review_summary.csv": [
+        "review_table",
+        "row_count",
+        "candidate_not_approved_rows",
+        "validation_only_rows",
+        "sensitivity_only_rows",
+        "missing_evidence_rows",
+        "postponed_rows",
+        "approved_rows",
+        "key_blockers",
+    ],
+}
+
+REVIEW_DATA_FILES = [
+    "process_units_candidate_review.csv",
+    "carriers_candidate_review.csv",
+    "stores_candidate_review.csv",
+    "conversion_coefficients_candidate_review.csv",
+    "process_bounds_candidate_review.csv",
+    "production_targets_candidate_review.csv",
+    "initial_inventories_candidate_review.csv",
+    "terminal_inventory_rules_candidate_review.csv",
+    "topology_routes_candidate_review.csv",
+    "validation_targets_candidate_review.csv",
+]
+
+FORBIDDEN_REVIEW_TOKENS = ("wag", "bfg", "cog", "ets", "tariff", "da_", "market", "mfrr", "cvar", "revenue")
+APPROVAL_BANNED_VALUES = {"approved", "approved_model_input", "thesis_grade", "base_case_truth"}
+REQUIRED_PROMOTION_TABLES = {
+    "process_units_schema.csv",
+    "carriers_schema.csv",
+    "stores_schema.csv",
+    "conversion_coefficients_schema.csv",
+    "process_bounds_schema.csv",
+    "production_targets_schema.csv",
+    "initial_inventories_schema.csv",
+    "terminal_inventory_rules_schema.csv",
+    "topology_routes_schema.csv",
+    "validation_targets_schema.csv",
+}
+
 
 @dataclass(frozen=True)
 class GovernanceTableBundle:
@@ -87,6 +181,8 @@ def _load_bundle(root: str | Path, file_specs: dict[str, list[str]]) -> Governan
         if frame.empty:
             raise ValueError(f"{filename} must contain at least one schema or mapping row.")
         for column in required_columns:
+            if column == "notes":
+                continue
             if frame[column].astype(str).str.strip().eq("").any():
                 raise ValueError(f"{filename} contains empty values in required column {column}.")
         tables[filename] = frame
@@ -101,13 +197,119 @@ def load_s2_candidate_mapping(mapping_root: str | Path) -> GovernanceTableBundle
     return _load_bundle(mapping_root, MAPPING_FILE_SPECS)
 
 
+def load_s2_candidate_review(review_root: str | Path) -> GovernanceTableBundle:
+    return _load_bundle(review_root, REVIEW_FILE_SPECS)
+
+
+def _count_status(frame: pd.DataFrame, status_name: str) -> int:
+    if "source_status" not in frame.columns:
+        return 0
+    return int(frame["source_status"].astype(str).str.strip().eq(status_name).sum())
+
+
+def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    tables = review_bundle.tables
+    summary = tables["s2_review_summary.csv"]
+    checklist = tables["s2_promotion_checklist.csv"]
+
+    approved_rows = 0
+    for filename in REVIEW_DATA_FILES:
+        frame = tables[filename]
+        approval_values = set(frame["approval_status"].astype(str).str.strip().str.lower())
+        if approval_values & APPROVAL_BANNED_VALUES:
+            raise ValueError(f"{filename} contains forbidden approval-style values: {sorted(approval_values & APPROVAL_BANNED_VALUES)}")
+
+        for column in ("candidate_source_file", "notes", "reviewer_notes"):
+            lowered = frame[column].astype(str).str.lower()
+            if lowered.str.contains("approved_model_input|thesis_grade|base_case_truth").any():
+                raise ValueError(f"{filename} contains forbidden executable-approval language in {column}.")
+
+        forbidden_pattern = "|".join(
+            rf"(?:^|[;/_]){re.escape(token)}(?:[;/_.]|$)"
+            for token in FORBIDDEN_REVIEW_TOKENS
+        )
+        if frame["candidate_source_file"].astype(str).str.lower().str.contains(forbidden_pattern, regex=True).any():
+            raise ValueError(f"{filename} references forbidden S3/market/risk candidate files.")
+
+        validation_rows = frame["source_status"].astype(str).str.strip().eq("validation_only")
+        if validation_rows.any() and frame.loc[validation_rows, "intended_use"].astype(str).str.lower().str.contains("constraint").any():
+            raise ValueError(f"{filename} contains validation_only rows marked as constraints.")
+
+        annual_rows = frame["input_unit_raw"].astype(str).str.contains("/y", regex=False) | frame["input_unit_raw"].astype(str).str.contains("Mt/y", regex=False) | frame["input_unit_raw"].astype(str).str.contains("PJ/y", regex=False)
+        if annual_rows.any():
+            if frame.loc[annual_rows, "hourly_cap_guard"].astype(str).str.lower().eq("hourly_cap_allowed").any():
+                raise ValueError(f"{filename} marks annual values as hourly-cap-allowed.")
+            if frame.loc[annual_rows, "intended_use"].astype(str).str.lower().str.contains("hourly_cap").any():
+                raise ValueError(f"{filename} labels annual values as hourly caps.")
+
+        approved_rows += int(frame["approval_status"].astype(str).str.strip().str.lower().isin(APPROVAL_BANNED_VALUES).sum())
+
+    checklist_tables = set(checklist["target_schema_table"].astype(str).str.strip())
+    if checklist_tables != REQUIRED_PROMOTION_TABLES:
+        missing = sorted(REQUIRED_PROMOTION_TABLES - checklist_tables)
+        extra = sorted(checklist_tables - REQUIRED_PROMOTION_TABLES)
+        raise ValueError(f"s2_promotion_checklist.csv does not match required S2 categories. missing={missing} extra={extra}")
+
+    if checklist["approval_ready"].astype(str).str.strip().str.lower().eq("true").any():
+        raise ValueError("s2_promotion_checklist.csv must not mark any category approval_ready=true at S2.4.")
+
+    summary_rows = {str(row["review_table"]): row for row in summary.to_dict(orient="records")}
+    for filename in REVIEW_DATA_FILES:
+        if filename not in summary_rows:
+            raise ValueError(f"s2_review_summary.csv is missing row for {filename}.")
+        frame = tables[filename]
+        row = summary_rows[filename]
+        expected = {
+            "row_count": len(frame),
+            "candidate_not_approved_rows": _count_status(frame, "candidate_not_approved"),
+            "validation_only_rows": _count_status(frame, "validation_only"),
+            "sensitivity_only_rows": _count_status(frame, "sensitivity_only"),
+            "missing_evidence_rows": _count_status(frame, "missing_evidence"),
+            "postponed_rows": _count_status(frame, "postponed"),
+            "approved_rows": 0,
+        }
+        for key, expected_value in expected.items():
+            actual_value = int(row[key])
+            if actual_value != expected_value:
+                raise ValueError(f"s2_review_summary.csv mismatch for {filename} field {key}: expected {expected_value}, found {actual_value}")
+
+    total_row = summary_rows.get("TOTAL")
+    if total_row is None:
+        raise ValueError("s2_review_summary.csv must include a TOTAL row.")
+    total_expected = {
+        "row_count": sum(len(tables[name]) for name in REVIEW_DATA_FILES),
+        "candidate_not_approved_rows": sum(_count_status(tables[name], "candidate_not_approved") for name in REVIEW_DATA_FILES),
+        "validation_only_rows": sum(_count_status(tables[name], "validation_only") for name in REVIEW_DATA_FILES),
+        "sensitivity_only_rows": sum(_count_status(tables[name], "sensitivity_only") for name in REVIEW_DATA_FILES),
+        "missing_evidence_rows": sum(_count_status(tables[name], "missing_evidence") for name in REVIEW_DATA_FILES),
+        "postponed_rows": sum(_count_status(tables[name], "postponed") for name in REVIEW_DATA_FILES),
+        "approved_rows": 0,
+    }
+    for key, expected_value in total_expected.items():
+        if int(total_row[key]) != expected_value:
+            raise ValueError(f"s2_review_summary.csv TOTAL mismatch for {key}: expected {expected_value}, found {total_row[key]}")
+
+    return {
+        "candidate_review_files_checked": len(REVIEW_FILE_SPECS),
+        "candidate_review_data_files_checked": len(REVIEW_DATA_FILES),
+        "candidate_review_total_rows": total_expected["row_count"],
+        "candidate_not_approved_rows": total_expected["candidate_not_approved_rows"],
+        "validation_only_rows": total_expected["validation_only_rows"],
+        "sensitivity_only_rows": total_expected["sensitivity_only_rows"],
+        "missing_evidence_rows": total_expected["missing_evidence_rows"],
+        "postponed_rows": total_expected["postponed_rows"],
+        "approved_rows": approved_rows,
+    }
+
+
 def dry_run_validate_input_governance(
     *,
     config,
     schema_bundle: GovernanceTableBundle,
     mapping_bundle: GovernanceTableBundle,
+    review_bundle: GovernanceTableBundle | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "input_mode": config.input_governance.input_mode,
         "schema_files_checked": len(schema_bundle.tables),
         "mapping_files_checked": len(mapping_bundle.tables),
@@ -118,3 +320,6 @@ def dry_run_validate_input_governance(
         "thesis_usable": config.input_governance.thesis_usable,
         "thesis_usability_reason": config.input_governance.thesis_usability_reason,
     }
+    if review_bundle is not None:
+        payload.update(validate_s2_candidate_review(review_bundle))
+    return payload

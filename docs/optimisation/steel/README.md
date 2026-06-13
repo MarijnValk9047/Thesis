@@ -98,3 +98,16 @@ Current boundary remains unchanged:
 Review plan:
 
 - `docs/optimisation/steel/STEEL_S2_APPROVED_INPUT_REVIEW_PLAN.md`
+
+## S2.4 Candidate-Review Scaffold
+
+`S2.4` adds the non-executable reviewed candidate-register layer under:
+
+- `data/03_Optimisation/inputs/assets/steel/s2_candidate_review/`
+
+Current boundary:
+
+- the review tables are schema-aligned governance artifacts only;
+- no value is promoted to `approved_model_input`;
+- annual public values remain validation or candidate anchors and must not become hourly caps;
+- candidate-review rows remain non-thesis-usable and non-executable as approved steel inputs.
