@@ -43,3 +43,39 @@ The planning set assumes:
 - first steel implementation is deterministic, hourly, DA-only, and continuous/LP where possible;
 - stochastic DA, CVaR, quarter-hour, `D_plus_4`, and `mFRR` are later phases only;
 - exclusive group bids remain out of scope unless reopened explicitly.
+
+## S2.0 to S2.2 Smoke Scaffold
+
+The first code scaffold for steel now lives under:
+
+- `scripts/Data/04_Steel_Test_Case/`
+
+Current implemented boundary:
+
+- deterministic hourly metallic material-flow LP only;
+- one-day toy smoke configuration;
+- simple indexed hours `0..23` rather than market-timestamped UTC delivery periods;
+- fixed production target with cost minimisation;
+- governed toy input tables under `data/03_Optimisation/inputs/assets/steel/s2_toy_scaffold/`;
+- explicit infeasibility-classification smoke cases for `S2.2`;
+- no product revenue;
+- no S3 internal-energy, emissions-cost, tariff, DA, stochastic, reserve, or CVaR layers.
+
+Run entry point:
+
+- `python scripts/Data/04_Steel_Test_Case/run_s2_toy_smoke.py`
+
+Important caveat:
+
+- all numerical values in the current steel smoke configs and governed toy tables are scaffold or toy values only;
+- they are not approved Tata Steel IJmuiden inputs;
+- they are not Tata-specific quantitative evidence;
+- feasible S2 smoke runs and infeasibility diagnostics are structural validation artifacts, not thesis-grade quantitative results.
+
+Current `S2.2` infeasibility smoke classes:
+
+- `capacity_bottleneck`
+- `terminal_inventory_violation`
+- `feed_shortage`
+
+These are structural test labels for governed diagnostic runs only. They do not open any `S3`, DA, stochastic, `mFRR`, or CVaR scope.

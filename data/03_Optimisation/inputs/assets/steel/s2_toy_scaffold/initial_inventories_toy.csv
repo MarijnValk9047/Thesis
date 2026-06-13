@@ -1,0 +1,9 @@
+input_id,store_id,initial_inventory_tonnes,unit,source_status,approval_status,intended_use,scenario_or_config,notes
+init_base_dri,dri_buffer,6.0,tonnes,toy_scaffold,not_approved,s2_toy_scaffold_smoke,base_s2_toy_smoke,"Toy scaffold initial inventory only; not approved."
+init_base_slab,slab_buffer,4.0,tonnes,toy_scaffold,not_approved,s2_toy_scaffold_smoke,base_s2_toy_smoke,"Toy scaffold initial inventory only; not approved."
+init_prod_dri,dri_buffer,6.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,impossible_production_target,"Toy scaffold initial inventory only; target is deliberately infeasible."
+init_prod_slab,slab_buffer,4.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,impossible_production_target,"Toy scaffold initial inventory only; target is deliberately infeasible."
+init_term_dri,dri_buffer,6.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,terminal_inventory_infeasible,"Toy scaffold initial inventory only; terminal rule is deliberately infeasible."
+init_term_slab,slab_buffer,4.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,terminal_inventory_infeasible,"Toy scaffold initial inventory only; terminal rule is deliberately infeasible."
+init_feed_dri,dri_buffer,6.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,route_feed_shortage_or_buffer_bottleneck,"Toy scaffold initial inventory only; feed is deliberately limited."
+init_feed_slab,slab_buffer,4.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,route_feed_shortage_or_buffer_bottleneck,"Toy scaffold initial inventory only; feed is deliberately limited."

@@ -1,0 +1,9 @@
+input_id,store_id,terminal_min_tonnes,terminal_max_tonnes,unit,source_status,approval_status,intended_use,scenario_or_config,notes
+term_base_dri,dri_buffer,6.0,6.0,tonnes,toy_scaffold,not_approved,s2_toy_scaffold_smoke,base_s2_toy_smoke,"Toy scaffold terminal rule only; anti-free-battery neutrality."
+term_base_slab,slab_buffer,4.0,4.0,tonnes,toy_scaffold,not_approved,s2_toy_scaffold_smoke,base_s2_toy_smoke,"Toy scaffold terminal rule only; anti-free-battery neutrality."
+term_prod_dri,dri_buffer,6.0,6.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,impossible_production_target,"Toy scaffold terminal rule only; target is deliberately infeasible."
+term_prod_slab,slab_buffer,4.0,4.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,impossible_production_target,"Toy scaffold terminal rule only; target is deliberately infeasible."
+term_term_dri,dri_buffer,6.0,6.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,terminal_inventory_infeasible,"Toy scaffold terminal rule only; terminal rule is deliberately infeasible."
+term_term_slab,slab_buffer,15.0,15.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,terminal_inventory_infeasible,"Toy scaffold terminal rule only; slab terminal inventory deliberately exceeds store capacity."
+term_feed_dri,dri_buffer,6.0,6.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,route_feed_shortage_or_buffer_bottleneck,"Toy scaffold terminal rule only; feed is deliberately limited."
+term_feed_slab,slab_buffer,4.0,4.0,tonnes,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,route_feed_shortage_or_buffer_bottleneck,"Toy scaffold terminal rule only; feed is deliberately limited."

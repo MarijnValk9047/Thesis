@@ -1,0 +1,50 @@
+model:
+  stage: S2.1
+  scope_label: deterministic_hourly_metallic_material_flow_lp
+  timestamp_mode: simple_indexed_hours
+  toy_values_not_approved: true
+  note: "All numerical values are toy scaffold values only, are not approved Tata inputs, and are not thesis-grade quantitative evidence."
+
+run:
+  output_root: data/03_Optimisation/runs
+  run_slug: steel_s2_toy_smoke
+  output_policy: minimal
+  run_class: smoke
+  lineage_role: diagnostic
+  retention_status: local_only
+
+solver:
+  preferred_solvers:
+    - gurobi
+    - highs
+    - glpk
+    - cbc
+  tee: false
+
+time:
+  horizon_hours: 24
+  start_index: 0
+
+input_tables:
+  table_root: ../../../../data/03_Optimisation/inputs/assets/steel/s2_toy_scaffold
+  scenario_or_config: base_s2_toy_smoke
+
+diagnostics:
+  case_label: base_s2_toy_smoke
+  expected_infeasibility_class:
+  diagnostic_mode: false
+
+flags:
+  s3_internal_energy: false
+  emissions_cost: false
+  network_tariffs: false
+  da_prices: false
+  da_bidding: false
+  stochastic_scenarios: false
+  scenario_probabilities: false
+  mfrr: false
+  quarter_hour: false
+  d_plus_4: false
+  cvar: false
+  product_revenue: false
+  order_book_deadline_production: false

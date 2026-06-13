@@ -1,0 +1,9 @@
+input_id,source_id,carrier_id,unit_cost_per_tonne,max_supply_tph,supply_unit,cost_unit,source_status,approval_status,intended_use,scenario_or_config,notes
+source_base_iron,iron_ore_import,iron_ore,0.8,10.0,tonnes_per_hour,eur_per_tonne,toy_scaffold,not_approved,s2_toy_scaffold_smoke,base_s2_toy_smoke,"Toy scaffold source only; not Tata-specific."
+source_base_pellets,pellets_import,pellets,0.7,10.0,tonnes_per_hour,eur_per_tonne,toy_scaffold,not_approved,s2_toy_scaffold_smoke,base_s2_toy_smoke,"Toy scaffold source only; not Tata-specific."
+source_prod_iron,iron_ore_import,iron_ore,0.8,10.0,tonnes_per_hour,eur_per_tonne,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,impossible_production_target,"Toy scaffold source only; target is deliberately infeasible."
+source_prod_pellets,pellets_import,pellets,0.7,10.0,tonnes_per_hour,eur_per_tonne,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,impossible_production_target,"Toy scaffold source only; target is deliberately infeasible."
+source_term_iron,iron_ore_import,iron_ore,0.8,10.0,tonnes_per_hour,eur_per_tonne,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,terminal_inventory_infeasible,"Toy scaffold source only; terminal rule is deliberately infeasible."
+source_term_pellets,pellets_import,pellets,0.7,10.0,tonnes_per_hour,eur_per_tonne,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,terminal_inventory_infeasible,"Toy scaffold source only; terminal rule is deliberately infeasible."
+source_feed_iron,iron_ore_import,iron_ore,0.8,1.0,tonnes_per_hour,eur_per_tonne,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,route_feed_shortage_or_buffer_bottleneck,"Toy scaffold source only; feed is deliberately limited."
+source_feed_pellets,pellets_import,pellets,0.7,1.0,tonnes_per_hour,eur_per_tonne,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,route_feed_shortage_or_buffer_bottleneck,"Toy scaffold source only; feed is deliberately limited."

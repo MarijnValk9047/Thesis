@@ -1,0 +1,5 @@
+input_id,sink_id,carrier_id,description,source_status,approval_status,intended_use,scenario_or_config,notes
+sink_base_finished,finished_steel_delivery,slab,Toy delivery sink for cumulative fixed production target.,toy_scaffold,not_approved,s2_toy_scaffold_smoke,base_s2_toy_smoke,"Toy scaffold sink only; not Tata-specific."
+sink_prod_finished,finished_steel_delivery,slab,Toy delivery sink for cumulative fixed production target.,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,impossible_production_target,"Toy scaffold sink only; target is deliberately infeasible."
+sink_term_finished,finished_steel_delivery,slab,Toy delivery sink for cumulative fixed production target.,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,terminal_inventory_infeasible,"Toy scaffold sink only; terminal rule is deliberately infeasible."
+sink_feed_finished,finished_steel_delivery,slab,Toy delivery sink for cumulative fixed production target.,toy_scaffold,not_approved,s2_toy_infeasibility_smoke,route_feed_shortage_or_buffer_bottleneck,"Toy scaffold sink only; feed is deliberately limited."
