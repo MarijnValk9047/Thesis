@@ -150,6 +150,92 @@ Wave C still does not approve or resolve:
 - quarter-hour and `D_plus_4`;
 - `mFRR`.
 
+## Wave D Update
+
+Wave D adds the first governed internal-energy and emissions scaffold for the future S3 steel layer.
+
+The main conclusions are:
+
+- the recommended minimal S3 is `B_lite`: a semi-detailed WAG layer with explicit `BFG`, `COG`, and `BOF_or_LD_gas` carriers;
+- WAG generation must be linked to S2 throughput through public or generic coefficients rather than treated as an exogenous credit;
+- natural-gas import and electricity import must be explicit from the start of S3;
+- flare or spill variables with non-zero penalty logic are required to stop free disposal;
+- Vattenfall remains an exogenous interface in minimal S3, not a full dispatch plant;
+- internal WAG value must come through explicit useful-energy substitution, especially natural-gas replacement, and not through direct electricity-price valuation;
+- the first emissions architecture must avoid double-counting WAG carbon and keep ETS or free-allocation detail postponed.
+
+### Wave D Source Hierarchy Rule
+
+For Wave D internal-energy and emissions work, use this order:
+
+1. formal public technical Tata sources and public annual reporting for topology and interface directionality;
+2. high-authority public technical references for generic WAG generation, composition, and integrated energy-system structure;
+3. formal EU ETS or MRV sources for accounting rules and waste-gas treatment;
+4. supporting industry case material only for structural guidance on holders, flare logic, and coupled utility systems;
+5. research memos as discovery aids only.
+
+### Wave D Minimal S3 Recommendation
+
+The recommended first S3 layer is `B_lite`, which means:
+
+- separate `BFG`, `COG`, and `BOF_or_LD_gas` balances;
+- explicit natural-gas and electricity imports;
+- optional simple `BOF_or_oxygas` holder logic where public structure exists;
+- explicit flare or spill variables;
+- a simple Vattenfall interface;
+- a first emissions-accounting layer with captured-CO2 visibility.
+
+It does not mean:
+
+- a full mixed-gas network;
+- a full steam or oxygen network;
+- a full CHP or Vattenfall dispatch model;
+- a full ETS or free-allocation model.
+
+### Wave D Carrier-Specific WAG Treatment
+
+Wave D candidate evidence now separates:
+
+- `BFG` as the blast-furnace residual gas carrier;
+- `COG` as the coke-route gas carrier;
+- `BOF_or_LD_gas` as the converter gas carrier with holder relevance;
+- optional later `mixed_gas` treatment for calorific control;
+- natural-gas import as the main explicit external substitution carrier;
+- electricity import and the Vattenfall interface as explicit boundary objects.
+
+### Wave D Internal Energy Valuation Hierarchy
+
+The governing valuation order is:
+
+1. explicit useful-energy substitution, especially natural-gas replacement;
+2. non-zero flare or spill penalty;
+3. later sensitivity-only conversion value through explicit on-site generation paths if those paths are modelled;
+4. never direct electricity-price valuation of WAG without explicit conversion logic;
+5. never confidential transfer-price assumptions in the public scaffold.
+
+### Wave D First Emissions Architecture
+
+The first S3 emissions layer should keep separate:
+
+- direct process emissions where relevant;
+- WAG combustion or flare emissions;
+- natural-gas combustion emissions;
+- captured CO2 from the DRI route;
+- optional indirect electricity emissions as a reporting-only module.
+
+The critical architecture rule is that WAG carbon is counted once through a consistent boundary rule and never both at generation and at later use.
+
+### Wave D Explicitly Postponed Layers
+
+Wave D still does not approve or resolve:
+
+- detailed mixed-gas setpoints and calorific-control constraints;
+- full steam-network and oxygen-network scheduling;
+- detailed Vattenfall or internal CHP dispatch;
+- confidential internal transfer prices;
+- detailed ETS or free-allocation treatment;
+- DA bidding, stochastic DA, CVaR, quarter-hour, `D_plus_4`, and `mFRR`.
+
 ## Modelling Layers
 
 ### Time And Market Structure

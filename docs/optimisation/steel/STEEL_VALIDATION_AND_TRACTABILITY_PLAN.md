@@ -165,6 +165,32 @@ When S2 is later implemented, its reporting must state:
 - which inventory endpoint rules were active;
 - which infeasibility class applied if the model failed.
 
+## Wave D S3 Validation Plan
+
+For the future S3 semi-detailed WAG and emissions layer, validation should explicitly include:
+
+- separate `BFG`, `COG`, and `BOF_or_LD_gas` generation plausibility checks against generic public ranges;
+- per-carrier WAG balance-closure checks;
+- flare or spill non-free-disposal checks;
+- holder endpoint checks whenever a holder state is activated;
+- no-free-energy checks so WAG value appears only through explicit sink paths;
+- no-double-counted-emissions checks across process, WAG, and natural-gas accounting;
+- validation against public order-of-magnitude anchors such as residual-gas reuse scale, residual-gas-based power scale, Phase 1 WAG scarcity direction, and DRI-route natural-gas plus captured-CO2 direction;
+- explicit reporting of valuation assumptions, candidate coefficients, and sensitivity-only derived emissions factors.
+
+These are defined as future checks and reporting obligations, not as already implemented code.
+
+## Wave D Reporting Rule
+
+When S3 is later implemented, its reporting must state:
+
+- which carrier split was active;
+- whether a holder was active and how its terminal rule was handled;
+- how WAG value was assigned and whether natural-gas substitution was the active primary method;
+- whether flare or spill penalties were active;
+- which emissions architecture was used to avoid double counting;
+- which candidate or sensitivity-only terms remained unresolved.
+
 ## Tractability Sequence
 
 The default sequence is:
