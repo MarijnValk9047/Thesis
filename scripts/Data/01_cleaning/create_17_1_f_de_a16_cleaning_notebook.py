@@ -94,7 +94,7 @@ def build_notebook() -> nbf.NotebookNode:
         code_cell(
             """
             RAW_DIR = REPO_ROOT / "data" / "00_Raw" / "ENTSOE" / "17.1 F - Prices of activated balancing energy" / "DE" / "A16 (Realised)"
-            OUTPUT_DIR = REPO_ROOT / "data" / "01_cleaned" / "Balancing" / "MARI DE" / "17_1_f_de_a16_realised"
+            OUTPUT_DIR = REPO_ROOT / "data" / "01_cleaned" / "02_Balancing_mFRR_IR" / "MARI DE" / "17_1_f_de_a16_realised"
             DIAGNOSTICS_DIR = OUTPUT_DIR / "diagnostics"
 
             config_df = pd.DataFrame(

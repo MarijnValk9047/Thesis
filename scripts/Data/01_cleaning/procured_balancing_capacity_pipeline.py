@@ -13,7 +13,7 @@ import pandas as pd
 
 DATASET_NAME = "12_3_f_nl_ir"
 RAW_SUBDIR = Path("ENTSOE/12_3_F_NL_IR")
-OUTPUT_SUBDIR = Path("Balancing") / "IR Capacity" / DATASET_NAME
+OUTPUT_SUBDIR = Path("02_Balancing_mFRR_IR") / "IR Capacity" / DATASET_NAME
 MARKET = "NL"
 MARKET_TIMEZONE = "Europe/Amsterdam"
 KNOWN_AT_RULE = "created_datetime_utc_from_export_only_not_forecast_safe"

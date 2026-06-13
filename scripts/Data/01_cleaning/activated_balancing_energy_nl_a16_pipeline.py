@@ -12,7 +12,7 @@ import pandas as pd
 
 DATASET_NAME = "17_1_f_nl_a16_realised"
 RAW_SUBDIR = Path("ENTSOE") / "17.1 F - Prices of activated balancing energy" / "NL" / "A16 (Realised)"
-OUTPUT_SUBDIR = Path("Balancing") / "IR Energy" / DATASET_NAME
+OUTPUT_SUBDIR = Path("02_Balancing_mFRR_IR") / "IR Energy" / DATASET_NAME
 MARKET = "NL"
 MARKET_TIMEZONE = "Europe/Amsterdam"
 KNOWN_AT_RULE = "realised_a16_not_forecast_safe"
