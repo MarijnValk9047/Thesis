@@ -1,0 +1,7 @@
+table_name,column_name,data_type,required,field_role,notes
+terminal_inventory_rules,input_id,string,yes,governance_key,Stable row identifier for terminal inventory rows.
+terminal_inventory_rules,store_id,string,yes,topology_reference,Store identifier used by terminal constraints.
+terminal_inventory_rules,value,number,yes,constraint_value,Terminal min or max value.
+terminal_inventory_rules,unit,string,yes,unit,Inventory unit.
+terminal_inventory_rules,horizon_applicability,string,yes,applicability,Configured horizon to which the terminal rule applies.
+terminal_inventory_rules,approval_status,string,yes,governance_status,Approved-mode execution requires approved_model_input status.

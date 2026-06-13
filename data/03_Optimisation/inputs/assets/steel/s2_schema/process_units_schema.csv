@@ -1,0 +1,7 @@
+table_name,column_name,data_type,required,field_role,notes
+process_units,input_id,string,yes,governance_key,Stable row identifier for future approved S2 process-unit inputs.
+process_units,process_id,string,yes,entity_key,Process or unit identifier used by the deterministic S2 loader.
+process_units,configuration,string,yes,configuration_scope,Baseline or Phase-1 configuration tag.
+process_units,source_status,string,yes,governance_status,Must distinguish candidate and approved rows.
+process_units,approval_status,string,yes,governance_status,Must be approved_model_input before executable approved-mode use.
+process_units,notes,string,yes,governance_note,Free-text review and caveat field.

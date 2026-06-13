@@ -1,0 +1,6 @@
+category_id,category_name,future_table,s2_use_class,review_status_required,missing_before_approval,notes
+S2REQ01,configuration topology and route presence,topology_routes.csv,required_for_s2,topology_review_complete,Route enable flags and formal route-membership review,Supports baseline and Phase-1 deterministic topology only.
+S2REQ02,process throughput bounds,process_bounds.csv,required_for_s2,process_bound_review_complete,Hourly translation method and reviewed envelope logic,Required before any approved deterministic S2 run.
+S2REQ03,material conversion coefficients,conversion_coefficients.csv,required_for_s2,recipe_review_complete,Reviewed yield and recipe evidence plus unit audit,Must remain separate from validation anchors.
+S2REQ04,buffer inventory rules,stores.csv and terminal_inventory_rules.csv,required_for_s2,buffer_rule_review_complete,Store class review and terminal-neutrality rule review,Includes DRI and slab or WIP buffers only.
+S2REQ05,annual public validation anchors,validation_targets.csv,validation_only,validation_review_complete,Validation definitions and non-constraint handling,Must not drive executable constraints until promoted.

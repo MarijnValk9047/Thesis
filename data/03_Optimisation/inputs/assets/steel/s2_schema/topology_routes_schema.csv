@@ -1,0 +1,7 @@
+table_name,column_name,data_type,required,field_role,notes
+topology_routes,input_id,string,yes,governance_key,Stable row identifier for route membership rows.
+topology_routes,route_id,string,yes,entity_key,Route or topology block identifier.
+topology_routes,process_id,string,yes,topology_reference,Process participating in the route definition.
+topology_routes,configuration,string,yes,configuration_scope,Configuration where the route membership applies.
+topology_routes,approval_status,string,yes,governance_status,Approved-mode execution requires approved_model_input status.
+topology_routes,notes,string,yes,governance_note,Route-membership review and caveat field.

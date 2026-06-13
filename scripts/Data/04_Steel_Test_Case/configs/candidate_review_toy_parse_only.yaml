@@ -1,13 +1,13 @@
 model:
-  stage: S2.2
+  stage: S2.3
   scope_label: deterministic_hourly_metallic_material_flow_lp
   timestamp_mode: simple_indexed_hours
   toy_values_not_approved: true
-  note: "Toy scaffold infeasibility smoke case only; not approved and not thesis-grade quantitative evidence."
+  note: "Candidate-review dry-run only; governed toy scaffold values remain not approved and not thesis-grade quantitative evidence."
 
 run:
   output_root: data/03_Optimisation/runs
-  run_slug: steel_s2_impossible_production_target
+  run_slug: steel_s2_candidate_review_toy_parse_only
   output_policy: minimal
   run_class: smoke
   lineage_role: diagnostic
@@ -27,12 +27,12 @@ time:
 
 input_tables:
   table_root: ../../../../data/03_Optimisation/inputs/assets/steel/s2_toy_scaffold
-  scenario_or_config: impossible_production_target
-  input_mode: toy_scaffold
+  scenario_or_config: base_s2_toy_smoke
+  input_mode: candidate_review
 
 diagnostics:
-  case_label: impossible_production_target
-  expected_infeasibility_class: capacity_bottleneck
+  case_label: candidate_review_toy_parse_only
+  expected_infeasibility_class:
   diagnostic_mode: true
 
 flags:

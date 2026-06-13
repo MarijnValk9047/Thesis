@@ -1,0 +1,7 @@
+table_name,column_name,data_type,required,field_role,notes
+conversion_coefficients,input_id,string,yes,governance_key,Stable row identifier for conversion rows.
+conversion_coefficients,process_id,string,yes,topology_reference,Process identifier that consumes or produces the carrier.
+conversion_coefficients,carrier_id,string,yes,topology_reference,Carrier identifier used in balances.
+conversion_coefficients,value,number,yes,coefficient,Deterministic S2 material-flow coefficient.
+conversion_coefficients,unit,string,yes,unit,Explicit coefficient unit to prevent silent misuse.
+conversion_coefficients,approval_status,string,yes,governance_status,Approved-mode execution requires approved_model_input status.

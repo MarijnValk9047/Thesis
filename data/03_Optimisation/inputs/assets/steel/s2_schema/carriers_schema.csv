@@ -1,0 +1,7 @@
+table_name,column_name,data_type,required,field_role,notes
+carriers,input_id,string,yes,governance_key,Stable row identifier for carrier definitions.
+carriers,carrier_id,string,yes,entity_key,Carrier identifier used in balances and conversions.
+carriers,unit,string,yes,unit,Default physical unit for the carrier.
+carriers,time_resolution,string,no,applicability,Hour remains the current S2 target resolution.
+carriers,approval_status,string,yes,governance_status,Approved-mode execution requires approved_model_input status.
+carriers,notes,string,yes,governance_note,Carrier definition caveats and review notes.

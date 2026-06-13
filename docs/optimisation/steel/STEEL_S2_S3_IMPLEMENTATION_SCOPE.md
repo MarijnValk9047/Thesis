@@ -67,6 +67,7 @@ Conceptually required in `S2`:
 - no-free-buffer-battery checks;
 - annualised reconciliation against validation anchors where relevant;
 - infeasibility classification.
+- explicit input-mode and thesis-usability reporting.
 
 ## `S2` Run Outputs And Diagnostics
 
@@ -173,3 +174,5 @@ The following must remain candidate or sensitivity only through the first coding
 - hydrogen and CCS timing or cost assumptions;
 - any product-value or margin proxies;
 - any free-allocation credit values.
+
+In `S2.3`, candidate categories may be mapped into the future deterministic `S2` schema surface for review purposes, but they still may not be treated as approved executable model inputs.

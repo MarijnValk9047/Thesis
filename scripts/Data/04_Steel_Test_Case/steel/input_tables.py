@@ -15,18 +15,28 @@ METADATA_COLUMNS = [
     "scenario_or_config",
     "notes",
 ]
+ALLOWED_INPUT_MODES = {
+    "toy_scaffold",
+    "candidate_review",
+    "approved_model_input",
+}
 ALLOWED_SOURCE_STATUS = {
     "toy_scaffold",
     "candidate_not_approved",
     "validation_only",
+    "sensitivity_only",
+    "approved_model_input",
     "approved_later",
 }
 ALLOWED_APPROVAL_STATUS = {
     "not_approved",
     "candidate_not_approved",
     "validation_only",
+    "sensitivity_only",
+    "approved_model_input",
     "approved_later",
 }
+APPROVED_INPUT_APPROVAL_STATUSES = {"approved_model_input"}
 FORBIDDEN_COLUMN_TOKENS = (
     "mfrr",
     "cvar",
@@ -135,6 +145,18 @@ class GovernedToyTables:
         return {name: int(len(frame)) for name, frame in self.tables.items()}
 
 
+@dataclass(frozen=True)
+class InputGovernanceSummary:
+    input_mode: str
+    contains_toy_values: bool
+    contains_candidate_not_approved_values: bool
+    contains_validation_only_values: bool
+    contains_sensitivity_only_values: bool
+    all_required_inputs_approved: bool
+    thesis_usable: bool
+    thesis_usability_reason: str
+
+
 def _read_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
@@ -172,8 +194,6 @@ def _ensure_allowed_statuses(frame: pd.DataFrame, table_name: str) -> None:
         raise ValueError(f"{table_name} has unsupported source_status values: {sorted(source_values - ALLOWED_SOURCE_STATUS)}")
     if not approval_values.issubset(ALLOWED_APPROVAL_STATUS):
         raise ValueError(f"{table_name} has unsupported approval_status values: {sorted(approval_values - ALLOWED_APPROVAL_STATUS)}")
-    if "approved" in approval_values:
-        raise ValueError(f"{table_name} contains approved rows, which are not allowed for S2 toy inputs.")
 
 
 def _coerce_columns(frame: pd.DataFrame, table_name: str) -> pd.DataFrame:
@@ -223,7 +243,75 @@ def _validate_references(tables: dict[str, pd.DataFrame]) -> None:
         raise ValueError(f"production_targets references unknown sinks: {sorted(unknown_target_sinks)}")
 
 
-def load_governed_toy_tables(table_root: str | Path, scenario_or_config: str) -> GovernedToyTables:
+def _validate_input_mode(input_mode: str) -> None:
+    if input_mode not in ALLOWED_INPUT_MODES:
+        raise ValueError(f"Unsupported input_mode={input_mode}. Allowed modes: {sorted(ALLOWED_INPUT_MODES)}")
+
+
+def _collect_input_governance_summary(tables: dict[str, pd.DataFrame], input_mode: str) -> InputGovernanceSummary:
+    _validate_input_mode(input_mode)
+    source_statuses = {
+        str(value).strip()
+        for frame in tables.values()
+        for value in frame["source_status"].tolist()
+    }
+    approval_statuses = {
+        str(value).strip()
+        for frame in tables.values()
+        for value in frame["approval_status"].tolist()
+    }
+
+    contains_toy_values = "toy_scaffold" in source_statuses
+    contains_candidate_not_approved_values = (
+        "candidate_not_approved" in source_statuses or "candidate_not_approved" in approval_statuses
+    )
+    contains_validation_only_values = (
+        "validation_only" in source_statuses or "validation_only" in approval_statuses
+    )
+    contains_sensitivity_only_values = (
+        "sensitivity_only" in source_statuses or "sensitivity_only" in approval_statuses
+    )
+    all_required_inputs_approved = approval_statuses.issubset(APPROVED_INPUT_APPROVAL_STATUSES)
+
+    if input_mode == "toy_scaffold":
+        if not contains_toy_values:
+            raise ValueError("toy_scaffold mode requires toy_scaffold source_status rows.")
+        thesis_usable = False
+        thesis_reason = (
+            "toy_scaffold mode uses scaffold values only; runs remain non-thesis-usable structural evidence."
+        )
+    elif input_mode == "candidate_review":
+        thesis_usable = False
+        thesis_reason = (
+            "candidate_review mode is structural validation only; candidate, toy, validation-only, and not-approved values are not thesis-usable."
+        )
+    else:
+        disallowed_approval = sorted(approval_statuses - APPROVED_INPUT_APPROVAL_STATUSES)
+        if disallowed_approval:
+            raise ValueError(
+                "approved_model_input mode requires every executable row to be approval_status=approved_model_input. "
+                f"Found non-approved statuses: {disallowed_approval}"
+            )
+        if contains_toy_values or contains_candidate_not_approved_values or contains_validation_only_values or contains_sensitivity_only_values:
+            raise ValueError(
+                "approved_model_input mode cannot include toy_scaffold, candidate_not_approved, validation_only, or sensitivity_only rows."
+            )
+        thesis_usable = True
+        thesis_reason = "All required executable input rows are approved_model_input."
+
+    return InputGovernanceSummary(
+        input_mode=input_mode,
+        contains_toy_values=contains_toy_values,
+        contains_candidate_not_approved_values=contains_candidate_not_approved_values,
+        contains_validation_only_values=contains_validation_only_values,
+        contains_sensitivity_only_values=contains_sensitivity_only_values,
+        all_required_inputs_approved=all_required_inputs_approved,
+        thesis_usable=thesis_usable,
+        thesis_usability_reason=thesis_reason,
+    )
+
+
+def load_governed_toy_tables(table_root: str | Path, scenario_or_config: str, *, input_mode: str) -> GovernedToyTables:
     root = Path(table_root).resolve()
     tables: dict[str, pd.DataFrame] = {}
     table_paths: dict[str, Path] = {}
@@ -241,9 +329,14 @@ def load_governed_toy_tables(table_root: str | Path, scenario_or_config: str) ->
         table_paths[table_name] = path
 
     _validate_references(tables)
+    _collect_input_governance_summary(tables, input_mode)
     return GovernedToyTables(
         table_root=root,
         scenario_or_config=scenario_or_config,
         tables=tables,
         table_paths=table_paths,
     )
+
+
+def summarize_input_governance(tables: dict[str, pd.DataFrame], *, input_mode: str) -> InputGovernanceSummary:
+    return _collect_input_governance_summary(tables, input_mode)

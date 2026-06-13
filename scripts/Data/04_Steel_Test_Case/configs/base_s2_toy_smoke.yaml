@@ -28,6 +28,7 @@ time:
 input_tables:
   table_root: ../../../../data/03_Optimisation/inputs/assets/steel/s2_toy_scaffold
   scenario_or_config: base_s2_toy_smoke
+  input_mode: toy_scaffold
 
 diagnostics:
   case_label: base_s2_toy_smoke

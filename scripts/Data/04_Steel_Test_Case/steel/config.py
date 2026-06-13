@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-from .input_tables import load_governed_toy_tables
+from .input_tables import InputGovernanceSummary, load_governed_toy_tables, summarize_input_governance
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,7 @@ class SolverConfig:
 class InputTablesConfig:
     table_root: Path
     scenario_or_config: str
+    input_mode: str
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,7 @@ class SteelToyConfig:
     flags: dict[str, bool]
     input_table_paths: dict[str, Path]
     input_table_row_counts: dict[str, int]
+    input_governance: InputGovernanceSummary
 
     @property
     def time_indices(self) -> list[int]:
@@ -137,8 +139,14 @@ def _build_config_from_input_tables(path: Path, raw: dict[str, Any]) -> SteelToy
     inputs_raw = _require_mapping(raw["input_tables"], "input_tables")
     diagnostics_raw = _require_mapping(raw["diagnostics"], "diagnostics")
     table_root = (path.parent / inputs_raw["table_root"]).resolve()
-    bundle = load_governed_toy_tables(table_root, inputs_raw["scenario_or_config"])
+    input_mode = str(inputs_raw["input_mode"])
+    bundle = load_governed_toy_tables(
+        table_root,
+        inputs_raw["scenario_or_config"],
+        input_mode=input_mode,
+    )
     tables = bundle.tables
+    input_governance = summarize_input_governance(tables, input_mode=input_mode)
 
     processes: dict[str, ProcessConfig] = {}
     conversion_rows = tables["conversion_coefficients"]
@@ -203,7 +211,11 @@ def _build_config_from_input_tables(path: Path, raw: dict[str, Any]) -> SteelToy
         run=RunConfig(**raw["run"]),
         solver=SolverConfig(**raw["solver"]),
         time=TimeConfig(**raw["time"]),
-        input_tables=InputTablesConfig(table_root=table_root, scenario_or_config=str(inputs_raw["scenario_or_config"])),
+        input_tables=InputTablesConfig(
+            table_root=table_root,
+            scenario_or_config=str(inputs_raw["scenario_or_config"]),
+            input_mode=input_mode,
+        ),
         diagnostics=DiagnosticsConfig(
             case_label=str(diagnostics_raw["case_label"]),
             expected_infeasibility_class=(
@@ -224,6 +236,7 @@ def _build_config_from_input_tables(path: Path, raw: dict[str, Any]) -> SteelToy
         flags={str(key): bool(value) for key, value in _require_mapping(raw["flags"], "flags").items()},
         input_table_paths=bundle.table_paths,
         input_table_row_counts=bundle.row_counts,
+        input_governance=input_governance,
     )
 
 
@@ -277,4 +290,14 @@ def load_config(config_path: str | Path) -> SteelToyConfig:
         flags={str(key): bool(value) for key, value in flags_raw.items()},
         input_table_paths={},
         input_table_row_counts={},
+        input_governance=InputGovernanceSummary(
+            input_mode="legacy_yaml",
+            contains_toy_values=True,
+            contains_candidate_not_approved_values=False,
+            contains_validation_only_values=False,
+            contains_sensitivity_only_values=False,
+            all_required_inputs_approved=False,
+            thesis_usable=False,
+            thesis_usability_reason="Legacy inline YAML scaffold is not approved model input and is not thesis-usable.",
+        ),
     )

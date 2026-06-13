@@ -1,0 +1,7 @@
+table_name,column_name,data_type,required,field_role,notes
+stores,input_id,string,yes,governance_key,Stable row identifier for store definitions.
+stores,store_id,string,yes,entity_key,Store identifier used by inventory constraints.
+stores,carrier_id,string,yes,topology_reference,Carrier mapped to the store.
+stores,unit,string,yes,unit,Inventory unit for the store.
+stores,approval_status,string,yes,governance_status,Approved-mode execution requires approved_model_input status.
+stores,notes,string,yes,governance_note,Store caveats and review notes.

@@ -1,0 +1,4 @@
+mapping_id,validation_category,candidate_file,validation_table,may_drive_constraints,review_status_required,notes
+S2VAL01,site annual production anchors,validation_targets_candidates.csv,validation_targets.csv,no,validation_review_complete,Annual site-level targets remain comparison anchors only.
+S2VAL02,public annual liquid-steel references,public_parameter_candidates.csv,validation_targets.csv,no,validation_review_complete,Public annual references must not be translated into hourly hard caps without a separate approval step.
+S2VAL03,S2 validation-check definitions,s2_validation_checks_candidates.csv,validation_targets.csv,no,validation_definition_review_complete,Validation-check rows define diagnostics and do not become model constraints.

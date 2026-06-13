@@ -1,0 +1,7 @@
+table_name,column_name,data_type,required,field_role,notes
+production_targets,input_id,string,yes,governance_key,Stable row identifier for production-target rows.
+production_targets,target_id,string,yes,entity_key,Target identifier used by the run configuration.
+production_targets,carrier_id,string,yes,topology_reference,Delivered carrier being targeted.
+production_targets,value,number,yes,constraint_value,Target quantity value.
+production_targets,unit,string,yes,unit,Target unit such as tonnes over the configured horizon.
+production_targets,approval_status,string,yes,governance_status,Validation-only targets must not drive constraints until approved.

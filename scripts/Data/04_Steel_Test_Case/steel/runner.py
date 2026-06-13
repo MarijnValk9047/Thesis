@@ -78,12 +78,15 @@ def _build_solver_summary_payload(
 
 
 def _build_warnings(config) -> list[str]:
+    governance = config.input_governance
     return [
         "All numerical values are toy scaffold values only and are not approved Tata Steel IJmuiden inputs.",
         "Governed toy input tables are scaffold inputs only, not approved model inputs and not Tata-specific quantitative evidence.",
         "S2 uses simple indexed hourly periods rather than market-timestamped UTC delivery times; this is intentional for the first smoke scaffold.",
         "This run excludes S3 internal energy, emissions costs, network tariffs, DA prices, DA bidding, stochasticity, mFRR, quarter-hour granularity, D+4 horizon, CVaR, and product revenue by design.",
         "The run is structural smoke evidence only and is not thesis-grade quantitative evidence.",
+        f"Declared input_mode={governance.input_mode}.",
+        governance.thesis_usability_reason,
         config.model.note,
     ]
 
@@ -116,7 +119,7 @@ def run_from_config(config_path: str | Path, *, output_root_override: str | Path
 
     objective_value = float(value(model.total_cost)) if success else None
     warnings = _build_warnings(config)
-    thesis_usable = "no"
+    thesis_usable = "yes" if config.input_governance.thesis_usable else "no"
     code_version = build_code_version(repo_root, runner_path)
 
     resolved_config = dict(config.raw)
@@ -125,16 +128,24 @@ def run_from_config(config_path: str | Path, *, output_root_override: str | Path
     resolved_config["resolved_solver"] = solver_name
     resolved_config["resolved_timestamp_utc"] = iso_utc(started)
     resolved_config["resolved_case_label"] = config.diagnostics.case_label
+    resolved_config["resolved_input_mode"] = config.input_governance.input_mode
     write_yaml(run_dir / "resolved_config.yaml", resolved_config)
 
     input_manifest = {
         "config_file": fingerprint_file(config.config_path, repo_root),
-        "approved_asset_inputs_used": False,
-        "toy_scaffold_only": True,
+        "approved_asset_inputs_used": bool(config.input_governance.all_required_inputs_approved),
+        "toy_scaffold_only": bool(config.input_governance.contains_toy_values and config.input_governance.input_mode == "toy_scaffold"),
+        "input_mode": config.input_governance.input_mode,
+        "contains_toy_values": config.input_governance.contains_toy_values,
+        "contains_candidate_not_approved_values": config.input_governance.contains_candidate_not_approved_values,
+        "contains_validation_only_values": config.input_governance.contains_validation_only_values,
+        "all_required_inputs_approved": config.input_governance.all_required_inputs_approved,
+        "thesis_usable": thesis_usable,
+        "thesis_usability_reason": config.input_governance.thesis_usability_reason,
         "input_paths": [
             {
                 "path": repo_rel(config.config_path, repo_root),
-                "role": "toy_scaffold_config",
+                "role": f"{config.input_governance.input_mode}_config",
             }
         ]
         + [
@@ -172,12 +183,13 @@ def run_from_config(config_path: str | Path, *, output_root_override: str | Path
         production_summary.to_csv(run_dir / "production_summary.csv", index=False)
         validation_summary.to_csv(run_dir / "validation_summary.csv", index=False)
         stage_note = (
-            "# S2.1 Stage Note\n\n"
-            "This run is the governed-input S2 deterministic hourly metallic material-flow LP scaffold.\n\n"
-            "- Purpose: prove the governed toy input-table bridge and run-output infrastructure.\n"
+            "# S2.3 Stage Note\n\n"
+            "This run is the governed-input S2 deterministic hourly metallic material-flow LP scaffold with the S2.3 input-governance guard.\n\n"
+            "- Purpose: prove the governed toy input-table bridge, input-mode guard, and run-output infrastructure.\n"
             "- Time indexing: simple hourly indices `0..23` for a one-day toy smoke horizon.\n"
+            f"- Input mode: `{config.input_governance.input_mode}`.\n"
             "- Numerical status: all values are scaffold/toy/not approved.\n"
-            "- Thesis status: not Tata-realistic quantitative evidence.\n"
+            f"- Thesis status: {thesis_usable}; {config.input_governance.thesis_usability_reason}\n"
         )
     else:
         infeasibility_payload = classify_infeasibility(config, solver)
@@ -199,11 +211,12 @@ def run_from_config(config_path: str | Path, *, output_root_override: str | Path
             },
         )
         stage_note = (
-            "# S2.2 Stage Note\n\n"
-            "This run is an explicit S2 infeasibility-classification smoke case.\n\n"
+            "# S2.3 Stage Note\n\n"
+            "This run is an explicit S2 infeasibility-classification smoke case under the S2.3 input-governance guard.\n\n"
             "- Purpose: prove that structural infeasibility is reported without slacks.\n"
+            f"- Input mode: `{config.input_governance.input_mode}`.\n"
             "- Numerical status: all values are scaffold/toy/not approved.\n"
-            "- Thesis status: not thesis-usable quantitative evidence.\n"
+            f"- Thesis status: {thesis_usable}; {config.input_governance.thesis_usability_reason}\n"
         )
 
     warnings_path = run_dir / "warnings_and_limitations.md"
@@ -219,7 +232,7 @@ def run_from_config(config_path: str | Path, *, output_root_override: str | Path
         objective_value=objective_value,
         runtime_seconds=runtime_seconds,
         model_stats=model_stats,
-        thesis_usable=thesis_usable,
+        input_governance=config.input_governance,
     )
     run_summary["infeasibility_class"] = infeasibility_class
     write_json(run_dir / "run_summary.json", run_summary)
@@ -251,6 +264,8 @@ def run_from_config(config_path: str | Path, *, output_root_override: str | Path
             "run_class": config.run.run_class,
             "lineage_role": config.run.lineage_role,
             "thesis_usable": thesis_usable,
+            "thesis_usability_reason": config.input_governance.thesis_usability_reason,
+            "input_mode": config.input_governance.input_mode,
             "output_root": repo_rel(run_dir, repo_root),
             "files": files,
         },
@@ -274,6 +289,7 @@ def run_from_config(config_path: str | Path, *, output_root_override: str | Path
         "lineage_role": config.run.lineage_role,
         "status": "completed" if success else "failed",
         "thesis_usable": thesis_usable,
+        "input_mode": config.input_governance.input_mode,
         "key_result": (
             f"S2 toy smoke run solved with solver_status={solver_status} and termination={termination_condition}."
             if success
@@ -295,6 +311,9 @@ def run_from_config(config_path: str | Path, *, output_root_override: str | Path
         "objective_value": objective_value,
         "runtime_seconds": runtime_seconds,
         "model_stats": asdict(model_stats),
+        "input_mode": config.input_governance.input_mode,
+        "thesis_usable": thesis_usable,
+        "thesis_usability_reason": config.input_governance.thesis_usability_reason,
         "validation_summary": validation_summary.to_dict(orient="records"),
         "infeasibility_class": infeasibility_class,
     }

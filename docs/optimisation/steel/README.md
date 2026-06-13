@@ -79,3 +79,22 @@ Current `S2.2` infeasibility smoke classes:
 - `feed_shortage`
 
 These are structural test labels for governed diagnostic runs only. They do not open any `S3`, DA, stochastic, `mFRR`, or CVaR scope.
+
+## S2.3 Input Governance Scaffold
+
+`S2.3` adds:
+
+- future deterministic `S2` schema files under `data/03_Optimisation/inputs/assets/steel/s2_schema/`;
+- candidate-to-schema mapping files under `data/03_Optimisation/inputs/assets/steel/s2_candidate_mapping/`;
+- executable `input_mode` guardrails for `toy_scaffold`, `candidate_review`, and `approved_model_input`;
+- explicit run-output fields for thesis usability and non-approved input presence.
+
+Current boundary remains unchanged:
+
+- toy scaffold runs remain non-thesis-usable;
+- candidate-review parsing remains non-thesis-usable;
+- approved-model-input mode must fail unless all required executable rows are explicitly approved.
+
+Review plan:
+
+- `docs/optimisation/steel/STEEL_S2_APPROVED_INPUT_REVIEW_PLAN.md`

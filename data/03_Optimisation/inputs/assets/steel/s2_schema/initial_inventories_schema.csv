@@ -1,0 +1,7 @@
+table_name,column_name,data_type,required,field_role,notes
+initial_inventories,input_id,string,yes,governance_key,Stable row identifier for initial inventory rows.
+initial_inventories,store_id,string,yes,topology_reference,Store identifier used by inventory initialization.
+initial_inventories,value,number,yes,constraint_value,Initial inventory value.
+initial_inventories,unit,string,yes,unit,Inventory unit.
+initial_inventories,scenario_tag,string,no,scenario_scope,Tag for scenario or configuration applicability.
+initial_inventories,approval_status,string,yes,governance_status,Approved-mode execution requires approved_model_input status.

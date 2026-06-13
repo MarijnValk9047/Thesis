@@ -1,0 +1,6 @@
+category_id,category_name,candidate_file,postponed_until,reason,notes
+S2POST01,WAG and internal energy layers,wag_energy_topology_candidates.csv;wag_parameter_candidates.csv;wag_valuation_method_candidates.csv,S3,Internal-energy and WAG logic are explicitly frozen out of S2,Keep separate from deterministic metallic LP inputs.
+S2POST02,emissions and ETS,s3_emissions_accounting_candidates.csv;ets_policy_candidates.csv,S3,Emissions accounting and gross ETS cost are outside frozen S2 scope,Do not map into approved S2 executable tables yet.
+S2POST03,network tariffs and infrastructure cost,network_tariff_candidates.csv;infrastructure_availability_candidates.csv,S3,Tariff and infrastructure-cost layers start only with the later economic layer,Keep connection and tariff evidence out of S2 executable inputs.
+S2POST04,DA and market parameters,market_parameter_candidates.csv,S4_or_later,DA bidding and settlement are frozen out of S2,No market-layer columns may appear in S2 executable input tables.
+S2POST05,product revenue and broader financial layer,financial_parameter_candidates.csv,S3_or_later,Steel output value remains outside the S2 base objective,Financial candidates stay postponed or sensitivity-only.

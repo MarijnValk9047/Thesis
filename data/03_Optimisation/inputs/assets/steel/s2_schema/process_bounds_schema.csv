@@ -1,0 +1,7 @@
+table_name,column_name,data_type,required,field_role,notes
+process_bounds,input_id,string,yes,governance_key,Stable row identifier for process-bound rows.
+process_bounds,process_id,string,yes,topology_reference,Bound applies to this process identifier.
+process_bounds,bound_type,string,yes,constraint_type,For example capacity_min or capacity_max.
+process_bounds,value,number,yes,constraint_value,Bound value in explicit unit.
+process_bounds,unit,string,yes,unit,Throughput unit such as tonnes_per_hour.
+process_bounds,approval_status,string,yes,governance_status,Approved-mode execution requires approved_model_input status.

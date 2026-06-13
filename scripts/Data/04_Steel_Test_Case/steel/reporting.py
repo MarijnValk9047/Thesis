@@ -207,8 +207,9 @@ def build_feasible_validation_frame(model, config: SteelToyConfig, solver_status
         )
 
     forbidden_features_active = [name for name, enabled in config.flags.items() if enabled]
-    thesis_usable = "no"
-    thesis_reason = "Toy scaffold values only; S2 smoke runs are structural evidence and not thesis-grade quantitative evidence."
+    input_governance = config.input_governance
+    thesis_usable = "yes" if input_governance.thesis_usable else "no"
+    thesis_reason = input_governance.thesis_usability_reason
 
     rows = [
         {
@@ -268,10 +269,45 @@ def build_feasible_validation_frame(model, config: SteelToyConfig, solver_status
             "notes": "Pyomo solver status as returned by the active LP solver.",
         },
         {
+            "check_name": "input_mode_declared",
+            "passed": bool(input_governance.input_mode),
+            "actual_value": input_governance.input_mode,
+            "expected_value": "declared",
+            "notes": "Every executable S2 configuration must declare toy_scaffold, candidate_review, or approved_model_input mode.",
+        },
+        {
+            "check_name": "contains_toy_values",
+            "passed": True,
+            "actual_value": bool(input_governance.contains_toy_values),
+            "expected_value": bool(input_governance.contains_toy_values),
+            "notes": "Reported input composition flag for thesis-governance review.",
+        },
+        {
+            "check_name": "contains_candidate_not_approved_values",
+            "passed": True,
+            "actual_value": bool(input_governance.contains_candidate_not_approved_values),
+            "expected_value": bool(input_governance.contains_candidate_not_approved_values),
+            "notes": "Candidate/not-approved rows must never be misreported as approved model inputs.",
+        },
+        {
+            "check_name": "contains_validation_only_values",
+            "passed": True,
+            "actual_value": bool(input_governance.contains_validation_only_values),
+            "expected_value": bool(input_governance.contains_validation_only_values),
+            "notes": "Validation-only rows must remain distinct from executable approved inputs.",
+        },
+        {
+            "check_name": "all_required_inputs_approved",
+            "passed": bool(input_governance.all_required_inputs_approved) == bool(input_governance.input_mode == "approved_model_input"),
+            "actual_value": bool(input_governance.all_required_inputs_approved),
+            "expected_value": input_governance.input_mode == "approved_model_input",
+            "notes": "Only approved_model_input runs may claim all required rows are approved.",
+        },
+        {
             "check_name": "thesis_usable",
-            "passed": False,
+            "passed": True,
             "actual_value": thesis_usable,
-            "expected_value": "no",
+            "expected_value": "yes" if input_governance.thesis_usable else "no",
             "notes": thesis_reason,
         },
     ]
@@ -287,6 +323,7 @@ def build_infeasible_validation_frame(
     expected_infeasibility_class: str | None,
 ) -> pd.DataFrame:
     forbidden_features_active = [name for name, enabled in config.flags.items() if enabled]
+    input_governance = config.input_governance
     rows = [
         {
             "check_name": "infeasibility_detected",
@@ -317,11 +354,46 @@ def build_infeasible_validation_frame(
             "notes": "S2.2 still excludes S3, DA, stochastic, reserve, CVaR, and revenue layers.",
         },
         {
+            "check_name": "input_mode_declared",
+            "passed": bool(input_governance.input_mode),
+            "actual_value": input_governance.input_mode,
+            "expected_value": "declared",
+            "notes": "Every executable S2 configuration must declare toy_scaffold, candidate_review, or approved_model_input mode.",
+        },
+        {
+            "check_name": "contains_toy_values",
+            "passed": True,
+            "actual_value": bool(input_governance.contains_toy_values),
+            "expected_value": bool(input_governance.contains_toy_values),
+            "notes": "Reported input composition flag for thesis-governance review.",
+        },
+        {
+            "check_name": "contains_candidate_not_approved_values",
+            "passed": True,
+            "actual_value": bool(input_governance.contains_candidate_not_approved_values),
+            "expected_value": bool(input_governance.contains_candidate_not_approved_values),
+            "notes": "Candidate/not-approved rows must never be misreported as approved model inputs.",
+        },
+        {
+            "check_name": "contains_validation_only_values",
+            "passed": True,
+            "actual_value": bool(input_governance.contains_validation_only_values),
+            "expected_value": bool(input_governance.contains_validation_only_values),
+            "notes": "Validation-only rows must remain distinct from executable approved inputs.",
+        },
+        {
+            "check_name": "all_required_inputs_approved",
+            "passed": bool(input_governance.all_required_inputs_approved) == bool(input_governance.input_mode == "approved_model_input"),
+            "actual_value": bool(input_governance.all_required_inputs_approved),
+            "expected_value": input_governance.input_mode == "approved_model_input",
+            "notes": "Only approved_model_input runs may claim all required rows are approved.",
+        },
+        {
             "check_name": "thesis_usable",
-            "passed": False,
-            "actual_value": "no",
-            "expected_value": "no",
-            "notes": "Toy and infeasible smoke cases are not thesis-usable quantitative evidence.",
+            "passed": True,
+            "actual_value": "yes" if input_governance.thesis_usable else "no",
+            "expected_value": "yes" if input_governance.thesis_usable else "no",
+            "notes": input_governance.thesis_usability_reason,
         },
         {
             "check_name": "solver_status_recorded",
@@ -354,7 +426,7 @@ def build_run_summary(
     objective_value: float | None,
     runtime_seconds: float,
     model_stats: ModelStats,
-    thesis_usable: str,
+    input_governance,
 ) -> dict[str, Any]:
     return {
         "run_id": run_id,
@@ -365,5 +437,11 @@ def build_run_summary(
         "objective_value": objective_value,
         "runtime_seconds": runtime_seconds,
         "model_stats": asdict(model_stats),
-        "thesis_usable": thesis_usable,
+        "input_mode": input_governance.input_mode,
+        "contains_toy_values": input_governance.contains_toy_values,
+        "contains_candidate_not_approved_values": input_governance.contains_candidate_not_approved_values,
+        "contains_validation_only_values": input_governance.contains_validation_only_values,
+        "all_required_inputs_approved": input_governance.all_required_inputs_approved,
+        "thesis_usable": "yes" if input_governance.thesis_usable else "no",
+        "thesis_usability_reason": input_governance.thesis_usability_reason,
     }

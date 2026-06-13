@@ -28,6 +28,7 @@ time:
 input_tables:
   table_root: ../../../../data/03_Optimisation/inputs/assets/steel/s2_toy_scaffold
   scenario_or_config: route_feed_shortage_or_buffer_bottleneck
+  input_mode: toy_scaffold
 
 diagnostics:
   case_label: route_feed_shortage_or_buffer_bottleneck

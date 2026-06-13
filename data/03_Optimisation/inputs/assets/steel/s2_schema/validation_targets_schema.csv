@@ -1,0 +1,7 @@
+table_name,column_name,data_type,required,field_role,notes
+validation_targets,input_id,string,yes,governance_key,Stable row identifier for validation-target rows.
+validation_targets,validation_target_id,string,yes,entity_key,Validation target identifier.
+validation_targets,value_or_range,string,yes,validation_value,Public anchor or reviewed comparison range.
+validation_targets,unit,string,yes,unit,Validation unit such as Mt_per_year or tonnes.
+validation_targets,approval_status,string,yes,governance_status,Validation targets remain non-executable unless explicitly promoted.
+validation_targets,notes,string,yes,governance_note,Validation-only targets must stay distinct from model constraints.
