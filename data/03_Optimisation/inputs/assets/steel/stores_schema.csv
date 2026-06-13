@@ -1,0 +1,1 @@
+store_id,carrier_id,configuration_id,capacity_min,capacity_max,initial_policy,terminal_policy,charge_limit,discharge_limit,loss_factor,notes
