@@ -23,6 +23,8 @@ from steel.governance import (
     load_s2_candidate_review,
     load_s2_schema,
     load_s2_topology_skeleton,
+    PROMOTION_REVIEW_CRITERIA_FILE_SPECS,
+    REVIEW_FILE_SPECS,
     validate_s2_candidate_review,
 )
 from steel.input_tables import load_governed_toy_tables
@@ -134,8 +136,19 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     review_bundle = load_s2_candidate_review(REVIEW_ROOT)
     payload = validate_s2_candidate_review(review_bundle)
     assert payload["candidate_review_data_files_checked"] == 10
-    assert payload["candidate_review_files_checked"] == 19
+    assert payload["candidate_review_files_checked"] == len(REVIEW_FILE_SPECS)
     assert payload["promotion_packet_rows_checked"] == 5
+    assert payload["promotion_protocol_memo_present"] is True
+    assert payload["promotion_protocol_rows_checked"] == 18
+    assert payload["promotion_review_criteria_files_checked"] == len(PROMOTION_REVIEW_CRITERIA_FILE_SPECS)
+    assert payload["promotion_decision_template_rows"] == 0
+    assert payload["human_review_packet_files_checked"] == 3
+    assert payload["human_review_packet_rows_checked"] == 7
+    assert payload["human_review_packet_dashboard_present"] is True
+    assert payload["human_review_packet_memos_present"] == 3
+    assert payload["human_policy_bundle_memo_present"] is True
+    assert payload["human_policy_decision_rows_checked"] == 26
+    assert payload["future_parameter_review_backlog_rows_checked"] == 12
     assert payload["unit_sign_endpoint_note_present"] is True
     assert payload["deepsearch_f_source_rows_checked"] == 20
     assert payload["deepsearch_f_candidate_assumption_rows_checked"] > 0
@@ -143,6 +156,7 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert payload["configuration_rows_checked"] == 4
     assert payload["main_configuration_rows"] == 2
     assert payload["configuration_tag_mapping_rows_checked"] == 33
+    assert payload["model_builder_contract_rows_checked"] == 29
     assert payload["topology_skeleton_files_checked"] == 7
     assert payload["topology_configuration_rows_checked"] == 2
     assert payload["topology_route_rows_checked"] == 3
@@ -242,6 +256,57 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert configuration_tag_mapping.loc[c2_rows, "mapped_configuration_role"].eq("optional_later_sensitivity_only").all()
     mapping_scan = configuration_tag_mapping.astype(str).agg(" ".join, axis=1).str.lower()
     assert not mapping_scan.str.contains(FORBIDDEN_HORIZON_PATTERN, regex=True).any()
+
+    model_builder_contract = review_bundle.tables["s2_model_builder_interface_contract.csv"]
+    assert len(model_builder_contract) == 29
+    assert set(model_builder_contract["contract_item_id"]) == {f"MBIC{index:02d}" for index in range(1, 30)}
+    assert model_builder_contract["executable_status"].eq("non_executable").all()
+    assert model_builder_contract["thesis_usability"].str.lower().eq("false").all()
+    assert model_builder_contract["approval_status"].isin({"interface_contract_only", "not_approved", "blocked"}).all()
+    assert not model_builder_contract["allowed_status"].str.lower().str.contains("thesis_grade|executable|approved_model_input", regex=True).any()
+    main_contract_rows = model_builder_contract["required_input_or_rule"].isin(
+        {
+            "configuration_selection",
+            "topology_view_consumption",
+            "route_membership",
+            "process_unit_membership",
+            "carrier_membership",
+            "store_membership",
+            "arc_membership",
+            "inventory_endpoint_policy",
+            "fixed_production_target_policy",
+        }
+    )
+    assert model_builder_contract.loc[
+        main_contract_rows,
+        "applies_to_configuration",
+    ].eq("C0_current_BF_BOF_reference;C1_phase1_hybrid_BF_BOF_NG_DRP_EAF").all()
+    c1s_contract = model_builder_contract.loc[
+        model_builder_contract["applies_to_configuration"].eq("C1S_phase1_sensitivity_variants")
+    ].iloc[0]
+    assert c1s_contract["allowed_status"] == "sensitivity_overlay_metadata_only"
+    c2_contract = model_builder_contract.loc[
+        model_builder_contract["applies_to_configuration"].eq("C2_exogenous_hydrogen_sensitivity_optional_later")
+    ].iloc[0]
+    assert c2_contract["allowed_status"] == "optional_later_metadata_only"
+    validation_target_contract = model_builder_contract.loc[
+        model_builder_contract["required_input_or_rule"].eq("future_validation_target_table")
+    ].iloc[0]
+    assert validation_target_contract["approval_status"] == "blocked"
+    assert "validation_target_as_constraint" in validation_target_contract["forbidden_status"]
+    annual_anchor_contract = model_builder_contract.loc[
+        model_builder_contract["required_input_or_rule"].eq("refusal_of_annual_public_anchors_as_hourly_caps")
+    ].iloc[0]
+    assert "annual_public_anchor_as_hourly_cap" in annual_anchor_contract["forbidden_status"]
+    blocked_logic_contracts = model_builder_contract[
+        model_builder_contract["contract_layer"].eq("refusal_rule")
+    ]
+    assert blocked_logic_contracts["approval_status"].eq("blocked").all()
+    contract_scan = model_builder_contract.astype(str).agg(" ".join, axis=1).str.lower()
+    assert not contract_scan[~model_builder_contract["required_input_or_rule"].eq("refusal_of_D_only_D_plus_4_comparison_logic")].str.contains(
+        FORBIDDEN_HORIZON_PATTERN,
+        regex=True,
+    ).any()
 
     topology_bundle = load_s2_topology_skeleton(REVIEW_ROOT)
     topology_configurations = topology_bundle.tables["configurations.csv"]
@@ -524,15 +589,20 @@ def test_candidate_review_mode_is_non_thesis_usable():
     assert payload["thesis_usable"] is False
     assert payload["schema_files_checked"] >= 10
     assert payload["mapping_files_checked"] == 4
-    assert payload["candidate_review_files_checked"] == 19
+    assert payload["candidate_review_files_checked"] == len(REVIEW_FILE_SPECS)
     assert payload["approved_rows"] == 0
     assert payload["promotion_packet_rows_checked"] == 5
+    assert payload["promotion_protocol_memo_present"] is True
+    assert payload["promotion_protocol_rows_checked"] == 18
+    assert payload["promotion_review_criteria_files_checked"] == len(PROMOTION_REVIEW_CRITERIA_FILE_SPECS)
+    assert payload["promotion_decision_template_rows"] == 0
     assert payload["unit_sign_endpoint_note_present"] is True
     assert payload["deepsearch_f_source_rows_checked"] == 20
     assert payload["deepsearch_f_candidate_assumption_rows_checked"] > 0
     assert payload["configuration_rows_checked"] == 4
     assert payload["main_configuration_rows"] == 2
     assert payload["configuration_tag_mapping_rows_checked"] == 33
+    assert payload["model_builder_contract_rows_checked"] == 29
     assert payload["topology_skeleton_files_checked"] == 7
     assert payload["topology_configuration_rows_checked"] == 2
     assert payload["topology_route_rows_checked"] == 3

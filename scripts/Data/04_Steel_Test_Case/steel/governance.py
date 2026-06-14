@@ -69,6 +69,271 @@ MAPPING_FILE_SPECS: dict[str, list[str]] = {
     ],
 }
 
+SCHEMA_ALIGNMENT_FILE_SPECS: dict[str, list[str]] = {
+    "s2_builder_input_schema_alignment.csv": [
+        "builder_input_gate_id",
+        "builder_input_gate_name",
+        "contract_item_id",
+        "future_approved_table",
+        "candidate_review_source_table",
+        "existing_schema_reference",
+        "new_schema_created_flag",
+        "applies_to_configuration",
+        "applies_to_stage",
+        "required_before_executable_builder",
+        "allowed_status",
+        "forbidden_status",
+        "approval_blocker",
+        "executable_status",
+        "thesis_usability",
+        "approval_status",
+        "notes",
+    ],
+}
+
+PROMOTION_PROTOCOL_FILE_SPECS: dict[str, list[str]] = {
+    "s2_approved_input_promotion_protocol.csv": [
+        "protocol_rule_id",
+        "category",
+        "target_approved_table",
+        "required_evidence",
+        "required_metadata",
+        "required_review_decision",
+        "allowed_status_before_review",
+        "allowed_status_after_review",
+        "forbidden_action",
+        "codex_allowed_role",
+        "codex_forbidden_role",
+        "user_review_required",
+        "executable_gate_required",
+        "sensitivity_required_rule",
+        "approval_blocker",
+        "applies_to_configuration",
+        "stage_relevance",
+        "executable_status",
+        "thesis_usability",
+        "approval_status",
+        "notes",
+    ],
+}
+
+PROMOTION_REVIEW_CRITERIA_COMMON_COLUMNS = [
+    "criterion_id",
+    "criterion",
+    "why_it_matters",
+    "required_evidence_or_check",
+    "pass_condition",
+    "fail_or_defer_condition",
+    "sensitivity_required_if_uncertain",
+    "reviewer_decision_required",
+    "codex_may_check",
+    "codex_may_decide",
+    "approval_status",
+    "notes",
+]
+
+PROMOTION_REVIEW_CRITERIA_FILE_SPECS: dict[str, list[str]] = {
+    "s2_promotion_review_criteria/inventory_endpoint_policies_review_criteria.csv": PROMOTION_REVIEW_CRITERIA_COMMON_COLUMNS,
+    "s2_promotion_review_criteria/terminal_inventory_rules_review_criteria.csv": PROMOTION_REVIEW_CRITERIA_COMMON_COLUMNS,
+    "s2_promotion_review_criteria/initial_inventories_review_criteria.csv": PROMOTION_REVIEW_CRITERIA_COMMON_COLUMNS,
+    "s2_promotion_review_criteria/conversion_coefficients_review_criteria.csv": PROMOTION_REVIEW_CRITERIA_COMMON_COLUMNS,
+    "s2_promotion_review_criteria/process_bounds_review_criteria.csv": PROMOTION_REVIEW_CRITERIA_COMMON_COLUMNS,
+    "s2_promotion_review_criteria/store_capacities_review_criteria.csv": PROMOTION_REVIEW_CRITERIA_COMMON_COLUMNS,
+    "s2_promotion_review_criteria/production_targets_review_criteria.csv": PROMOTION_REVIEW_CRITERIA_COMMON_COLUMNS,
+    "s2_promotion_review_criteria/validation_targets_review_criteria.csv": PROMOTION_REVIEW_CRITERIA_COMMON_COLUMNS,
+}
+
+PROMOTION_DECISION_TEMPLATE_COLUMNS = [
+    "decision_id",
+    "candidate_row_id",
+    "candidate_source_table",
+    "target_approved_table",
+    "proposed_parameter_id",
+    "reviewer_decision",
+    "reviewer_name_or_role",
+    "decision_date",
+    "approved_value",
+    "approved_unit",
+    "approved_basis",
+    "source_ids",
+    "sensitivity_required",
+    "thesis_use_allowed",
+    "executable_allowed",
+    "conditions_or_limitations",
+    "rejection_or_deferral_reason",
+    "notes",
+]
+
+APPROVED_INPUT_FILE_SPECS: dict[str, list[str]] = {
+    "process_bounds.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "process_unit_id",
+        "bound_name",
+        "bound_value",
+        "unit",
+        "time_basis",
+        "annual_to_hourly_translation_status",
+        "source_ids",
+        "evidence_status",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "approved_by",
+        "approval_date",
+        "notes",
+    ],
+    "conversion_coefficients.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "process_unit_id",
+        "carrier_id",
+        "coefficient_name",
+        "coefficient_value",
+        "unit",
+        "source_ids",
+        "evidence_status",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "approved_by",
+        "approval_date",
+        "notes",
+    ],
+    "store_capacities.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "store_id",
+        "carrier_id",
+        "capacity_name",
+        "capacity_value",
+        "unit",
+        "source_ids",
+        "evidence_status",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "approved_by",
+        "approval_date",
+        "notes",
+    ],
+    "initial_inventories.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "store_id",
+        "carrier_id",
+        "inventory_basis",
+        "initial_inventory_value",
+        "unit",
+        "source_ids",
+        "evidence_status",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "approved_by",
+        "approval_date",
+        "notes",
+    ],
+    "terminal_inventory_rules.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "store_id",
+        "carrier_id",
+        "rule_type",
+        "rule_value",
+        "unit",
+        "horizon_applicability",
+        "source_ids",
+        "evidence_status",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "approved_by",
+        "approval_date",
+        "notes",
+    ],
+    "production_targets.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "target_id",
+        "carrier_id",
+        "target_type",
+        "target_value",
+        "unit",
+        "horizon_applicability",
+        "annual_to_hourly_translation_status",
+        "source_ids",
+        "evidence_status",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "approved_by",
+        "approval_date",
+        "notes",
+    ],
+    "validation_targets.csv": [
+        "row_id",
+        "configuration_id",
+        "validation_target_id",
+        "metric_name",
+        "target_value_or_range",
+        "unit",
+        "constraint_usage_status",
+        "annual_to_hourly_translation_status",
+        "source_ids",
+        "evidence_status",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "approved_by",
+        "approval_date",
+        "notes",
+    ],
+    "inventory_endpoint_policies.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "store_id",
+        "endpoint_policy_id",
+        "initial_inventory_policy",
+        "terminal_inventory_policy",
+        "policy_value",
+        "unit",
+        "source_ids",
+        "evidence_status",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "approved_by",
+        "approval_date",
+        "notes",
+    ],
+    "run_reporting_requirements.csv": [
+        "row_id",
+        "configuration_id",
+        "report_field_id",
+        "report_field_name",
+        "metric_definition",
+        "unit_or_format",
+        "stage_applicability",
+        "required_for_run_contract",
+        "source_ids",
+        "evidence_status",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "approved_by",
+        "approval_date",
+        "notes",
+    ],
+}
+
 TOPOLOGY_SKELETON_FILE_SPECS: dict[str, list[str]] = {
     "configurations.csv": [
         "configuration_id",
@@ -312,6 +577,21 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "approval_status",
         "notes",
     ],
+    "s2_model_builder_interface_contract.csv": [
+        "contract_item_id",
+        "contract_layer",
+        "required_input_or_rule",
+        "expected_source",
+        "applies_to_configuration",
+        "applies_to_stage",
+        "allowed_status",
+        "forbidden_status",
+        "required_governance_check",
+        "executable_status",
+        "thesis_usability",
+        "approval_status",
+        "notes",
+    ],
     "s2_promotion_checklist.csv": [
         "input_category",
         "target_schema_table",
@@ -378,6 +658,40 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "approval_blocker",
         "next_review_action",
     ],
+    "s2_human_policy_decision_bundle.csv": [
+        "decision_id",
+        "decision_cluster",
+        "decision_item",
+        "human_decision",
+        "modelling_interpretation",
+        "applies_to_configuration",
+        "applies_to_stage",
+        "affected_future_approved_table",
+        "evidence_basis",
+        "sensitivity_implication",
+        "unresolved_blocker",
+        "codex_allowed_role",
+        "codex_forbidden_role",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "notes",
+    ],
+    "s2_future_parameter_review_backlog.csv": [
+        "backlog_item_id",
+        "parameter_category",
+        "review_priority",
+        "why_review_needed",
+        "current_policy_status",
+        "future_decision_needed",
+        "affected_model_risk",
+        "suggested_review_stage",
+        "candidate_sources_available",
+        "sensitivity_likely_required",
+        "notes",
+    ],
+    **PROMOTION_PROTOCOL_FILE_SPECS,
+    **PROMOTION_REVIEW_CRITERIA_FILE_SPECS,
 }
 
 REVIEW_DATA_FILES = [
@@ -489,6 +803,133 @@ CONFIGURATION_TAG_MAPPING_REQUIRED_ROLE_BY_ID = {
     "postponed_or_blocked": "postponed_or_blocked",
 }
 CONFIGURATION_TAG_MAPPING_FORBIDDEN_HORIZON_PATTERNS = CONFIGURATION_SCOPE_FORBIDDEN_HORIZON_PATTERNS
+MODEL_BUILDER_CONTRACT_REQUIRED_IDS = {
+    "MBIC01",
+    "MBIC02",
+    "MBIC03",
+    "MBIC04",
+    "MBIC05",
+    "MBIC06",
+    "MBIC07",
+    "MBIC08",
+    "MBIC09",
+    "MBIC10",
+    "MBIC11",
+    "MBIC12",
+    "MBIC13",
+    "MBIC14",
+    "MBIC15",
+    "MBIC16",
+    "MBIC17",
+    "MBIC18",
+    "MBIC19",
+    "MBIC20",
+    "MBIC21",
+    "MBIC22",
+    "MBIC23",
+    "MBIC24",
+    "MBIC25",
+    "MBIC26",
+    "MBIC27",
+    "MBIC28",
+    "MBIC29",
+}
+MODEL_BUILDER_CONTRACT_REQUIRED_NUMERICAL_TABLE_ROWS = {
+    "future_process_bounds_table",
+    "future_conversion_coefficients_table",
+    "future_store_capacity_table",
+    "future_initial_inventory_table",
+    "future_terminal_inventory_rule_table",
+    "future_production_target_table",
+    "future_validation_target_table",
+}
+MODEL_BUILDER_CONTRACT_REQUIRED_REPORTING_ROWS = {
+    "solver_status_reporting",
+    "objective_reporting",
+    "runtime_reporting",
+    "variable_constraint_count_reporting",
+    "infeasibility_diagnostics",
+}
+MODEL_BUILDER_CONTRACT_REQUIRED_REFUSAL_ROWS = {
+    "refusal_of_candidate_review_values_unless_approved_later",
+    "refusal_of_validation_targets_as_constraints",
+    "refusal_of_annual_public_anchors_as_hourly_caps",
+    "refusal_of_S3_DA_stochastic_mFRR_CVaR_product_revenue_order_book_logic",
+    "refusal_of_D_only_D_plus_4_comparison_logic",
+}
+MODEL_BUILDER_CONTRACT_ALLOWED_APPROVAL_STATUSES = {"interface_contract_only", "not_approved", "blocked"}
+MODEL_BUILDER_CONTRACT_ALLOWED_CONFIG_TOKENS = CONFIGURATION_SCOPE_REQUIRED_IDS | {"all"}
+MODEL_BUILDER_CONTRACT_MAIN_CONFIG_TOKENS = {
+    "C0_current_BF_BOF_reference",
+    "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
+}
+SCHEMA_ALIGNMENT_REQUIRED_GATE_NAMES = {
+    "topology_view_selection",
+    "inventory_endpoint_policy",
+    "fixed_production_target_policy",
+    "process_bounds",
+    "conversion_coefficients",
+    "store_capacities",
+    "initial_inventories",
+    "terminal_inventory_rules",
+    "production_targets",
+    "validation_targets",
+    "solver_status_reporting",
+    "objective_reporting",
+    "runtime_reporting",
+    "variable_constraint_count_reporting",
+    "infeasibility_diagnostics",
+}
+SCHEMA_ALIGNMENT_ALLOWED_APPROVAL_STATUSES = {"schema_alignment_only", "not_approved", "blocked", "template_only"}
+SCHEMA_ALIGNMENT_ALLOWED_NEW_SCHEMA_FLAGS = {"true", "false"}
+SCHEMA_ALIGNMENT_REQUIRED_BLOCKED_GATE = "validation_targets"
+SCHEMA_ALIGNMENT_REQUIRED_ANNUAL_BLOCKED_GATES = {"process_bounds", "production_targets", "validation_targets"}
+APPROVED_INPUT_REQUIRED_TABLES = set(APPROVED_INPUT_FILE_SPECS)
+APPROVED_INPUT_REQUIRED_ZERO_ROW_TABLES = APPROVED_INPUT_REQUIRED_TABLES
+APPROVED_INPUT_ALLOWED_APPROVAL_STATUSES = {"approved"}
+APPROVED_INPUT_ALLOWED_EXECUTABLE_STATUSES = {"executable"}
+APPROVED_INPUT_ALLOWED_THESIS_USABILITY = {"true"}
+APPROVED_INPUT_REQUIRED_METADATA_COLUMNS = {
+    "source_ids",
+    "approval_status",
+    "executable_status",
+    "thesis_usability",
+    "approved_by",
+    "approval_date",
+    "notes",
+}
+APPROVED_INPUT_TABLES_REQUIRING_TRANSLATION_STATUS = {
+    "process_bounds.csv",
+    "production_targets.csv",
+    "validation_targets.csv",
+}
+APPROVED_INPUT_FORBIDDEN_SCOPE_PATTERNS = (
+    r"phase 2",
+    r"phase2",
+    r"phase_2",
+    r"phase 3",
+    r"phase3",
+    r"phase_3",
+    r"full_hydrogen",
+    r"full hydrogen",
+    r"on_site_electrolysis",
+    r"on-site electrolysis",
+    r"hydrogen_production",
+    r"hydrogen storage",
+    r"hydrogen_storage",
+    r"saf",
+    r"ccs",
+    r"da_bidding",
+    r"stochastic",
+    r"mfrr",
+    r"cvar",
+    r"product_revenue",
+    r"order_book",
+    r"d_only",
+    r"d\+4",
+    r"d_plus_4",
+    r"wag",
+)
 TOPOLOGY_SKELETON_DIRNAME = "s2_topology_skeleton"
 TOPOLOGY_REQUIRED_CONFIGURATION_IDS = {
     "C0_current_BF_BOF_reference",
@@ -577,6 +1018,275 @@ DEEPSEARCH_F_FORBIDDEN_SCOPE_TOKENS = (
 )
 REPO_ROOT = Path(__file__).resolve().parents[4]
 UNIT_SIGN_ENDPOINT_NOTE = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_UNIT_SIGN_AND_ENDPOINT_CONVENTIONS.md"
+APPROVED_INPUT_README = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_approved_model_input" / "README.md"
+PROMOTION_PROTOCOL_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_APPROVED_INPUT_PROMOTION_PROTOCOL.md"
+PROMOTION_DECISION_TEMPLATE = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_promotion_decision_template.csv"
+PROMOTION_REVIEW_CRITERIA_DIR = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_promotion_review_criteria"
+
+PROMOTION_PROTOCOL_ALLOWED_APPROVAL_STATUSES = {"protocol_only", "not_approved", "blocked"}
+PROMOTION_PROTOCOL_REQUIRED_CATEGORIES = {
+    "process_bounds",
+    "conversion_coefficients",
+    "store_capacities",
+    "initial_inventories",
+    "terminal_inventory_rules",
+    "production_targets",
+    "validation_targets",
+    "inventory_endpoint_policies",
+    "run_reporting_requirements",
+    "annual_to_hourly_translation",
+    "source_card_completeness",
+    "unit_sign_convention_compliance",
+    "configuration_applicability_c0_c1",
+    "c1s_sensitivity_overlay",
+    "c2_optional_later_exogenous_hydrogen",
+    "codex_role_limits",
+    "explicit_user_approval_requirement",
+    "executable_gate_separation",
+}
+PROMOTION_PROTOCOL_REQUIRED_TARGET_TABLES_BY_CATEGORY = {
+    "process_bounds": "process_bounds.csv",
+    "conversion_coefficients": "conversion_coefficients.csv",
+    "store_capacities": "store_capacities.csv",
+    "initial_inventories": "initial_inventories.csv",
+    "terminal_inventory_rules": "terminal_inventory_rules.csv",
+    "production_targets": "production_targets.csv",
+    "validation_targets": "validation_targets.csv",
+    "inventory_endpoint_policies": "inventory_endpoint_policies.csv",
+    "run_reporting_requirements": "run_reporting_requirements.csv",
+    "annual_to_hourly_translation": "all_applicable_tables",
+    "source_card_completeness": "all_applicable_tables",
+    "unit_sign_convention_compliance": "all_applicable_tables",
+    "configuration_applicability_c0_c1": "all_applicable_tables",
+    "c1s_sensitivity_overlay": "all_applicable_tables",
+    "c2_optional_later_exogenous_hydrogen": "all_applicable_tables",
+    "codex_role_limits": "all_applicable_tables",
+    "explicit_user_approval_requirement": "all_applicable_tables",
+    "executable_gate_separation": "all_applicable_tables",
+}
+PROMOTION_REVIEW_CRITERIA_ALLOWED_APPROVAL_STATUSES = {"protocol_only", "not_approved", "blocked"}
+PROMOTION_REVIEW_CRITERIA_REQUIRED_BASE_FILENAMES = {
+    "inventory_endpoint_policies_review_criteria.csv",
+    "terminal_inventory_rules_review_criteria.csv",
+    "initial_inventories_review_criteria.csv",
+    "conversion_coefficients_review_criteria.csv",
+    "process_bounds_review_criteria.csv",
+    "store_capacities_review_criteria.csv",
+    "production_targets_review_criteria.csv",
+    "validation_targets_review_criteria.csv",
+}
+HUMAN_REVIEW_PACKET_DOC_DIR = REPO_ROOT / "docs" / "optimisation" / "steel" / "s2_human_review_packets"
+HUMAN_REVIEW_PACKET_DATA_DIR_NAME = "s2_human_review_packets"
+HUMAN_REVIEW_PACKET_SUMMARY_COLUMNS = [
+    "review_packet_id",
+    "review_category",
+    "candidate_row_id",
+    "candidate_source_table",
+    "target_approved_table",
+    "parameter_or_rule_name",
+    "candidate_value_or_rule_summary",
+    "unit_or_basis",
+    "source_ids",
+    "evidence_status",
+    "modelling_interpretation",
+    "affects_model_component",
+    "main_risk",
+    "sensitivity_required",
+    "approval_blockers",
+    "codex_preliminary_assessment",
+    "possible_reviewer_outcomes",
+    "reviewer_decision_required",
+    "codex_may_decide",
+    "approval_status",
+    "executable_status",
+    "thesis_usability",
+    "notes",
+]
+HUMAN_REVIEW_PACKET_SUMMARY_FILE_SPECS: dict[str, dict[str, str]] = {
+    "inventory_endpoint_policy_review_packet.csv": {
+        "review_category": "inventory_endpoint_policy",
+        "target_approved_table": "inventory_endpoint_policies.csv",
+    },
+    "terminal_inventory_rules_review_packet.csv": {
+        "review_category": "terminal_inventory_rules",
+        "target_approved_table": "terminal_inventory_rules.csv",
+    },
+    "initial_inventory_rules_review_packet.csv": {
+        "review_category": "initial_inventory_rules",
+        "target_approved_table": "initial_inventories.csv",
+    },
+}
+HUMAN_REVIEW_PACKET_ALLOWED_APPROVAL_STATUSES = {
+    "review_packet_only",
+    "not_approved",
+    "blocked",
+    "defer_pending_review",
+}
+HUMAN_REVIEW_PACKET_DASHBOARD_COLUMNS = [
+    "review_category",
+    "candidate_count",
+    "high_confidence_candidate_count",
+    "sensitivity_required_count",
+    "blocked_or_defer_count",
+    "missing_source_count",
+    "missing_unit_or_basis_count",
+    "human_decision_needed_count",
+    "recommended_review_priority",
+    "main_blocker",
+    "next_human_action",
+]
+HUMAN_REVIEW_PACKET_MEMO_REQUIRED_PHRASES: dict[str, tuple[str, ...]] = {
+    "S2_7D_INVENTORY_ENDPOINT_POLICY_REVIEW_PACKET.md": (
+        "review purpose",
+        "relevant approved-input target table",
+        "relevant candidate-review sources",
+        "relevant source-card ids",
+        "relevant promotion criteria",
+        "candidate evidence summary",
+        "modelling interpretation options",
+        "what the rule would affect in the later lp",
+        "red flags and blockers",
+        "sensitivity implications",
+        "suggested human review questions",
+        "possible reviewer outcomes",
+        "codex is not approving any row",
+        "approved-input tables remain empty",
+        "cyc50",
+        "anti-gaming",
+        "buffer capacity",
+        "operational truth",
+        "base-case policy",
+        "sensitivity policy",
+        "deferred",
+    ),
+    "S2_7D_TERMINAL_INVENTORY_RULES_REVIEW_PACKET.md": (
+        "review purpose",
+        "relevant approved-input target table",
+        "relevant candidate-review sources",
+        "relevant source-card ids",
+        "relevant promotion criteria",
+        "candidate evidence summary",
+        "modelling interpretation options",
+        "what the rule would affect in the later lp",
+        "red flags and blockers",
+        "sensitivity implications",
+        "suggested human review questions",
+        "possible reviewer outcomes",
+        "codex is not approving any row",
+        "approved-input tables remain empty",
+        "terminal equality",
+        "cyclic rule",
+        "loose terminal band",
+        "terminal value penalty",
+        "fake flexibility",
+        "horizon borrowing",
+        "capacity values",
+    ),
+    "S2_7D_INITIAL_INVENTORY_RULES_REVIEW_PACKET.md": (
+        "review purpose",
+        "relevant approved-input target table",
+        "relevant candidate-review sources",
+        "relevant source-card ids",
+        "relevant promotion criteria",
+        "candidate evidence summary",
+        "modelling interpretation options",
+        "what the rule would affect in the later lp",
+        "red flags and blockers",
+        "sensitivity implications",
+        "suggested human review questions",
+        "possible reviewer outcomes",
+        "codex is not approving any row",
+        "approved-input tables remain empty",
+        "percentage-of-capacity",
+        "absolute site inventory",
+        "cannot be finalised before store-capacity rows exist",
+        "formula or policy",
+        "absolute site inventory quantity",
+    ),
+}
+HUMAN_REVIEW_PACKET_DASHBOARD = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_first_promotion_review_dashboard.csv"
+HUMAN_POLICY_DECISION_BUNDLE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_HUMAN_POLICY_DECISION_BUNDLE.md"
+HUMAN_POLICY_DECISION_BUNDLE_COLUMNS = REVIEW_FILE_SPECS["s2_human_policy_decision_bundle.csv"]
+HUMAN_POLICY_DECISION_BUNDLE_ALLOWED_APPROVAL_STATUSES = {
+    "human_policy_recorded",
+    "convention_recorded",
+    "sensitivity_strategy_recorded",
+    "not_approved_numerical",
+    "blocked_until_later_review",
+}
+HUMAN_POLICY_DECISION_BUNDLE_REQUIRED_CLUSTERS = {
+    "inventory_endpoint_policy",
+    "buffer_classification",
+    "buffer_sizing_basis",
+    "conversion_coefficient_convention",
+    "process_bound_policy",
+    "production_target_policy",
+    "sensitivity_strategy",
+}
+HUMAN_POLICY_DECISION_BUNDLE_REQUIRED_ITEMS = {
+    "CYC50_endpoint_policy_base_case",
+    "initial_inventory_formula",
+    "terminal_equality_rule",
+    "non_negative_inventory_state_convention",
+    "HDRI_DRI_surge_main_flexibility_buffer",
+    "cold_slab_WIP_main_flexibility_buffer",
+    "hot_metal_synchronisation_secondary_buffer",
+    "hot_slab_WIP_thermal_transfer_classification",
+    "liquid_steel_ladle_tundish_feasibility_only",
+    "coke_sinter_pellet_excluded_from_base_flexibility",
+    "finished_goods_order_book_excluded",
+    "heat_based_relative_sizing_convention",
+    "days_of_throughput_relative_sizing_convention",
+    "positive_magnitude_coefficients",
+    "coefficient_role_taxonomy",
+    "carrier_per_activity_unit_convention",
+    "process_output_activity_basis_default",
+    "BF_near_must_run_policy",
+    "DRP_continuous_turndown_policy",
+    "BOF_EAF_batch_equivalent_hourly_policy",
+    "annual_to_hourly_translation_required",
+    "horizon_total_production_target_policy",
+    "single_sink_carrier_target_basis_required",
+    "no_route_specific_base_target",
+    "early_sensitivity_screening_strategy",
+    "final_thesis_sensitivity_selection_strategy",
+}
+HUMAN_POLICY_DECISION_BUNDLE_MEMO_REQUIRED_PHRASES = (
+    "purpose and scope",
+    "records the current human modelling-policy decisions",
+    "not a codex approval artifact",
+    "approved-input tables remain empty",
+    "endpoint policy decision",
+    "buffer classification decision",
+    "buffer sizing-basis decision",
+    "conversion-coefficient convention decision",
+    "process-bound policy decision",
+    "production target policy decision",
+    "sensitivity strategy decision",
+    "what remains undecided",
+    "what is still blocked from executable use",
+    "how future codex tasks should use this bundle",
+    "why this does not approve exact numerical values",
+)
+HUMAN_POLICY_NUMERIC_FORBIDDEN_PATTERN = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:tonnes|t/h|mt/y|pj/y|€/mwh|€/kg|eur/mwh|eur/kg|mw|mwh|kg)\b",
+    re.IGNORECASE,
+)
+FUTURE_PARAMETER_REVIEW_BACKLOG_COLUMNS = REVIEW_FILE_SPECS["s2_future_parameter_review_backlog.csv"]
+FUTURE_PARAMETER_REVIEW_BACKLOG_REQUIRED_CATEGORIES = {
+    "exact_DRI_HDRI_surge_capacity",
+    "exact_cold_slab_WIP_capacity",
+    "exact_hot_metal_buffer_capacity",
+    "exact_hot_slab_WIP_treatment_or_capacity",
+    "exact_conversion_coefficients",
+    "process_bounds_and_annual_to_hourly_translation",
+    "production_target_basis_and_scale",
+    "store_capacity_sensitivity_ranges",
+    "DRP_turndown",
+    "BF_near_must_run_band",
+    "BOF_EAF_batch_equivalent_capacity",
+    "validation_target_selection",
+}
 
 
 @dataclass(frozen=True)
@@ -593,7 +1303,12 @@ def _read_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, dtype=str, keep_default_na=False)
 
 
-def _load_bundle(root: str | Path, file_specs: dict[str, list[str]]) -> GovernanceTableBundle:
+def _load_bundle(
+    root: str | Path,
+    file_specs: dict[str, list[str]],
+    *,
+    require_non_empty: bool = True,
+) -> GovernanceTableBundle:
     base = Path(root).resolve()
     tables: dict[str, pd.DataFrame] = {}
     for filename, required_columns in file_specs.items():
@@ -602,12 +1317,12 @@ def _load_bundle(root: str | Path, file_specs: dict[str, list[str]]) -> Governan
         missing = [column for column in required_columns if column not in frame.columns]
         if missing:
             raise ValueError(f"{filename} is missing required columns: {missing}")
-        if frame.empty:
+        if require_non_empty and frame.empty:
             raise ValueError(f"{filename} must contain at least one schema or mapping row.")
         for column in required_columns:
             if column == "notes":
                 continue
-            if frame[column].astype(str).str.strip().eq("").any():
+            if not frame.empty and frame[column].astype(str).str.strip().eq("").any():
                 raise ValueError(f"{filename} contains empty values in required column {column}.")
         tables[filename] = frame
     return GovernanceTableBundle(root=base, tables=tables)
@@ -623,6 +1338,14 @@ def load_s2_candidate_mapping(mapping_root: str | Path) -> GovernanceTableBundle
 
 def load_s2_candidate_review(review_root: str | Path) -> GovernanceTableBundle:
     return _load_bundle(review_root, REVIEW_FILE_SPECS)
+
+
+def load_s2_schema_alignment(review_root: str | Path) -> GovernanceTableBundle:
+    return _load_bundle(review_root, SCHEMA_ALIGNMENT_FILE_SPECS)
+
+
+def load_s2_approved_model_input(approved_input_root: str | Path) -> GovernanceTableBundle:
+    return _load_bundle(approved_input_root, APPROVED_INPUT_FILE_SPECS, require_non_empty=False)
 
 
 def load_s2_topology_skeleton(review_root: str | Path) -> TopologyTableBundle:
@@ -651,6 +1374,358 @@ def build_s2_topology_views(topology: SteelTopology) -> TopologyAssemblyBundle:
     return _assemble_topology_views(topology)
 
 
+def validate_s2_schema_alignment(alignment_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    alignment = alignment_bundle.tables["s2_builder_input_schema_alignment.csv"]
+    if alignment["builder_input_gate_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_builder_input_schema_alignment.csv must not contain duplicate builder_input_gate_id values.")
+    if alignment["builder_input_gate_name"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_builder_input_schema_alignment.csv must not contain duplicate builder_input_gate_name values.")
+
+    gate_names = set(alignment["builder_input_gate_name"].astype(str).str.strip())
+    if gate_names != SCHEMA_ALIGNMENT_REQUIRED_GATE_NAMES:
+        missing = sorted(SCHEMA_ALIGNMENT_REQUIRED_GATE_NAMES - gate_names)
+        extra = sorted(gate_names - SCHEMA_ALIGNMENT_REQUIRED_GATE_NAMES)
+        raise ValueError(f"s2_builder_input_schema_alignment.csv does not match required builder gates. missing={missing} extra={extra}")
+
+    contract_ids = set(alignment["contract_item_id"].astype(str).str.strip())
+    if not contract_ids.issubset(MODEL_BUILDER_CONTRACT_REQUIRED_IDS):
+        raise ValueError(
+            "s2_builder_input_schema_alignment.csv references unknown contract_item_id values: "
+            f"{sorted(contract_ids - MODEL_BUILDER_CONTRACT_REQUIRED_IDS)}"
+        )
+
+    new_schema_flags = set(alignment["new_schema_created_flag"].astype(str).str.strip().str.lower())
+    if not new_schema_flags.issubset(SCHEMA_ALIGNMENT_ALLOWED_NEW_SCHEMA_FLAGS):
+        raise ValueError(
+            "s2_builder_input_schema_alignment.csv contains unsupported new_schema_created_flag values: "
+            f"{sorted(new_schema_flags - SCHEMA_ALIGNMENT_ALLOWED_NEW_SCHEMA_FLAGS)}"
+        )
+    if (~alignment["executable_status"].astype(str).str.strip().str.lower().eq("non_executable")).any():
+        raise ValueError("s2_builder_input_schema_alignment.csv must keep executable_status=non_executable for all rows.")
+    if (~alignment["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_builder_input_schema_alignment.csv must keep thesis_usability=false for all rows.")
+    approval_values = set(alignment["approval_status"].astype(str).str.strip().str.lower())
+    if not approval_values.issubset(SCHEMA_ALIGNMENT_ALLOWED_APPROVAL_STATUSES):
+        raise ValueError(
+            "s2_builder_input_schema_alignment.csv contains unsupported approval_status values: "
+            f"{sorted(approval_values - SCHEMA_ALIGNMENT_ALLOWED_APPROVAL_STATUSES)}"
+        )
+
+    valid_config_tokens = CONFIGURATION_SCOPE_REQUIRED_IDS | {"all", "C0_current_BF_BOF_reference;C1_phase1_hybrid_BF_BOF_NG_DRP_EAF"}
+    for raw_value in alignment["applies_to_configuration"].astype(str).str.strip():
+        if raw_value in valid_config_tokens:
+            continue
+        tokens = {token.strip() for token in raw_value.split(";") if token.strip()}
+        if not tokens or not tokens.issubset(CONFIGURATION_SCOPE_REQUIRED_IDS | {"all"}):
+            raise ValueError(f"s2_builder_input_schema_alignment.csv contains unsupported applies_to_configuration value: {raw_value}")
+
+    blocked_row = alignment.loc[alignment["builder_input_gate_name"].eq(SCHEMA_ALIGNMENT_REQUIRED_BLOCKED_GATE)]
+    if blocked_row.empty:
+        raise ValueError("s2_builder_input_schema_alignment.csv must include a validation_targets gate row.")
+    blocked_row = blocked_row.iloc[0]
+    if blocked_row["approval_status"] != "blocked":
+        raise ValueError("validation_targets schema-alignment row must remain blocked.")
+    if "validation_target_as_constraint" not in str(blocked_row["forbidden_status"]):
+        raise ValueError("validation_targets schema-alignment row must explicitly forbid validation_target_as_constraint.")
+
+    annual_block_rows = alignment[alignment["builder_input_gate_name"].isin(SCHEMA_ALIGNMENT_REQUIRED_ANNUAL_BLOCKED_GATES)]
+    if annual_block_rows.empty or set(annual_block_rows["builder_input_gate_name"]) != SCHEMA_ALIGNMENT_REQUIRED_ANNUAL_BLOCKED_GATES:
+        raise ValueError("s2_builder_input_schema_alignment.csv must cover every annual-anchor blocker gate.")
+    if (~annual_block_rows["approval_blocker"].astype(str).str.lower().str.contains("annual|hourly")).any():
+        raise ValueError("Annual-anchor schema-alignment rows must mention annual/hourly blockers explicitly.")
+
+    reporting_rows = alignment[alignment["future_approved_table"].astype(str).str.strip().eq("run_reporting_requirements.csv")]
+    if len(reporting_rows) != 5:
+        raise ValueError("s2_builder_input_schema_alignment.csv must map five reporting fields to run_reporting_requirements.csv.")
+
+    alignment_scan = alignment.astype(str).agg(" ".join, axis=1).str.lower()
+    forbidden_scope_pattern = "|".join(APPROVED_INPUT_FORBIDDEN_SCOPE_PATTERNS)
+    allowed_optional_scope_rows = alignment["builder_input_gate_name"].astype(str).str.strip().isin({"validation_targets"})
+    if (alignment_scan.str.contains(forbidden_scope_pattern, regex=True) & ~allowed_optional_scope_rows).any():
+        raise ValueError("s2_builder_input_schema_alignment.csv must not introduce blocked later-stage or horizon scope in executable gate rows.")
+
+    return {
+        "schema_alignment_rows_checked": int(len(alignment)),
+        "schema_alignment_required_gate_count": int(len(SCHEMA_ALIGNMENT_REQUIRED_GATE_NAMES)),
+    }
+
+
+def validate_s2_approved_model_input(approved_input_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    tables = approved_input_bundle.tables
+    table_names = set(tables)
+    if table_names != APPROVED_INPUT_REQUIRED_TABLES:
+        missing = sorted(APPROVED_INPUT_REQUIRED_TABLES - table_names)
+        extra = sorted(table_names - APPROVED_INPUT_REQUIRED_TABLES)
+        raise ValueError(f"s2_approved_model_input tables do not match the required shell set. missing={missing} extra={extra}")
+
+    if not APPROVED_INPUT_README.exists():
+        raise ValueError("s2_approved_model_input/README.md must exist.")
+    readme_text = APPROVED_INPUT_README.read_text(encoding="utf-8").lower()
+    required_readme_phrases = (
+        "currently empty",
+        "no value may be copied",
+        "validation targets cannot be used as constraints",
+        "annual values cannot become hourly caps",
+        "not yet thesis-usable or executable",
+        "promotion protocol",
+        "codex cannot approve values",
+        "approved and executable statuses are separate",
+        "promotion decision records",
+    )
+    for phrase in required_readme_phrases:
+        if phrase not in readme_text:
+            raise ValueError(f"s2_approved_model_input/README.md is missing required phrase: {phrase}")
+
+    approved_row_count = 0
+    thesis_grade_numerical_row_count = 0
+    executable_row_count = 0
+    total_data_rows = 0
+    forbidden_scope_pattern = "|".join(APPROVED_INPUT_FORBIDDEN_SCOPE_PATTERNS)
+
+    for filename, required_columns in APPROVED_INPUT_FILE_SPECS.items():
+        frame = tables[filename]
+        if set(required_columns) - set(frame.columns):
+            raise ValueError(f"{filename} is missing required approved-input columns.")
+        total_data_rows += int(len(frame))
+        if len(frame) != 0:
+            raise ValueError(f"{filename} must remain an empty approved-input shell with headers only.")
+
+        lower_columns = [column.lower() for column in frame.columns]
+        if any(re.search(forbidden_scope_pattern, column) for column in lower_columns):
+            raise ValueError(f"{filename} contains forbidden later-stage or blocked-scope column names.")
+        if not APPROVED_INPUT_REQUIRED_METADATA_COLUMNS.issubset(frame.columns):
+            missing_columns = sorted(APPROVED_INPUT_REQUIRED_METADATA_COLUMNS - set(frame.columns))
+            raise ValueError(f"{filename} is missing required governance metadata columns: {missing_columns}")
+
+        if filename in APPROVED_INPUT_TABLES_REQUIRING_TRANSLATION_STATUS and "annual_to_hourly_translation_status" not in frame.columns:
+            raise ValueError(f"{filename} must carry annual_to_hourly_translation_status.")
+        if filename == "validation_targets.csv" and "constraint_usage_status" not in frame.columns:
+            raise ValueError("validation_targets.csv must carry constraint_usage_status.")
+
+        if not frame.empty:
+            approved_row_count += int(frame["approval_status"].astype(str).str.strip().str.lower().eq("approved").sum())
+            thesis_grade_numerical_row_count += int(frame["thesis_usability"].astype(str).str.strip().str.lower().eq("true").sum())
+            executable_row_count += int(frame["executable_status"].astype(str).str.strip().str.lower().eq("executable").sum())
+            required_non_empty_columns = {"source_ids", "unit", "approval_status", "executable_status", "thesis_usability", "approved_by", "approval_date"}
+            missing_columns = required_non_empty_columns - set(frame.columns)
+            if missing_columns:
+                raise ValueError(f"{filename} is missing required non-empty columns for future approved rows: {sorted(missing_columns)}")
+            for column in required_non_empty_columns:
+                if frame[column].astype(str).str.strip().eq("").any():
+                    raise ValueError(f"{filename} contains empty values in required future approved-row column {column}.")
+            if (~frame["approval_status"].astype(str).str.strip().str.lower().isin(APPROVED_INPUT_ALLOWED_APPROVAL_STATUSES)).any():
+                raise ValueError(f"{filename} contains non-approved approval_status values.")
+            if (~frame["executable_status"].astype(str).str.strip().str.lower().isin(APPROVED_INPUT_ALLOWED_EXECUTABLE_STATUSES)).any():
+                raise ValueError(f"{filename} contains non-executable executable_status values.")
+            if (~frame["thesis_usability"].astype(str).str.strip().str.lower().isin(APPROVED_INPUT_ALLOWED_THESIS_USABILITY)).any():
+                raise ValueError(f"{filename} contains non-thesis-usable rows.")
+
+    return {
+        "approved_input_tables_checked": int(len(tables)),
+        "approved_input_total_rows": total_data_rows,
+        "approved_input_approved_rows": approved_row_count,
+        "approved_input_thesis_grade_numerical_rows": thesis_grade_numerical_row_count,
+        "approved_input_executable_rows": executable_row_count,
+        "approved_input_readme_present": True,
+    }
+
+
+def validate_s2_human_review_packets(review_root: str | Path) -> dict[str, Any]:
+    review_root = Path(review_root).resolve()
+    data_dir = review_root / HUMAN_REVIEW_PACKET_DATA_DIR_NAME
+    if not data_dir.exists():
+        raise ValueError("s2_human_review_packets data folder must exist.")
+    if not HUMAN_REVIEW_PACKET_DOC_DIR.exists():
+        raise ValueError("docs/optimisation/steel/s2_human_review_packets must exist.")
+
+    total_rows = 0
+    frames_by_category: dict[str, pd.DataFrame] = {}
+
+    for filename, spec in HUMAN_REVIEW_PACKET_SUMMARY_FILE_SPECS.items():
+        path = data_dir / filename
+        if not path.exists():
+            raise ValueError(f"{filename} must exist in s2_human_review_packets.")
+        frame = _read_csv(path)
+        if list(frame.columns) != HUMAN_REVIEW_PACKET_SUMMARY_COLUMNS:
+            raise ValueError(f"{filename} must match the required S2.7d review-packet column order.")
+        if frame.empty:
+            raise ValueError(f"{filename} must contain at least one review-packet row.")
+        if frame["review_packet_id"].astype(str).str.strip().duplicated().any():
+            raise ValueError(f"{filename} must not contain duplicate review_packet_id values.")
+        if (~frame["review_category"].astype(str).str.strip().eq(spec["review_category"])).any():
+            raise ValueError(f"{filename} must use review_category={spec['review_category']} for every row.")
+        if (~frame["target_approved_table"].astype(str).str.strip().eq(spec["target_approved_table"])).any():
+            raise ValueError(f"{filename} must target {spec['target_approved_table']} for every row.")
+        if (~frame["reviewer_decision_required"].astype(str).str.strip().str.lower().eq("true")).any():
+            raise ValueError(f"{filename} must keep reviewer_decision_required=true for every row.")
+        if (~frame["codex_may_decide"].astype(str).str.strip().str.lower().eq("false")).any():
+            raise ValueError(f"{filename} must keep codex_may_decide=false for every row.")
+        if (~frame["executable_status"].astype(str).str.strip().str.lower().eq("non_executable")).any():
+            raise ValueError(f"{filename} must keep executable_status=non_executable for every row.")
+        if (~frame["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+            raise ValueError(f"{filename} must keep thesis_usability=false for every row.")
+        if (~frame["approval_status"].astype(str).str.strip().str.lower().isin(HUMAN_REVIEW_PACKET_ALLOWED_APPROVAL_STATUSES)).any():
+            raise ValueError(f"{filename} contains invalid review-packet approval_status values.")
+        if frame["approval_status"].astype(str).str.strip().str.lower().eq("approved").any():
+            raise ValueError(f"{filename} must not mark any row approved.")
+        if frame["candidate_source_table"].astype(str).str.lower().str.contains("validation_targets_candidate_review.csv").any():
+            raise ValueError(f"{filename} must not repurpose validation targets as live review-packet candidates.")
+        outcomes = frame["possible_reviewer_outcomes"].astype(str).str.lower()
+        required_outcome_tokens = ("approve_later", "approve_only_as_sensitivity", "defer", "reject")
+        for token in required_outcome_tokens:
+            if (~outcomes.str.contains(token)).any():
+                raise ValueError(f"{filename} must enumerate reviewer outcome token {token} on every row.")
+
+        frame_text = " ".join(frame.astype(str).agg(" ".join, axis=1).str.lower())
+        if spec["review_category"] == "inventory_endpoint_policy":
+            for phrase in ("cyc50", "capacity", "operational_truth"):
+                if phrase not in frame_text:
+                    raise ValueError(f"{filename} must keep CYC50 policy review separate from capacity approval and operational truth claims.")
+        elif spec["review_category"] == "terminal_inventory_rules":
+            for phrase in ("fake_flexibility", "horizon_borrowing", "penalty"):
+                if phrase not in frame_text:
+                    raise ValueError(f"{filename} must flag fake flexibility and horizon borrowing risk explicitly.")
+        elif spec["review_category"] == "initial_inventory_rules":
+            for phrase in ("percentage_of_capacity", "absolute_quantity", "store_capacity_approval"):
+                if phrase not in frame_text:
+                    raise ValueError(f"{filename} must keep formula review separate from absolute quantity approval.")
+
+        total_rows += int(len(frame))
+        frames_by_category[spec["review_category"]] = frame
+
+    if not HUMAN_REVIEW_PACKET_DASHBOARD.exists():
+        raise ValueError("s2_first_promotion_review_dashboard.csv must exist.")
+    dashboard = _read_csv(HUMAN_REVIEW_PACKET_DASHBOARD)
+    if list(dashboard.columns) != HUMAN_REVIEW_PACKET_DASHBOARD_COLUMNS:
+        raise ValueError("s2_first_promotion_review_dashboard.csv must match the required S2.7d dashboard column order.")
+    expected_categories = {spec["review_category"] for spec in HUMAN_REVIEW_PACKET_SUMMARY_FILE_SPECS.values()}
+    actual_categories = set(dashboard["review_category"].astype(str).str.strip())
+    if actual_categories != expected_categories:
+        missing = sorted(expected_categories - actual_categories)
+        extra = sorted(actual_categories - expected_categories)
+        raise ValueError(f"s2_first_promotion_review_dashboard.csv category mismatch. missing={missing} extra={extra}")
+
+    for record in dashboard.to_dict(orient="records"):
+        category = str(record["review_category"]).strip()
+        frame = frames_by_category[category]
+        expected_candidate_count = len(frame)
+        expected_high_confidence_count = int(frame["evidence_status"].astype(str).str.strip().str.lower().str.startswith("high_").sum())
+        expected_sensitivity_required_count = int(frame["sensitivity_required"].astype(str).str.strip().str.lower().eq("true").sum())
+        expected_blocked_or_defer_count = int(frame["approval_status"].astype(str).str.strip().str.lower().isin({"blocked", "defer_pending_review"}).sum())
+        expected_missing_source_count = int(frame["evidence_status"].astype(str).str.strip().str.lower().str.contains("missing_reviewed_evidence").sum())
+        expected_missing_unit_or_basis_count = int(frame["unit_or_basis"].astype(str).str.strip().str.lower().str.contains("unresolved").sum())
+        expected_human_decision_needed_count = int(frame["reviewer_decision_required"].astype(str).str.strip().str.lower().eq("true").sum())
+        numeric_expectations = {
+            "candidate_count": expected_candidate_count,
+            "high_confidence_candidate_count": expected_high_confidence_count,
+            "sensitivity_required_count": expected_sensitivity_required_count,
+            "blocked_or_defer_count": expected_blocked_or_defer_count,
+            "missing_source_count": expected_missing_source_count,
+            "missing_unit_or_basis_count": expected_missing_unit_or_basis_count,
+            "human_decision_needed_count": expected_human_decision_needed_count,
+        }
+        for field_name, expected_value in numeric_expectations.items():
+            if int(record[field_name]) != expected_value:
+                raise ValueError(f"s2_first_promotion_review_dashboard.csv mismatch for {category} field {field_name}: expected {expected_value} found {record[field_name]}")
+        for field_name in ("recommended_review_priority", "main_blocker", "next_human_action"):
+            if str(record[field_name]).strip() == "":
+                raise ValueError(f"s2_first_promotion_review_dashboard.csv must keep {field_name} non-empty for {category}.")
+
+    for filename, phrases in HUMAN_REVIEW_PACKET_MEMO_REQUIRED_PHRASES.items():
+        path = HUMAN_REVIEW_PACKET_DOC_DIR / filename
+        if not path.exists():
+            raise ValueError(f"{filename} must exist in docs/optimisation/steel/s2_human_review_packets.")
+        text = path.read_text(encoding="utf-8").lower()
+        for phrase in phrases:
+            if phrase not in text:
+                raise ValueError(f"{filename} is missing required review-packet phrase: {phrase}")
+
+    return {
+        "human_review_packet_files_checked": int(len(HUMAN_REVIEW_PACKET_SUMMARY_FILE_SPECS)),
+        "human_review_packet_rows_checked": int(total_rows),
+        "human_review_packet_dashboard_present": True,
+        "human_review_packet_memos_present": int(len(HUMAN_REVIEW_PACKET_MEMO_REQUIRED_PHRASES)),
+    }
+
+
+def validate_s2_human_policy_bundle(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    if not HUMAN_POLICY_DECISION_BUNDLE_MEMO.exists():
+        raise ValueError("STEEL_S2_HUMAN_POLICY_DECISION_BUNDLE.md must exist.")
+    memo_text = HUMAN_POLICY_DECISION_BUNDLE_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in HUMAN_POLICY_DECISION_BUNDLE_MEMO_REQUIRED_PHRASES:
+        if phrase not in memo_text:
+            raise ValueError(f"STEEL_S2_HUMAN_POLICY_DECISION_BUNDLE.md is missing required phrase: {phrase}")
+
+    decision_bundle = review_bundle.tables["s2_human_policy_decision_bundle.csv"]
+    if list(decision_bundle.columns) != HUMAN_POLICY_DECISION_BUNDLE_COLUMNS:
+        raise ValueError("s2_human_policy_decision_bundle.csv must match the required column order.")
+    if decision_bundle["decision_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_human_policy_decision_bundle.csv must not contain duplicate decision_id values.")
+    if not HUMAN_POLICY_DECISION_BUNDLE_REQUIRED_CLUSTERS.issubset(set(decision_bundle["decision_cluster"].astype(str).str.strip())):
+        missing = sorted(HUMAN_POLICY_DECISION_BUNDLE_REQUIRED_CLUSTERS - set(decision_bundle["decision_cluster"].astype(str).str.strip()))
+        raise ValueError(f"s2_human_policy_decision_bundle.csv is missing required decision clusters: {missing}")
+    if not HUMAN_POLICY_DECISION_BUNDLE_REQUIRED_ITEMS.issubset(set(decision_bundle["decision_item"].astype(str).str.strip())):
+        missing = sorted(HUMAN_POLICY_DECISION_BUNDLE_REQUIRED_ITEMS - set(decision_bundle["decision_item"].astype(str).str.strip()))
+        raise ValueError(f"s2_human_policy_decision_bundle.csv is missing required decision items: {missing}")
+    if (~decision_bundle["approval_status"].astype(str).str.strip().str.lower().isin(HUMAN_POLICY_DECISION_BUNDLE_ALLOWED_APPROVAL_STATUSES)).any():
+        raise ValueError("s2_human_policy_decision_bundle.csv contains invalid approval_status values.")
+    if (~decision_bundle["executable_status"].astype(str).str.strip().str.lower().eq("non_executable")).any():
+        raise ValueError("s2_human_policy_decision_bundle.csv must keep executable_status=non_executable for every row.")
+    if (~decision_bundle["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_human_policy_decision_bundle.csv must keep thesis_usability=false for every row.")
+    if decision_bundle["approval_status"].astype(str).str.lower().str.contains("approved").any():
+        raise ValueError("s2_human_policy_decision_bundle.csv must not mark any row approved.")
+    if (~decision_bundle["codex_allowed_role"].astype(str).str.lower().str.contains("record")).any():
+        raise ValueError("Every human policy decision row must limit Codex to recording/applying explicit policy only.")
+    if (~decision_bundle["codex_forbidden_role"].astype(str).str.lower().str.contains("approve|promote|populate")).any():
+        raise ValueError("Every human policy decision row must explicitly forbid approval/promotion/population actions.")
+
+    forbidden_numeric_text_columns = [
+        "human_decision",
+        "modelling_interpretation",
+        "unresolved_blocker",
+        "notes",
+    ]
+    for column in forbidden_numeric_text_columns:
+        if decision_bundle[column].astype(str).str.contains(HUMAN_POLICY_NUMERIC_FORBIDDEN_PATTERN).any():
+            raise ValueError(f"s2_human_policy_decision_bundle.csv contains exact numerical executable-style values in {column}.")
+
+    decision_text = " ".join(decision_bundle.astype(str).agg(" ".join, axis=1).str.lower())
+    for required_phrase in (
+        "capacity_approval",
+        "not_main_strategic_flexibility",
+        "positive_magnitudes_with_explicit_role_fields",
+        "annual_public_values_are_validation_or_scaling_anchors_only",
+        "no_route_specific_production_target",
+    ):
+        if required_phrase not in decision_text:
+            raise ValueError(f"s2_human_policy_decision_bundle.csv must include policy phrase: {required_phrase}")
+
+    backlog = review_bundle.tables["s2_future_parameter_review_backlog.csv"]
+    if list(backlog.columns) != FUTURE_PARAMETER_REVIEW_BACKLOG_COLUMNS:
+        raise ValueError("s2_future_parameter_review_backlog.csv must match the required column order.")
+    if backlog["backlog_item_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_future_parameter_review_backlog.csv must not contain duplicate backlog_item_id values.")
+    backlog_categories = set(backlog["parameter_category"].astype(str).str.strip())
+    if not FUTURE_PARAMETER_REVIEW_BACKLOG_REQUIRED_CATEGORIES.issubset(backlog_categories):
+        missing = sorted(FUTURE_PARAMETER_REVIEW_BACKLOG_REQUIRED_CATEGORIES - backlog_categories)
+        raise ValueError(f"s2_future_parameter_review_backlog.csv is missing required backlog categories: {missing}")
+    if (~backlog["review_priority"].astype(str).str.strip().isin({"high", "medium", "low"})).any():
+        raise ValueError("s2_future_parameter_review_backlog.csv must use high/medium/low review priorities only.")
+    if (~backlog["sensitivity_likely_required"].astype(str).str.strip().str.lower().isin({"true", "false"})).any():
+        raise ValueError("s2_future_parameter_review_backlog.csv must keep sensitivity_likely_required as true/false.")
+    if backlog["parameter_category"].astype(str).str.strip().eq("store_capacity_sensitivity_ranges").sum() != 1:
+        raise ValueError("s2_future_parameter_review_backlog.csv must include exactly one store_capacity_sensitivity_ranges row.")
+    if backlog["parameter_category"].astype(str).str.strip().eq("validation_target_selection").sum() != 1:
+        raise ValueError("s2_future_parameter_review_backlog.csv must include exactly one validation_target_selection row.")
+
+    return {
+        "human_policy_bundle_memo_present": True,
+        "human_policy_decision_rows_checked": int(len(decision_bundle)),
+        "future_parameter_review_backlog_rows_checked": int(len(backlog)),
+    }
+
+
 def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
     tables = review_bundle.tables
     summary = tables["s2_review_summary.csv"]
@@ -662,7 +1737,140 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     deepsearch_f_matrix = tables["s2_deepsearch_f_assumption_sensitivity_matrix.csv"]
     configuration_scope_register = tables["s2_configuration_scope_register.csv"]
     configuration_tag_mapping = tables["s2_configuration_tag_mapping.csv"]
+    model_builder_contract = tables["s2_model_builder_interface_contract.csv"]
+    promotion_protocol = tables["s2_approved_input_promotion_protocol.csv"]
+    promotion_review_criteria = {
+        name: tables[name]
+        for name in PROMOTION_REVIEW_CRITERIA_FILE_SPECS
+    }
+    decision_template_path = review_bundle.root / PROMOTION_DECISION_TEMPLATE.name
+    decision_template = _read_csv(decision_template_path)
     topology_bundle = load_s2_topology_skeleton(review_bundle.root)
+    human_review_packet_payload = validate_s2_human_review_packets(review_bundle.root)
+    human_policy_bundle_payload = validate_s2_human_policy_bundle(review_bundle)
+
+    if not PROMOTION_PROTOCOL_MEMO.exists():
+        raise ValueError("STEEL_S2_APPROVED_INPUT_PROMOTION_PROTOCOL.md must exist.")
+    memo_text = PROMOTION_PROTOCOL_MEMO.read_text(encoding="utf-8").lower()
+    required_memo_phrases = (
+        "candidate-review",
+        "approved assumption",
+        "thesis-grade numerical input",
+        "executable model input",
+        "codex may prepare review packets but may not approve rows",
+        "explicit user/thesis-review approval is required",
+        "approval and executable status are separate gates",
+        "annual-to-hourly translation approval",
+        "deepsearch f",
+        "cyc50",
+    )
+    for phrase in required_memo_phrases:
+        if phrase not in memo_text:
+            raise ValueError(f"STEEL_S2_APPROVED_INPUT_PROMOTION_PROTOCOL.md is missing required phrase: {phrase}")
+
+    if not PROMOTION_REVIEW_CRITERIA_DIR.exists():
+        raise ValueError("s2_promotion_review_criteria folder must exist.")
+    criteria_basenames = {Path(name).name for name in promotion_review_criteria}
+    if criteria_basenames != PROMOTION_REVIEW_CRITERIA_REQUIRED_BASE_FILENAMES:
+        missing = sorted(PROMOTION_REVIEW_CRITERIA_REQUIRED_BASE_FILENAMES - criteria_basenames)
+        extra = sorted(criteria_basenames - PROMOTION_REVIEW_CRITERIA_REQUIRED_BASE_FILENAMES)
+        raise ValueError(f"s2_promotion_review_criteria file set mismatch. missing={missing} extra={extra}")
+
+    if list(decision_template.columns) != PROMOTION_DECISION_TEMPLATE_COLUMNS:
+        raise ValueError("s2_promotion_decision_template.csv does not match the required header.")
+    if len(decision_template) != 0:
+        raise ValueError("s2_promotion_decision_template.csv must remain header-only with zero data rows.")
+
+    protocol_categories = set(promotion_protocol["category"].astype(str).str.strip())
+    if not PROMOTION_PROTOCOL_REQUIRED_CATEGORIES.issubset(protocol_categories):
+        missing = sorted(PROMOTION_PROTOCOL_REQUIRED_CATEGORIES - protocol_categories)
+        raise ValueError(f"s2_approved_input_promotion_protocol.csv is missing required categories: {missing}")
+    if promotion_protocol["protocol_rule_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_approved_input_promotion_protocol.csv must not contain duplicate protocol_rule_id values.")
+    if (~promotion_protocol["executable_status"].astype(str).str.strip().str.lower().eq("non_executable")).any():
+        raise ValueError("s2_approved_input_promotion_protocol.csv must keep every row non_executable.")
+    if (~promotion_protocol["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_approved_input_promotion_protocol.csv must keep thesis_usability=false for all rows.")
+    protocol_approval_statuses = set(promotion_protocol["approval_status"].astype(str).str.strip().str.lower())
+    if not protocol_approval_statuses.issubset(PROMOTION_PROTOCOL_ALLOWED_APPROVAL_STATUSES):
+        raise ValueError("s2_approved_input_promotion_protocol.csv contains invalid approval_status values.")
+    if (~promotion_protocol["user_review_required"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("Every promotion protocol row must require explicit user/reviewer approval.")
+    if (~promotion_protocol["executable_gate_required"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("Every promotion protocol row must preserve the separate executable gate.")
+    if promotion_protocol["codex_allowed_role"].astype(str).str.lower().str.contains("approve|select_base_case|select_value|populate_approved_table", regex=True).any():
+        raise ValueError("s2_approved_input_promotion_protocol.csv must not grant Codex approval or value-selection authority.")
+    if (~promotion_protocol["codex_forbidden_role"].astype(str).str.lower().str.contains("approve|promote_without_decision|populate_approved_table", regex=True)).any():
+        raise ValueError("Every promotion protocol row must explicitly forbid Codex approval or silent promotion.")
+    if promotion_protocol["forbidden_action"].astype(str).str.lower().str.contains("make_executable_now|approve_numerical_value_now", regex=True).sum() < 2:
+        raise ValueError("Promotion protocol must explicitly forbid immediate approval and executable activation.")
+
+    for category, expected_target_table in PROMOTION_PROTOCOL_REQUIRED_TARGET_TABLES_BY_CATEGORY.items():
+        matching_rows = promotion_protocol["category"].astype(str).str.strip().eq(category)
+        if not matching_rows.any():
+            continue
+        actual_targets = set(promotion_protocol.loc[matching_rows, "target_approved_table"].astype(str).str.strip())
+        if actual_targets != {expected_target_table}:
+            raise ValueError(
+                f"s2_approved_input_promotion_protocol.csv must map {category} to {expected_target_table}. found={sorted(actual_targets)}"
+            )
+
+    validation_protocol_rows = promotion_protocol["category"].astype(str).str.strip().eq("validation_targets")
+    if validation_protocol_rows.any():
+        row_text = promotion_protocol.loc[validation_protocol_rows].astype(str).agg(" ".join, axis=1).str.lower()
+        if (~row_text.str.contains("constraint")).any():
+            raise ValueError("validation_targets promotion protocol row must explicitly block constraint use.")
+
+    annual_protocol_rows = promotion_protocol["category"].astype(str).str.strip().eq("annual_to_hourly_translation")
+    if annual_protocol_rows.any():
+        annual_text = promotion_protocol.loc[annual_protocol_rows].astype(str).agg(" ".join, axis=1).str.lower()
+        if (~annual_text.str.contains("explicit")).any() or (~annual_text.str.contains("annual")).any() or (~annual_text.str.contains("hourly")).any():
+            raise ValueError("annual_to_hourly_translation protocol row must require explicit annual-to-hourly approval.")
+
+    c1s_protocol_rows = promotion_protocol["category"].astype(str).str.strip().eq("c1s_sensitivity_overlay")
+    if c1s_protocol_rows.any():
+        c1s_text = promotion_protocol.loc[c1s_protocol_rows].astype(str).agg(" ".join, axis=1).str.lower()
+        if (~c1s_text.str.contains("overlay")).any():
+            raise ValueError("c1s_sensitivity_overlay protocol row must keep C1S as overlay-only.")
+
+    c2_protocol_rows = promotion_protocol["category"].astype(str).str.strip().eq("c2_optional_later_exogenous_hydrogen")
+    if c2_protocol_rows.any():
+        c2_text = promotion_protocol.loc[c2_protocol_rows].astype(str).agg(" ".join, axis=1).str.lower()
+        if (~c2_text.str.contains("optional later")).any() or (~c2_text.str.contains("exogenous")).any():
+            raise ValueError("c2_optional_later_exogenous_hydrogen protocol row must keep C2 optional-later and exogenous only.")
+
+    for criteria_name, criteria_frame in promotion_review_criteria.items():
+        if criteria_frame.empty:
+            raise ValueError(f"{criteria_name} must contain at least one review criterion row.")
+        if criteria_frame["criterion_id"].astype(str).str.strip().duplicated().any():
+            raise ValueError(f"{criteria_name} must not contain duplicate criterion_id values.")
+        if (~criteria_frame["reviewer_decision_required"].astype(str).str.strip().str.lower().eq("true")).any():
+            raise ValueError(f"{criteria_name} must require reviewer_decision_required=true for every row.")
+        if (~criteria_frame["codex_may_decide"].astype(str).str.strip().str.lower().eq("false")).any():
+            raise ValueError(f"{criteria_name} must keep codex_may_decide=false for every row.")
+        if (~criteria_frame["codex_may_check"].astype(str).str.strip().str.lower().eq("true")).any():
+            raise ValueError(f"{criteria_name} must keep codex_may_check=true for every row.")
+        criteria_approval_statuses = set(criteria_frame["approval_status"].astype(str).str.strip().str.lower())
+        if not criteria_approval_statuses.issubset(PROMOTION_REVIEW_CRITERIA_ALLOWED_APPROVAL_STATUSES):
+            raise ValueError(f"{criteria_name} contains invalid approval_status values.")
+
+    validation_criteria_text = promotion_review_criteria["s2_promotion_review_criteria/validation_targets_review_criteria.csv"].astype(str).agg(" ".join, axis=1).str.lower()
+    if (~validation_criteria_text.str.contains("constraint")).all():
+        raise ValueError("validation_targets_review_criteria.csv must explicitly block constraint use.")
+    production_criteria_text = promotion_review_criteria["s2_promotion_review_criteria/production_targets_review_criteria.csv"].astype(str).agg(" ".join, axis=1).str.lower()
+    if (~production_criteria_text.str.contains("target basis|target_basis", regex=True)).all():
+        raise ValueError("production_targets_review_criteria.csv must require target-basis clarity.")
+    process_bounds_criteria_text = promotion_review_criteria["s2_promotion_review_criteria/process_bounds_review_criteria.csv"].astype(str).agg(" ".join, axis=1).str.lower()
+    if (~process_bounds_criteria_text.str.contains("annual-to-hourly|annual to hourly", regex=True)).all():
+        raise ValueError("process_bounds_review_criteria.csv must require annual-to-hourly review.")
+    if (~process_bounds_criteria_text.str.contains("operating envelope")).all():
+        raise ValueError("process_bounds_review_criteria.csv must require operating-envelope review.")
+    store_capacities_criteria_text = promotion_review_criteria["s2_promotion_review_criteria/store_capacities_review_criteria.csv"].astype(str).agg(" ".join, axis=1).str.lower()
+    if (~store_capacities_criteria_text.str.contains("flexibility")).all() or (~store_capacities_criteria_text.str.contains("risk")).all():
+        raise ValueError("store_capacities_review_criteria.csv must flag flexibility-value risk.")
+    inventory_endpoint_criteria_text = promotion_review_criteria["s2_promotion_review_criteria/inventory_endpoint_policies_review_criteria.csv"].astype(str).agg(" ".join, axis=1).str.lower()
+    if (~inventory_endpoint_criteria_text.str.contains("endpoint policy")).all() or (~inventory_endpoint_criteria_text.str.contains("capacity")).all():
+        raise ValueError("inventory_endpoint_policies_review_criteria.csv must distinguish endpoint-policy logic from capacity approval.")
 
     approved_rows = 0
     for filename in REVIEW_DATA_FILES:
@@ -1020,6 +2228,114 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     if mapping_scan.str.contains(mapping_forbidden_horizon_pattern, regex=True).any():
         raise ValueError("s2_configuration_tag_mapping.csv must not introduce D-only/D+4 comparison categories.")
 
+    contract_ids = set(model_builder_contract["contract_item_id"].astype(str).str.strip())
+    if contract_ids != MODEL_BUILDER_CONTRACT_REQUIRED_IDS:
+        missing = sorted(MODEL_BUILDER_CONTRACT_REQUIRED_IDS - contract_ids)
+        extra = sorted(contract_ids - MODEL_BUILDER_CONTRACT_REQUIRED_IDS)
+        raise ValueError(f"s2_model_builder_interface_contract.csv does not match required contract rows. missing={missing} extra={extra}")
+    if model_builder_contract["contract_item_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_model_builder_interface_contract.csv must not contain duplicate contract_item_id values.")
+    if (~model_builder_contract["executable_status"].astype(str).str.strip().str.lower().eq("non_executable")).any():
+        raise ValueError("s2_model_builder_interface_contract.csv must keep every row non_executable.")
+    if (~model_builder_contract["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_model_builder_interface_contract.csv must keep thesis_usability=false for all rows.")
+    contract_approval_statuses = set(model_builder_contract["approval_status"].astype(str).str.strip().str.lower())
+    if not contract_approval_statuses.issubset(MODEL_BUILDER_CONTRACT_ALLOWED_APPROVAL_STATUSES):
+        raise ValueError("s2_model_builder_interface_contract.csv contains approval statuses outside interface_contract_only/not_approved/blocked.")
+    if model_builder_contract["allowed_status"].astype(str).str.strip().str.lower().str.contains("thesis_grade|executable|approved_model_input").any():
+        raise ValueError("s2_model_builder_interface_contract.csv must not describe thesis-grade or executable model behaviour.")
+
+    numerical_rows = set(
+        model_builder_contract.loc[
+            model_builder_contract["contract_layer"].astype(str).str.strip().eq("future_numerical_input_gate"),
+            "required_input_or_rule",
+        ].astype(str).str.strip()
+    )
+    if numerical_rows != MODEL_BUILDER_CONTRACT_REQUIRED_NUMERICAL_TABLE_ROWS:
+        missing = sorted(MODEL_BUILDER_CONTRACT_REQUIRED_NUMERICAL_TABLE_ROWS - numerical_rows)
+        extra = sorted(numerical_rows - MODEL_BUILDER_CONTRACT_REQUIRED_NUMERICAL_TABLE_ROWS)
+        raise ValueError(f"s2_model_builder_interface_contract.csv numerical gate rows do not match required inputs. missing={missing} extra={extra}")
+
+    reporting_rows = set(
+        model_builder_contract.loc[
+            model_builder_contract["contract_layer"].astype(str).str.strip().eq("reporting_contract"),
+            "required_input_or_rule",
+        ].astype(str).str.strip()
+    )
+    if reporting_rows != MODEL_BUILDER_CONTRACT_REQUIRED_REPORTING_ROWS:
+        missing = sorted(MODEL_BUILDER_CONTRACT_REQUIRED_REPORTING_ROWS - reporting_rows)
+        extra = sorted(reporting_rows - MODEL_BUILDER_CONTRACT_REQUIRED_REPORTING_ROWS)
+        raise ValueError(f"s2_model_builder_interface_contract.csv reporting rows do not match required outputs. missing={missing} extra={extra}")
+
+    refusal_rows = set(
+        model_builder_contract.loc[
+            model_builder_contract["contract_layer"].astype(str).str.strip().eq("refusal_rule"),
+            "required_input_or_rule",
+        ].astype(str).str.strip()
+    )
+    if refusal_rows != MODEL_BUILDER_CONTRACT_REQUIRED_REFUSAL_ROWS:
+        missing = sorted(MODEL_BUILDER_CONTRACT_REQUIRED_REFUSAL_ROWS - refusal_rows)
+        extra = sorted(refusal_rows - MODEL_BUILDER_CONTRACT_REQUIRED_REFUSAL_ROWS)
+        raise ValueError(f"s2_model_builder_interface_contract.csv refusal rows do not match required refusal rules. missing={missing} extra={extra}")
+
+    for row in model_builder_contract.to_dict(orient="records"):
+        config_tokens = set(_split_multi_value_field(row["applies_to_configuration"]))
+        if not config_tokens:
+            raise ValueError("s2_model_builder_interface_contract.csv must define applies_to_configuration for every row.")
+        if not config_tokens.issubset(MODEL_BUILDER_CONTRACT_ALLOWED_CONFIG_TOKENS):
+            invalid = sorted(config_tokens - MODEL_BUILDER_CONTRACT_ALLOWED_CONFIG_TOKENS)
+            raise ValueError(f"s2_model_builder_interface_contract.csv contains unsupported configuration tokens: {invalid}")
+
+    main_config_rows = model_builder_contract["required_input_or_rule"].astype(str).str.strip().isin(
+        {
+            "configuration_selection",
+            "topology_view_consumption",
+            "route_membership",
+            "process_unit_membership",
+            "carrier_membership",
+            "store_membership",
+            "arc_membership",
+            "inventory_endpoint_policy",
+            "fixed_production_target_policy",
+        }
+    )
+    for raw_value in model_builder_contract.loc[main_config_rows, "applies_to_configuration"]:
+        config_tokens = set(_split_multi_value_field(raw_value))
+        if config_tokens != MODEL_BUILDER_CONTRACT_MAIN_CONFIG_TOKENS:
+            raise ValueError("Main deterministic S2 contract rows must apply only to C0 and C1.")
+
+    c1s_rows = model_builder_contract["applies_to_configuration"].astype(str).str.strip().eq("C1S_phase1_sensitivity_variants")
+    if c1s_rows.any():
+        if (~model_builder_contract.loc[c1s_rows, "allowed_status"].astype(str).str.strip().eq("sensitivity_overlay_metadata_only")).any():
+            raise ValueError("C1S contract rows must remain sensitivity-overlay-only.")
+    c2_rows = model_builder_contract["applies_to_configuration"].astype(str).str.strip().eq("C2_exogenous_hydrogen_sensitivity_optional_later")
+    if c2_rows.any():
+        if (~model_builder_contract.loc[c2_rows, "allowed_status"].astype(str).str.strip().eq("optional_later_metadata_only")).any():
+            raise ValueError("C2 contract rows must remain optional-later-only.")
+
+    if (~model_builder_contract.loc[
+        model_builder_contract["required_input_or_rule"].astype(str).str.strip().eq("future_validation_target_table"),
+        "approval_status",
+    ].astype(str).str.strip().str.lower().eq("blocked")).any():
+        raise ValueError("future_validation_target_table must remain blocked in the interface contract.")
+    if (~model_builder_contract.loc[
+        model_builder_contract["required_input_or_rule"].astype(str).str.strip().eq("future_validation_target_table"),
+        "forbidden_status",
+    ].astype(str).str.contains("validation_target_as_constraint", case=False, regex=False)).any():
+        raise ValueError("future_validation_target_table must explicitly forbid validation-target-as-constraint use.")
+    if (~model_builder_contract.loc[
+        model_builder_contract["required_input_or_rule"].astype(str).str.strip().eq("refusal_of_annual_public_anchors_as_hourly_caps"),
+        "forbidden_status",
+    ].astype(str).str.contains("annual_public_anchor_as_hourly_cap", case=False, regex=False)).any():
+        raise ValueError("Annual public anchors must remain blocked from hourly-cap use in the interface contract.")
+
+    contract_scan = model_builder_contract.astype(str).agg(" ".join, axis=1).str.lower()
+    contract_horizon_pattern = "|".join(CONFIGURATION_SCOPE_FORBIDDEN_HORIZON_PATTERNS)
+    horizon_rows = contract_scan.str.contains(contract_horizon_pattern, regex=True)
+    allowed_horizon_rows = model_builder_contract["required_input_or_rule"].astype(str).str.strip().eq("refusal_of_D_only_D_plus_4_comparison_logic")
+    if (horizon_rows & ~allowed_horizon_rows).any():
+        raise ValueError("s2_model_builder_interface_contract.csv must not introduce D-only/D+4 scope outside the refusal row.")
+
     payload = {
         "candidate_review_files_checked": len(REVIEW_FILE_SPECS),
         "candidate_review_data_files_checked": len(REVIEW_DATA_FILES),
@@ -1039,6 +2355,12 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
         "configuration_rows_checked": int(len(configuration_scope_register)),
         "main_configuration_rows": int(main_case_mask.sum()),
         "configuration_tag_mapping_rows_checked": int(len(configuration_tag_mapping)),
+        "model_builder_contract_rows_checked": int(len(model_builder_contract)),
+        "promotion_protocol_memo_present": True,
+        "promotion_protocol_rows_checked": int(len(promotion_protocol)),
+        "promotion_review_criteria_files_checked": int(len(promotion_review_criteria)),
+        "promotion_review_criteria_rows_checked": int(sum(len(frame) for frame in promotion_review_criteria.values())),
+        "promotion_decision_template_rows": int(len(decision_template)),
         "thesis_grade_numerical_rows": int(classification["thesis_grade_numerical_eligibility"].astype(str).str.strip().str.lower().eq("true").sum()),
         "candidate_review_executable_rows": int(classification["executable_status"].astype(str).str.strip().str.lower().isin(EXECUTABLE_BANNED_VALUES).sum()),
         "later_stage_s2_executable_rows": int(
@@ -1071,6 +2393,8 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
             "topology_view_warnings": list(topology_views.warnings),
         }
     )
+    payload.update(human_review_packet_payload)
+    payload.update(human_policy_bundle_payload)
     return payload
 
 
@@ -1080,6 +2404,8 @@ def dry_run_validate_input_governance(
     schema_bundle: GovernanceTableBundle,
     mapping_bundle: GovernanceTableBundle,
     review_bundle: GovernanceTableBundle | None = None,
+    alignment_bundle: GovernanceTableBundle | None = None,
+    approved_input_bundle: GovernanceTableBundle | None = None,
 ) -> dict[str, Any]:
     payload = {
         "input_mode": config.input_governance.input_mode,
@@ -1094,4 +2420,8 @@ def dry_run_validate_input_governance(
     }
     if review_bundle is not None:
         payload.update(validate_s2_candidate_review(review_bundle))
+    if alignment_bundle is not None:
+        payload.update(validate_s2_schema_alignment(alignment_bundle))
+    if approved_input_bundle is not None:
+        payload.update(validate_s2_approved_model_input(approved_input_bundle))
     return payload
