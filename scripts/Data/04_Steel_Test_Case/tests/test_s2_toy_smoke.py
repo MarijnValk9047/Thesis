@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import inspect
 from pathlib import Path
+from shutil import copytree
 import sys
 
+import pandas as pd
 import pytest
 from pyomo.environ import Var
 import yaml
@@ -24,6 +27,8 @@ from steel.governance import (
 from steel.input_tables import load_governed_toy_tables
 from steel.model import build_model, choose_solver
 from steel.runner import run_from_config
+from steel.topology_loader import load_topology_skeleton, validate_topology_skeleton
+from steel.topology_objects import build_steel_topology, build_steel_topology_from_registry
 
 FORBIDDEN_HORIZON_PATTERN = r"(?:^|[^a-z0-9])d-only(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d_only(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d\+4(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d_plus_4(?:[^a-z0-9]|$)"
 
@@ -131,6 +136,14 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert payload["topology_store_rows_checked"] == 7
     assert payload["topology_arc_rows_checked"] == 32
     assert payload["topology_inventory_policy_rows_checked"] == 4
+    assert payload["topology_object_configuration_count"] == 2
+    assert payload["topology_object_route_count"] == 3
+    assert payload["topology_object_process_unit_count"] == 17
+    assert payload["topology_object_carrier_count"] == 11
+    assert payload["topology_object_store_count"] == 7
+    assert payload["topology_object_arc_count"] == 32
+    assert payload["topology_object_inventory_policy_count"] == 4
+    assert payload["topology_object_warnings"] == []
     assert payload["approved_rows"] == 0
     assert payload["candidate_review_total_rows"] > 0
     assert payload["thesis_grade_numerical_rows"] == 0
@@ -270,6 +283,101 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert deepsearch_f_register.loc[annual_rows, "approval_blocker"].str.lower().str.contains("hourly").all()
 
 
+def test_topology_loader_loads_current_registry():
+    topology_bundle = load_topology_skeleton(REVIEW_ROOT)
+    payload = validate_topology_skeleton(topology_bundle)
+
+    assert payload["topology_skeleton_files_checked"] == 7
+    assert payload["topology_configuration_rows_checked"] == 2
+    assert payload["topology_route_rows_checked"] == 3
+    assert payload["topology_process_unit_rows_checked"] == 17
+    assert payload["topology_carrier_rows_checked"] == 11
+    assert payload["topology_store_rows_checked"] == 7
+    assert payload["topology_arc_rows_checked"] == 32
+    assert payload["topology_inventory_policy_rows_checked"] == 4
+    assert payload["topology_loader_warnings"] == []
+
+
+def test_topology_loader_rejects_unbounded_internal_store(tmp_path: Path):
+    source_root = REVIEW_ROOT / "s2_topology_skeleton"
+    copied_root = tmp_path / "s2_topology_skeleton"
+    copytree(source_root, copied_root)
+
+    stores_path = copied_root / "stores.csv"
+    stores = pd.read_csv(stores_path, dtype=str, keep_default_na=False)
+    stores.loc[stores["store_id"].eq("c1_dri_hdri_buffer"), "bounded_store_required"] = "false"
+    stores.to_csv(stores_path, index=False)
+
+    topology_bundle = load_topology_skeleton(tmp_path)
+    with pytest.raises(ValueError, match="bounded"):
+        validate_topology_skeleton(topology_bundle)
+
+
+def test_topology_object_builder_constructs_structural_topology():
+    topology = build_steel_topology_from_registry(REVIEW_ROOT)
+
+    assert set(topology.configurations) == {
+        "C0_current_BF_BOF_reference",
+        "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
+    }
+    assert topology.summary_counts() == {
+        "configurations": 2,
+        "routes": 3,
+        "process_units": 17,
+        "carriers": 11,
+        "stores": 7,
+        "arcs": 32,
+        "inventory_policies": 4,
+    }
+
+    assert len(topology.list_routes("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF")) == 2
+    assert topology.list_process_units("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "C1_ROUTE_NG_DRP_EAF")
+    assert topology.list_stores("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "C1_ROUTE_NG_DRP_EAF")
+    assert topology.list_arcs("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "C1_ROUTE_NG_DRP_EAF")
+    assert topology.list_carriers_in_scope()
+    assert topology.source_like_nodes("C0_current_BF_BOF_reference")
+    assert topology.sink_like_nodes("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF")
+
+    for collection in (
+        topology.configurations.values(),
+        topology.routes.values(),
+        topology.process_units.values(),
+        topology.carriers.values(),
+        topology.stores.values(),
+        topology.arcs.values(),
+        topology.inventory_policies.values(),
+    ):
+        for item in collection:
+            assert item.executable_status == "non_executable"
+            assert item.thesis_usability is False
+            assert item.approval_status in {"structural_candidate", "scope_freeze_only", "not_approved", "blocked"}
+
+
+def test_topology_object_builder_keeps_structural_surface_only():
+    topology_bundle = load_topology_skeleton(REVIEW_ROOT)
+    topology = build_steel_topology(topology_bundle, validate=True)
+    module_source = inspect.getsource(sys.modules["steel.topology_objects"]).lower()
+
+    assert "pyomo" not in module_source
+    banned_field_tokens = {"capacity", "yield", "coefficient", "cost", "emission", "tariff", "bid_quantity", "objective_value"}
+    object_text = " ".join(
+        str(value).lower()
+        for collection in (
+            topology.configurations.values(),
+            topology.routes.values(),
+            topology.process_units.values(),
+            topology.carriers.values(),
+            topology.stores.values(),
+            topology.arcs.values(),
+            topology.inventory_policies.values(),
+        )
+        for item in collection
+        for value in item.__dict__.values()
+    )
+    assert not any(token in object_text for token in ("phase 2", "phase3", "full_hydrogen", "on_site_electrolysis", "mfrr", "cvar"))
+    assert not any(token in module_source for token in banned_field_tokens)
+
+
 def test_candidate_review_mode_is_non_thesis_usable():
     config = load_config(CANDIDATE_REVIEW_CONFIG_PATH)
     schema_bundle = load_s2_schema(SCHEMA_ROOT)
@@ -302,6 +410,14 @@ def test_candidate_review_mode_is_non_thesis_usable():
     assert payload["topology_store_rows_checked"] == 7
     assert payload["topology_arc_rows_checked"] == 32
     assert payload["topology_inventory_policy_rows_checked"] == 4
+    assert payload["topology_object_configuration_count"] == 2
+    assert payload["topology_object_route_count"] == 3
+    assert payload["topology_object_process_unit_count"] == 17
+    assert payload["topology_object_carrier_count"] == 11
+    assert payload["topology_object_store_count"] == 7
+    assert payload["topology_object_arc_count"] == 32
+    assert payload["topology_object_inventory_policy_count"] == 4
+    assert payload["topology_object_warnings"] == []
     assert payload["thesis_grade_numerical_rows"] == 0
     assert payload["candidate_review_executable_rows"] == 0
 

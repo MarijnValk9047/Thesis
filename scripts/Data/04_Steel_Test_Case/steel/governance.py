@@ -7,6 +7,13 @@ from typing import Any
 
 import pandas as pd
 
+from .topology_loader import (
+    TopologyTableBundle,
+    load_topology_skeleton as _load_topology_skeleton_bundle,
+    validate_topology_skeleton as _validate_topology_skeleton_bundle,
+)
+from .topology_objects import SteelTopology, build_steel_topology as _build_steel_topology
+
 
 SCHEMA_FILE_SPECS: dict[str, list[str]] = {
     "process_units_schema.csv": ["table_name", "column_name", "data_type", "required", "field_role", "notes"],
@@ -617,8 +624,8 @@ def load_s2_candidate_review(review_root: str | Path) -> GovernanceTableBundle:
     return _load_bundle(review_root, REVIEW_FILE_SPECS)
 
 
-def load_s2_topology_skeleton(review_root: str | Path) -> GovernanceTableBundle:
-    return _load_bundle(Path(review_root).resolve() / TOPOLOGY_SKELETON_DIRNAME, TOPOLOGY_SKELETON_FILE_SPECS)
+def load_s2_topology_skeleton(review_root: str | Path) -> TopologyTableBundle:
+    return _load_topology_skeleton_bundle(review_root)
 
 
 def _count_status(frame: pd.DataFrame, status_name: str) -> int:
@@ -631,146 +638,12 @@ def _split_multi_value_field(raw_value: str) -> list[str]:
     return [token.strip() for token in str(raw_value).split(";") if token.strip()]
 
 
-def validate_s2_topology_skeleton(topology_bundle: GovernanceTableBundle) -> dict[str, Any]:
-    tables = topology_bundle.tables
-    configurations = tables["configurations.csv"]
-    routes = tables["routes.csv"]
-    process_units = tables["process_units.csv"]
-    carriers = tables["carriers.csv"]
-    stores = tables["stores.csv"]
-    topology_arcs = tables["topology_arcs.csv"]
-    inventory_policy = tables["inventory_policy.csv"]
+def validate_s2_topology_skeleton(topology_bundle: TopologyTableBundle) -> dict[str, Any]:
+    return _validate_topology_skeleton_bundle(topology_bundle)
 
-    for filename, frame in tables.items():
-        lowered_columns = {column.lower() for column in frame.columns}
-        forbidden_column_pattern = "|".join(TOPOLOGY_FORBIDDEN_COLUMN_PATTERNS)
-        if any(re.search(forbidden_column_pattern, column) for column in lowered_columns):
-            raise ValueError(f"{filename} contains forbidden column names for numerical or later-stage content.")
-        if (~frame["executable_status"].astype(str).str.strip().str.lower().isin(TOPOLOGY_ALLOWED_EXECUTABLE_STATUSES)).any():
-            raise ValueError(f"{filename} must keep every row non_executable.")
-        if (~frame["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
-            raise ValueError(f"{filename} must keep thesis_usability=false for every row.")
-        if (~frame["approval_status"].astype(str).str.strip().str.lower().isin(TOPOLOGY_ALLOWED_APPROVAL_STATUSES)).any():
-            raise ValueError(f"{filename} contains approval_status values outside the allowed structural candidate set.")
-        if (~frame["numerical_status"].astype(str).str.strip().str.lower().isin(TOPOLOGY_ALLOWED_NUMERICAL_STATUSES)).any():
-            raise ValueError(f"{filename} contains numerical_status values outside the allowed non-executable set.")
 
-        scan = frame.astype(str).agg(" ".join, axis=1).str.lower()
-        horizon_pattern = "|".join(CONFIGURATION_SCOPE_FORBIDDEN_HORIZON_PATTERNS)
-        if scan.str.contains(horizon_pattern, regex=True).any():
-            raise ValueError(f"{filename} must not introduce D-only/D+4 comparison categories.")
-
-    configuration_ids = set(configurations["configuration_id"].astype(str).str.strip())
-    if configuration_ids != TOPOLOGY_REQUIRED_CONFIGURATION_IDS:
-        missing = sorted(TOPOLOGY_REQUIRED_CONFIGURATION_IDS - configuration_ids)
-        extra = sorted(configuration_ids - TOPOLOGY_REQUIRED_CONFIGURATION_IDS)
-        raise ValueError(f"configurations.csv must contain only C0 and C1. missing={missing} extra={extra}")
-    if (~configurations["main_case_flag"].astype(str).str.strip().str.lower().eq("true")).any():
-        raise ValueError("configurations.csv must mark C0 and C1 as the only main physical configurations.")
-    if configurations["sensitivity_only_flag"].astype(str).str.strip().str.lower().eq("true").any():
-        raise ValueError("configurations.csv must not implement C1S as a topology branch.")
-    if configurations["optional_later_flag"].astype(str).str.strip().str.lower().eq("true").any():
-        raise ValueError("configurations.csv must not implement C2 as a topology branch.")
-
-    route_pairs = {
-        (str(row["configuration_id"]).strip(), str(row["route_id"]).strip())
-        for row in routes.to_dict(orient="records")
-    }
-    if route_pairs != TOPOLOGY_REQUIRED_ROUTE_ROWS:
-        missing = sorted(TOPOLOGY_REQUIRED_ROUTE_ROWS - route_pairs)
-        extra = sorted(route_pairs - TOPOLOGY_REQUIRED_ROUTE_ROWS)
-        raise ValueError(f"routes.csv must contain only the frozen C0/C1 route rows. missing={missing} extra={extra}")
-    if (~routes["included_in_main_case"].astype(str).str.strip().str.lower().eq("true")).any():
-        raise ValueError("routes.csv must mark the frozen C0/C1 routes as included in the main structural set.")
-
-    forbidden_scope_pattern = "|".join(TOPOLOGY_FORBIDDEN_SCOPE_PATTERNS)
-    forbidden_stage_pattern = "|".join(TOPOLOGY_FORBIDDEN_STAGE_PATTERNS)
-    if routes[["route_id", "route_name", "notes"]].astype(str).agg(" ".join, axis=1).str.lower().str.contains(forbidden_scope_pattern, regex=True).any():
-        raise ValueError("routes.csv contains blocked pathway or technology scope.")
-    if routes[["route_id", "route_name", "notes"]].astype(str).agg(" ".join, axis=1).str.lower().str.contains(forbidden_stage_pattern, regex=True).any():
-        raise ValueError("routes.csv contains later-stage scope that does not belong in S2 topology.")
-
-    valid_route_ids = set(routes["route_id"].astype(str).str.strip())
-    for filename, frame, route_field in (
-        ("process_units.csv", process_units, "route_id"),
-        ("stores.csv", stores, "route_id"),
-        ("topology_arcs.csv", topology_arcs, "route_id"),
-    ):
-        for raw_value in frame[route_field]:
-            route_tokens = _split_multi_value_field(raw_value)
-            if not set(route_tokens).issubset(valid_route_ids):
-                raise ValueError(f"{filename} references route_id values outside the frozen route set: {raw_value}")
-
-    if (~process_units["configuration_id"].astype(str).str.strip().isin(TOPOLOGY_REQUIRED_CONFIGURATION_IDS)).any():
-        raise ValueError("process_units.csv references configurations outside C0/C1.")
-    if (~process_units["included_in_s2"].astype(str).str.strip().str.lower().eq("true")).any():
-        raise ValueError("process_units.csv must keep every listed process unit in S2 structural scope.")
-    if process_units["process_unit_name"].astype(str).str.lower().str.contains(forbidden_scope_pattern, regex=True).any():
-        raise ValueError("process_units.csv contains blocked pathway names.")
-    if process_units["notes"].astype(str).str.lower().str.contains(forbidden_stage_pattern, regex=True).any():
-        raise ValueError("process_units.csv contains later-stage scope in notes.")
-
-    if (~carriers["s2_in_scope"].astype(str).str.strip().str.lower().eq("true")).any():
-        raise ValueError("carriers.csv must keep every listed carrier in S2 structural scope.")
-    if carriers["material_or_energy"].astype(str).str.strip().str.lower().ne("material").any():
-        raise ValueError("carriers.csv must stay material-only for the S2 topology registry.")
-    carrier_ids = set(carriers["carrier_id"].astype(str).str.strip())
-    if not TOPOLOGY_REQUIRED_EXTERNAL_BOUNDARY_CARRIERS.issubset(carrier_ids):
-        missing = sorted(TOPOLOGY_REQUIRED_EXTERNAL_BOUNDARY_CARRIERS - carrier_ids)
-        raise ValueError(f"carriers.csv is missing required external supply boundary carriers: {missing}")
-    boundary_rows = carriers["carrier_id"].astype(str).str.strip().isin(TOPOLOGY_REQUIRED_EXTERNAL_BOUNDARY_CARRIERS)
-    if (~carriers.loc[boundary_rows, "external_supply_flag"].astype(str).str.strip().str.lower().eq("true")).any():
-        raise ValueError("External raw-material boundary carriers must be marked external_supply_flag=true.")
-    if (~carriers.loc[boundary_rows, "internal_carrier_flag"].astype(str).str.strip().str.lower().eq("false")).any():
-        raise ValueError("External raw-material boundary carriers must not be marked as internal carriers.")
-
-    if (~stores["configuration_id"].astype(str).str.strip().isin(TOPOLOGY_REQUIRED_CONFIGURATION_IDS)).any():
-        raise ValueError("stores.csv references configurations outside C0/C1.")
-    if (~stores["carrier_id"].astype(str).str.strip().isin(carrier_ids)).any():
-        raise ValueError("stores.csv references carriers outside carriers.csv.")
-    if (~stores["bounded_store_required"].astype(str).str.strip().str.lower().eq("true")).any():
-        raise ValueError("stores.csv must keep every internal store structurally bounded.")
-    if stores["store_name"].astype(str).str.lower().str.contains(r"coke|sinter|pellet", regex=True).any():
-        raise ValueError("stores.csv must not create coke, sinter, or pellet internal buffers in the main topology registry.")
-    if stores["notes"].astype(str).str.lower().str.contains("unbounded", regex=False).any():
-        raise ValueError("stores.csv must not describe any internal store as unbounded.")
-
-    process_unit_ids = set(process_units["process_unit_id"].astype(str).str.strip())
-    store_ids = set(stores["store_id"].astype(str).str.strip())
-    valid_nodes = process_unit_ids | store_ids
-    if (~topology_arcs["configuration_id"].astype(str).str.strip().isin(TOPOLOGY_REQUIRED_CONFIGURATION_IDS)).any():
-        raise ValueError("topology_arcs.csv references configurations outside C0/C1.")
-    if (~topology_arcs["carrier_id"].astype(str).str.strip().isin(carrier_ids)).any():
-        raise ValueError("topology_arcs.csv references carriers outside carriers.csv.")
-    if (~topology_arcs["from_node"].astype(str).str.strip().isin(valid_nodes)).any():
-        raise ValueError("topology_arcs.csv contains from_node values outside process_units.csv and stores.csv.")
-    if (~topology_arcs["to_node"].astype(str).str.strip().isin(valid_nodes)).any():
-        raise ValueError("topology_arcs.csv contains to_node values outside process_units.csv and stores.csv.")
-    if topology_arcs.astype(str).agg(" ".join, axis=1).str.lower().str.contains(forbidden_scope_pattern, regex=True).any():
-        raise ValueError("topology_arcs.csv contains blocked pathway scope.")
-    if topology_arcs.astype(str).agg(" ".join, axis=1).str.lower().str.contains(forbidden_stage_pattern, regex=True).any():
-        raise ValueError("topology_arcs.csv contains later-stage scope.")
-
-    if inventory_policy["policy_id"].astype(str).str.contains("CYC50", case=False, regex=False).sum() == 0:
-        raise ValueError("inventory_policy.csv must include at least one CYC50 policy candidate row.")
-    cyc50_rows = inventory_policy["endpoint_policy"].astype(str).str.contains("CYC50", case=False, regex=False)
-    if not cyc50_rows.any():
-        raise ValueError("inventory_policy.csv must record CYC50 as a policy candidate.")
-    if inventory_policy.loc[cyc50_rows, "numerical_status"].astype(str).str.strip().str.lower().ne("no_numerical_value").any():
-        raise ValueError("CYC50 policy rows must remain non-numerical structural candidates.")
-    if inventory_policy.loc[cyc50_rows, "executable_status"].astype(str).str.strip().str.lower().ne("non_executable").any():
-        raise ValueError("CYC50 policy rows must remain non_executable.")
-
-    return {
-        "topology_skeleton_files_checked": len(TOPOLOGY_SKELETON_FILE_SPECS),
-        "topology_configuration_rows_checked": int(len(configurations)),
-        "topology_route_rows_checked": int(len(routes)),
-        "topology_process_unit_rows_checked": int(len(process_units)),
-        "topology_carrier_rows_checked": int(len(carriers)),
-        "topology_store_rows_checked": int(len(stores)),
-        "topology_arc_rows_checked": int(len(topology_arcs)),
-        "topology_inventory_policy_rows_checked": int(len(inventory_policy)),
-    }
+def build_s2_topology_objects(topology_bundle: TopologyTableBundle) -> SteelTopology:
+    return _build_steel_topology(topology_bundle, validate=True)
 
 
 def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
@@ -1171,6 +1044,20 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
         ),
     }
     payload.update(validate_s2_topology_skeleton(topology_bundle))
+    topology_objects = build_s2_topology_objects(topology_bundle)
+    topology_object_counts = topology_objects.summary_counts()
+    payload.update(
+        {
+            "topology_object_configuration_count": topology_object_counts["configurations"],
+            "topology_object_route_count": topology_object_counts["routes"],
+            "topology_object_process_unit_count": topology_object_counts["process_units"],
+            "topology_object_carrier_count": topology_object_counts["carriers"],
+            "topology_object_store_count": topology_object_counts["stores"],
+            "topology_object_arc_count": topology_object_counts["arcs"],
+            "topology_object_inventory_policy_count": topology_object_counts["inventory_policies"],
+            "topology_object_warnings": list(topology_objects.warnings),
+        }
+    )
     return payload
 
 

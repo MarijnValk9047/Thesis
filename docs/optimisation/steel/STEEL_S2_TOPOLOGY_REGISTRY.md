@@ -137,6 +137,62 @@ This registry prepares later `S2.6c` and `S2.7` work by giving the steel workstr
 
 That is enough to support future structural parsing, structural validation, and later non-executable topology-building logic without silently promoting numerical assumptions.
 
+## Topology Loader And Parser
+
+`S2.6c` adds a small governed loader and parser under:
+
+- `scripts/Data/04_Steel_Test_Case/steel/topology_loader.py`
+
+It reads the seven topology-skeleton CSV files and validates:
+
+- required columns and table presence;
+- frozen `C0` and `C1` configuration scope;
+- route, process-unit, store, carrier, and arc reference consistency;
+- bounded internal-store structure;
+- external raw-material boundaries staying external;
+- `CYC50` remaining a non-executable policy candidate;
+- absence of executable, thesis-usable, approved, numerical, or later-stage market/risk content.
+
+The loader deliberately refuses to:
+
+- create a Pyomo model;
+- create capacities, coefficients, costs, emissions factors, or objective terms;
+- approve numerical inputs;
+- convert candidate-review topology into executable model parameters.
+
+Its role is narrower: it gives `S2.6d` and later `S2.7` work a checked structural input surface before any deterministic steel LP builder is allowed.
+
+## In-Memory Topology Object Layer
+
+`S2.6d` adds a structural-only object layer under:
+
+- `scripts/Data/04_Steel_Test_Case/steel/topology_objects.py`
+
+This sits one step above the CSV registry and the loader:
+
+- the CSV registry is the governed tabular source;
+- the loader validates raw table consistency;
+- the object layer converts the already-validated rows into lightweight Python objects for `C0` and `C1` only.
+
+The object layer exposes compact structural helpers such as:
+
+- get configuration by ID;
+- list routes by configuration;
+- list process units, stores, and arcs by configuration or route;
+- list carriers in scope;
+- identify source-like and sink-like nodes from the arc structure;
+- summarize topology counts.
+
+It is still structural only. It does not:
+
+- create a Pyomo model;
+- create solver inputs;
+- expose optimisation-ready capacities, coefficients, costs, or market parameters;
+- approve numerical inputs;
+- turn `C1S` or `C2` into implementation branches.
+
+Its role is to prepare `S2.6e` and later `S2.7` work with a small in-memory topology surface that stays inside the same governance boundary as the registry and loader.
+
 ## What Is Explicitly Not Included
 
 The registry excludes:
