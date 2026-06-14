@@ -33,6 +33,7 @@ Write:
 - why the steel model is Tata-inspired rather than a digital twin;
 - why candidate evidence and approved structure must be separated;
 - what Waves `A` through `E` established;
+- why the thesis freezes a small configuration set before coding;
 - why no approved numerical model-input table exists yet.
 
 ### After `S2`
@@ -113,6 +114,7 @@ Write:
 ### `S2`
 
 - configuration and route table;
+- configuration-scope disclosure table showing `C0`, `C1`, `C1S`, and optional later `C2`;
 - balance-validation table;
 - material-flow diagram;
 - inventory trajectory figure;
@@ -209,6 +211,7 @@ Explain:
 Explain:
 
 - which policy choices were frozen;
+- which configuration choices were frozen;
 - which forecast or scenario inputs changed;
 - which physical structure stayed constant;
 - why this is necessary for valid forecast-quality comparisons.

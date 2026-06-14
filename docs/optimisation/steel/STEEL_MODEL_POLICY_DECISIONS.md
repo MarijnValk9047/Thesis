@@ -109,6 +109,25 @@ The steel model sequence is:
 
 `mFRR` before 15-minute or `D_plus_4` is treated as a market-scope extension, not as a forecast-granularity test.
 
+## Configuration Policy
+
+The steel configuration set is intentionally small and is frozen by `STEEL_CONFIGURATION_SCOPE_FREEZE.md`.
+
+The allowed physical configuration roles are:
+
+- `C0_current_BF_BOF_reference`: current-route reference and contrast case;
+- `C1_phase1_hybrid_BF_BOF_NG_DRP_EAF`: main thesis steel configuration;
+- `C1S_phase1_sensitivity_variants`: sensitivity-only variants inside `C1`;
+- `C2_exogenous_hydrogen_sensitivity_optional_later`: optional later exogenous-hydrogen sensitivity only.
+
+The following are not allowed in the main `S2` to `S9` implementation path unless a methodological change is declared explicitly:
+
+- Phase 2 or Phase 3 transition configurations as peer thesis cases;
+- full-hydrogen steel plant as a main case;
+- on-site electrolysis;
+- endogenous hydrogen production optimisation in the steel model;
+- technology-pathway comparison as the thesis objective.
+
 ## What Is Explicitly Not Allowed In The Base Case
 
 The following are not allowed in the base case:
@@ -119,6 +138,8 @@ The following are not allowed in the base case:
 - average MW demand as network capacity;
 - Tata-specific tariff or contract assumptions inferred from public proxy sheets;
 - hydrogen or CCS treated as always available by default;
+- Phase 2 or Phase 3 transition topology as a default steel case;
+- full-hydrogen or on-site-electrolyser steel topology as a main case;
 - day-ahead bidding before deterministic physical and economic layers are stable;
 - stochastic DA, CVaR, `mFRR`, 15-minute, or `D_plus_4` implementation in the current governance stage.
 

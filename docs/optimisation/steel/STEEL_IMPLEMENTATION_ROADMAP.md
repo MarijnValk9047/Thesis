@@ -19,6 +19,16 @@ This roadmap is intentionally restrictive. It exists to stop future chats from j
 
 This roadmap now follows the frozen `S1` through `S9` sequence in `STEEL_IMPLEMENTATION_FREEZE_V1.md`.
 
+The physical configuration path is frozen separately in `STEEL_CONFIGURATION_SCOPE_FREEZE.md`.
+
+Future implementation should therefore treat:
+
+- `C0_current_BF_BOF_reference` and `C1_phase1_hybrid_BF_BOF_NG_DRP_EAF` as the only main physical configurations;
+- `C1S_phase1_sensitivity_variants` as sensitivity work inside `C1`;
+- `C2_exogenous_hydrogen_sensitivity_optional_later` as optional later exogenous-hydrogen sensitivity only.
+
+Do not expand the main roadmap into Phase 2, Phase 3, full-hydrogen, or on-site-electrolyser steel cases unless the methodology is reopened explicitly.
+
 ### S1 Data, Source-Card, And Register Setup
 
 **Goal**
@@ -68,6 +78,7 @@ Build the deterministic hourly metallic material-flow LP without market complexi
 - topology-aware LP;
 - mass-balance tests;
 - small deterministic smoke cases.
+- deterministic configuration coverage for `C0` and `C1` before any sensitivity expansion.
 
 **Validation Checks**
 
@@ -79,6 +90,7 @@ Build the deterministic hourly metallic material-flow LP without market complexi
 **Stop/Go Criteria**
 
 - do not add bidding or stochastic logic until balances close and outputs are interpretable.
+- do not multiply pathway configurations beyond `C0` and `C1` during the first steel implementation path.
 
 **Risks**
 

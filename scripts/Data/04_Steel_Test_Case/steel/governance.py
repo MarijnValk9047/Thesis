@@ -154,6 +154,27 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "approval_blocker",
         "notes",
     ],
+    "s2_configuration_scope_register.csv": [
+        "configuration_id",
+        "configuration_name",
+        "role",
+        "implementation_status",
+        "thesis_role",
+        "stage_relevance",
+        "topology_scope",
+        "included_routes",
+        "excluded_routes_or_assets",
+        "hydrogen_treatment",
+        "flexibility_sources",
+        "sensitivity_dimensions_allowed",
+        "main_case_flag",
+        "sensitivity_only_flag",
+        "optional_later_flag",
+        "executable_status",
+        "thesis_usability",
+        "approval_status",
+        "notes",
+    ],
     "s2_promotion_checklist.csv": [
         "input_category",
         "target_schema_table",
@@ -264,6 +285,40 @@ PACKET_INDEX_REQUIRED_CATEGORIES = {
     "initial_inventories",
     "terminal_inventory_rules",
 }
+CONFIGURATION_SCOPE_REQUIRED_IDS = {
+    "C0_current_BF_BOF_reference",
+    "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
+    "C1S_phase1_sensitivity_variants",
+    "C2_exogenous_hydrogen_sensitivity_optional_later",
+}
+CONFIGURATION_SCOPE_MAIN_IDS = {
+    "C0_current_BF_BOF_reference",
+    "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
+}
+CONFIGURATION_SCOPE_SENSITIVITY_ONLY_IDS = {
+    "C1S_phase1_sensitivity_variants",
+    "C2_exogenous_hydrogen_sensitivity_optional_later",
+}
+CONFIGURATION_SCOPE_OPTIONAL_LATER_ID = "C2_exogenous_hydrogen_sensitivity_optional_later"
+CONFIGURATION_SCOPE_ALLOWED_EXECUTABLE_STATUSES = {"non_executable", "not_implemented"}
+CONFIGURATION_SCOPE_ALLOWED_APPROVAL_STATUSES = {"not_approved", "scope_freeze_only"}
+CONFIGURATION_SCOPE_BLOCKED_MAIN_PATTERNS = (
+    "phase 2",
+    "phase2",
+    "phase_2",
+    "phase 3",
+    "phase3",
+    "phase_3",
+    "full hydrogen",
+    "full_hydrogen",
+    "on-site electrolysis",
+    "on_site_electrolysis",
+    "on-site electrolyser",
+    "on_site_electrolyser",
+    "on-site electrolyzer",
+    "on_site_electrolyzer",
+)
+CONFIGURATION_SCOPE_FORBIDDEN_HORIZON_PATTERNS = (r"d-only", r"d_only", r"d\+4", r"d_plus_4")
 DEEPSEARCH_F_REQUIRED_SOURCE_IDS = {f"F{index:02d}" for index in range(1, 21)}
 DEEPSEARCH_F_ALLOWED_EXECUTABLE_STATUSES = {"not_approved", "not_executable"}
 DEEPSEARCH_F_ALLOWED_RECOMMENDED_STATUSES = {
@@ -361,6 +416,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     deepsearch_f_source_index = tables["s2_deepsearch_f_source_index.csv"]
     deepsearch_f_register = tables["s2_deepsearch_f_candidate_assumption_register.csv"]
     deepsearch_f_matrix = tables["s2_deepsearch_f_assumption_sensitivity_matrix.csv"]
+    configuration_scope_register = tables["s2_configuration_scope_register.csv"]
 
     approved_rows = 0
     for filename in REVIEW_DATA_FILES:
@@ -486,7 +542,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
         if bad_numeric.any():
             raise ValueError("Structural approval language cannot imply approved numerical status.")
     later_stage_mask = classification["category"].astype(str).str.lower().str.contains(
-        "wag|internal_energy|emissions|ets|tariff|da|market|mfrr|cvar|revenue|15_minute|d_plus_4",
+        "wag|internal_energy|emissions|ets|tariff|da|market|stochastic|mfrr|cvar|product_revenue|revenue|order_book|deadline|15_minute|d_plus_4",
         regex=True,
     )
     if later_stage_mask.any():
@@ -595,6 +651,65 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     if matrix_scan.str.contains(r"d\+4|d_plus_4|d_only", regex=True).any():
         raise ValueError("Deepsearch F assumption sensitivity matrix must not introduce D-only/D+4 comparison categories.")
 
+    configuration_ids = set(configuration_scope_register["configuration_id"].astype(str).str.strip())
+    if configuration_ids != CONFIGURATION_SCOPE_REQUIRED_IDS:
+        missing = sorted(CONFIGURATION_SCOPE_REQUIRED_IDS - configuration_ids)
+        extra = sorted(configuration_ids - CONFIGURATION_SCOPE_REQUIRED_IDS)
+        raise ValueError(f"s2_configuration_scope_register.csv does not match the frozen configuration set. missing={missing} extra={extra}")
+
+    configuration_scope_register = configuration_scope_register.set_index("configuration_id", drop=False)
+    main_case_mask = configuration_scope_register["main_case_flag"].astype(str).str.strip().str.lower().eq("true")
+    main_case_ids = set(configuration_scope_register.loc[main_case_mask, "configuration_id"].astype(str).str.strip())
+    if main_case_ids != CONFIGURATION_SCOPE_MAIN_IDS:
+        raise ValueError("s2_configuration_scope_register.csv must keep C0 and C1 as the only main physical configurations.")
+
+    sensitivity_only_mask = configuration_scope_register["sensitivity_only_flag"].astype(str).str.strip().str.lower().eq("true")
+    sensitivity_only_ids = set(configuration_scope_register.loc[sensitivity_only_mask, "configuration_id"].astype(str).str.strip())
+    if not CONFIGURATION_SCOPE_SENSITIVITY_ONLY_IDS.issubset(sensitivity_only_ids):
+        raise ValueError("s2_configuration_scope_register.csv must keep C1S and C2 marked sensitivity-only.")
+    if configuration_scope_register.loc["C0_current_BF_BOF_reference", "sensitivity_only_flag"].strip().lower() != "false":
+        raise ValueError("C0 must not be marked sensitivity-only.")
+    if configuration_scope_register.loc["C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "sensitivity_only_flag"].strip().lower() != "false":
+        raise ValueError("C1 must not be marked sensitivity-only.")
+    if configuration_scope_register.loc["C1S_phase1_sensitivity_variants", "main_case_flag"].strip().lower() != "false":
+        raise ValueError("C1S must not be marked as a main physical configuration.")
+    if configuration_scope_register.loc["C2_exogenous_hydrogen_sensitivity_optional_later", "main_case_flag"].strip().lower() != "false":
+        raise ValueError("C2 must not be marked as a main physical configuration.")
+
+    optional_later_mask = configuration_scope_register["optional_later_flag"].astype(str).str.strip().str.lower().eq("true")
+    optional_later_ids = set(configuration_scope_register.loc[optional_later_mask, "configuration_id"].astype(str).str.strip())
+    if optional_later_ids != {CONFIGURATION_SCOPE_OPTIONAL_LATER_ID}:
+        raise ValueError("s2_configuration_scope_register.csv must keep C2 as the only optional-later configuration.")
+
+    executable_statuses = set(configuration_scope_register["executable_status"].astype(str).str.strip().str.lower())
+    if not executable_statuses.issubset(CONFIGURATION_SCOPE_ALLOWED_EXECUTABLE_STATUSES):
+        raise ValueError("s2_configuration_scope_register.csv contains executable statuses outside non_executable/not_implemented.")
+    if (~configuration_scope_register["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_configuration_scope_register.csv must keep thesis_usability=false for all candidate-review rows.")
+    approval_statuses = set(configuration_scope_register["approval_status"].astype(str).str.strip().str.lower())
+    if not approval_statuses.issubset(CONFIGURATION_SCOPE_ALLOWED_APPROVAL_STATUSES):
+        raise ValueError("s2_configuration_scope_register.csv contains approval statuses outside not_approved/scope_freeze_only.")
+
+    c2_hydrogen_treatment = str(configuration_scope_register.loc["C2_exogenous_hydrogen_sensitivity_optional_later", "hydrogen_treatment"]).strip().lower()
+    if "exogenous" not in c2_hydrogen_treatment or "no_on_site_electrolysis" not in c2_hydrogen_treatment:
+        raise ValueError("C2 must remain an exogenous-hydrogen sensitivity with no on-site electrolysis.")
+    c1_hydrogen_treatment = str(configuration_scope_register.loc["C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "hydrogen_treatment"]).strip().lower()
+    if "no_endogenous_production" not in c1_hydrogen_treatment:
+        raise ValueError("C1 must not imply endogenous hydrogen production.")
+
+    main_scope_scan = configuration_scope_register.loc[
+        main_case_mask,
+        ["configuration_name", "role", "topology_scope", "included_routes"],
+    ].astype(str).agg(" ".join, axis=1).str.lower()
+    blocked_main_pattern = "|".join(re.escape(token) for token in CONFIGURATION_SCOPE_BLOCKED_MAIN_PATTERNS)
+    if main_scope_scan.str.contains(blocked_main_pattern, regex=True).any():
+        raise ValueError("Main configuration rows must not be defined as Phase 2/Phase 3/full-hydrogen/on-site-electrolysis cases.")
+
+    configuration_scope_scan = configuration_scope_register.astype(str).agg(" ".join, axis=1).str.lower()
+    forbidden_horizon_pattern = "|".join(CONFIGURATION_SCOPE_FORBIDDEN_HORIZON_PATTERNS)
+    if configuration_scope_scan.str.contains(forbidden_horizon_pattern, regex=True).any():
+        raise ValueError("s2_configuration_scope_register.csv must not introduce D-only/D+4 comparison categories.")
+
     return {
         "candidate_review_files_checked": len(REVIEW_FILE_SPECS),
         "candidate_review_data_files_checked": len(REVIEW_DATA_FILES),
@@ -611,6 +726,8 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
         "deepsearch_f_source_rows_checked": int(len(deepsearch_f_source_index)),
         "deepsearch_f_candidate_assumption_rows_checked": int(len(deepsearch_f_register)),
         "deepsearch_f_matrix_rows_checked": int(len(deepsearch_f_matrix)),
+        "configuration_rows_checked": int(len(configuration_scope_register)),
+        "main_configuration_rows": int(main_case_mask.sum()),
         "thesis_grade_numerical_rows": int(classification["thesis_grade_numerical_eligibility"].astype(str).str.strip().str.lower().eq("true").sum()),
         "candidate_review_executable_rows": int(classification["executable_status"].astype(str).str.strip().str.lower().isin(EXECUTABLE_BANNED_VALUES).sum()),
         "later_stage_s2_executable_rows": int(

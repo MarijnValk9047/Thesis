@@ -86,6 +86,25 @@ The approved structures are:
 - `Vattenfall` as interface, not dispatch plant;
 - staged later market sequence through `S4` to `S9`.
 
+## Frozen Configuration Scope
+
+The physical configuration scope is frozen by `STEEL_CONFIGURATION_SCOPE_FREEZE.md`.
+
+The implementation path must use:
+
+- `C0_current_BF_BOF_reference` as the current-route reference and contrast case;
+- `C1_phase1_hybrid_BF_BOF_NG_DRP_EAF` as the main future steel configuration;
+- `C1S_phase1_sensitivity_variants` only as sensitivity work inside `C1`;
+- `C2_exogenous_hydrogen_sensitivity_optional_later` only as optional later exogenous-hydrogen sensitivity.
+
+The following are blocked from the main `S2` to `S9` path unless a methodological change is declared explicitly:
+
+- Phase 2 and Phase 3 transition configurations;
+- full-hydrogen steel plant as a main case;
+- on-site electrolysis in the steel configuration;
+- hydrogen production optimisation inside the steel model;
+- pathway-comparison framing as the thesis objective.
+
 ## Candidate-Only Numerical Evidence
 
 The following remain candidate-only until a future approval step promotes them:
@@ -164,7 +183,8 @@ Scope:
 
 Required structure:
 
-- explicit `BF_BOF` and `DRP_EAF` route logic;
+- explicit `C0` and `C1` route logic only;
+- explicit `BF_BOF` and `DRP_EAF` route logic inside those frozen configurations;
 - bounded `DRI` and slab or `WIP` buffers;
 - terminal inventory rules;
 - material-balance and infeasibility diagnostics.

@@ -112,12 +112,14 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     review_bundle = load_s2_candidate_review(REVIEW_ROOT)
     payload = validate_s2_candidate_review(review_bundle)
     assert payload["candidate_review_data_files_checked"] == 10
-    assert payload["candidate_review_files_checked"] == 17
+    assert payload["candidate_review_files_checked"] == 18
     assert payload["promotion_packet_rows_checked"] == 5
     assert payload["unit_sign_endpoint_note_present"] is True
     assert payload["deepsearch_f_source_rows_checked"] == 20
     assert payload["deepsearch_f_candidate_assumption_rows_checked"] > 0
     assert payload["deepsearch_f_matrix_rows_checked"] > 0
+    assert payload["configuration_rows_checked"] == 4
+    assert payload["main_configuration_rows"] == 2
     assert payload["approved_rows"] == 0
     assert payload["candidate_review_total_rows"] > 0
     assert payload["thesis_grade_numerical_rows"] == 0
@@ -150,6 +152,31 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert packet_index["executable_use_status"].str.lower().eq("non_executable").all()
     assert packet_index["validation_use_status"].str.lower().eq("cannot_drive_constraints").all()
     assert packet_index["annual_to_hourly_status"].str.lower().isin({"annual_public_values_not_hourly_cap", "not_annual_value"}).all()
+
+    configuration_register = review_bundle.tables["s2_configuration_scope_register.csv"]
+    assert set(configuration_register["configuration_id"]) == {
+        "C0_current_BF_BOF_reference",
+        "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
+        "C1S_phase1_sensitivity_variants",
+        "C2_exogenous_hydrogen_sensitivity_optional_later",
+    }
+    main_rows = configuration_register["main_case_flag"].str.lower().eq("true")
+    assert set(configuration_register.loc[main_rows, "configuration_id"]) == {
+        "C0_current_BF_BOF_reference",
+        "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
+    }
+    c1s = configuration_register.loc[configuration_register["configuration_id"].eq("C1S_phase1_sensitivity_variants")].iloc[0]
+    assert c1s["sensitivity_only_flag"] == "true"
+    assert c1s["main_case_flag"] == "false"
+    c2 = configuration_register.loc[configuration_register["configuration_id"].eq("C2_exogenous_hydrogen_sensitivity_optional_later")].iloc[0]
+    assert c2["optional_later_flag"] == "true"
+    assert c2["sensitivity_only_flag"] == "true"
+    assert c2["main_case_flag"] == "false"
+    assert configuration_register["executable_status"].isin({"non_executable", "not_implemented"}).all()
+    assert configuration_register["thesis_usability"].str.lower().eq("false").all()
+    assert configuration_register["approval_status"].isin({"not_approved", "scope_freeze_only"}).all()
+    scan = configuration_register.astype(str).agg(" ".join, axis=1).str.lower()
+    assert not scan.str.contains(r"d-only|d_only|d\+4|d_plus_4", regex=True).any()
 
     deepsearch_f_source_index = review_bundle.tables["s2_deepsearch_f_source_index.csv"]
     assert set(deepsearch_f_source_index["source_id"]) == {f"F{index:02d}" for index in range(1, 21)}
@@ -188,12 +215,14 @@ def test_candidate_review_mode_is_non_thesis_usable():
     assert payload["thesis_usable"] is False
     assert payload["schema_files_checked"] >= 10
     assert payload["mapping_files_checked"] == 4
-    assert payload["candidate_review_files_checked"] == 17
+    assert payload["candidate_review_files_checked"] == 18
     assert payload["approved_rows"] == 0
     assert payload["promotion_packet_rows_checked"] == 5
     assert payload["unit_sign_endpoint_note_present"] is True
     assert payload["deepsearch_f_source_rows_checked"] == 20
     assert payload["deepsearch_f_candidate_assumption_rows_checked"] > 0
+    assert payload["configuration_rows_checked"] == 4
+    assert payload["main_configuration_rows"] == 2
     assert payload["thesis_grade_numerical_rows"] == 0
     assert payload["candidate_review_executable_rows"] == 0
 

@@ -11,11 +11,28 @@ It covers only:
 
 It does not authorise Pyomo code, approved numerical values, or later market layers by itself.
 
+## Frozen Configuration Boundary
+
+`S2` and `S3` must follow `STEEL_CONFIGURATION_SCOPE_FREEZE.md`.
+
+For the first steel implementation path this means:
+
+- only `C0_current_BF_BOF_reference` and `C1_phase1_hybrid_BF_BOF_NG_DRP_EAF` are main physical configurations;
+- `C1S_phase1_sensitivity_variants` is sensitivity-only inside `C1`;
+- `C2_exogenous_hydrogen_sensitivity_optional_later` is optional later only and may not introduce endogenous hydrogen production.
+
+The following are outside the main `S2` and `S3` path unless reopened explicitly:
+
+- Phase 2 and Phase 3 transition configurations;
+- full-hydrogen steel plant as a main case;
+- on-site electrolysis;
+- technology-pathway comparison.
+
 ## `S2` Allowed Components
 
 Allowed in `S2`:
 
-- baseline and Phase 1 route structure;
+- frozen `C0` and `C1` route structure only;
 - metallic material nodes and flows;
 - explicit `BF_BOF` and `DRP_EAF` route presence;
 - bounded `DRI` and slab or `WIP` buffers;
@@ -39,6 +56,9 @@ Forbidden in `S2`:
 - `mFRR`;
 - 15-minute or `D_plus_4`;
 - CVaR.
+- Phase 2 or Phase 3 transition-topology expansion;
+- full-hydrogen topology as a main case;
+- on-site electrolysis or endogenous hydrogen production.
 
 ## `S2` Minimum Variables And Constraints At Conceptual Level
 
