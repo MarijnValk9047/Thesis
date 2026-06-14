@@ -24,6 +24,7 @@ from steel.input_tables import load_governed_toy_tables
 from steel.model import build_model, choose_solver
 from steel.runner import run_from_config
 
+FORBIDDEN_HORIZON_PATTERN = r"(?:^|[^a-z0-9])d-only(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d_only(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d\+4(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d_plus_4(?:[^a-z0-9]|$)"
 
 CONFIG_PATH = TEST_CASE_ROOT / "configs" / "base_s2_toy_smoke.yaml"
 CANDIDATE_REVIEW_CONFIG_PATH = TEST_CASE_ROOT / "configs" / "candidate_review_toy_parse_only.yaml"
@@ -112,7 +113,7 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     review_bundle = load_s2_candidate_review(REVIEW_ROOT)
     payload = validate_s2_candidate_review(review_bundle)
     assert payload["candidate_review_data_files_checked"] == 10
-    assert payload["candidate_review_files_checked"] == 18
+    assert payload["candidate_review_files_checked"] == 19
     assert payload["promotion_packet_rows_checked"] == 5
     assert payload["unit_sign_endpoint_note_present"] is True
     assert payload["deepsearch_f_source_rows_checked"] == 20
@@ -120,6 +121,7 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert payload["deepsearch_f_matrix_rows_checked"] > 0
     assert payload["configuration_rows_checked"] == 4
     assert payload["main_configuration_rows"] == 2
+    assert payload["configuration_tag_mapping_rows_checked"] == 33
     assert payload["approved_rows"] == 0
     assert payload["candidate_review_total_rows"] > 0
     assert payload["thesis_grade_numerical_rows"] == 0
@@ -176,7 +178,30 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert configuration_register["thesis_usability"].str.lower().eq("false").all()
     assert configuration_register["approval_status"].isin({"not_approved", "scope_freeze_only"}).all()
     scan = configuration_register.astype(str).agg(" ".join, axis=1).str.lower()
-    assert not scan.str.contains(r"d-only|d_only|d\+4|d_plus_4", regex=True).any()
+    assert not scan.str.contains(FORBIDDEN_HORIZON_PATTERN, regex=True).any()
+
+    configuration_tag_mapping = review_bundle.tables["s2_configuration_tag_mapping.csv"]
+    assert set(configuration_tag_mapping["mapped_configuration_id"]).issuperset(
+        {
+            "C0_current_BF_BOF_reference",
+            "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
+            "C1S_phase1_sensitivity_variants",
+            "C2_exogenous_hydrogen_sensitivity_optional_later",
+            "postponed_or_blocked",
+        }
+    )
+    blocked_tags = {"Phase 2", "Phase 3", "full_hydrogen", "on_site_electrolysis", "hydrogen_production_optimisation", "hydrogen_storage", "SAF", "CCS"}
+    blocked_rows = configuration_tag_mapping["legacy_tag"].isin(blocked_tags)
+    assert configuration_tag_mapping.loc[blocked_rows, "mapped_configuration_id"].eq("postponed_or_blocked").all()
+    assert configuration_tag_mapping["executable_status"].eq("non_executable").all()
+    assert configuration_tag_mapping["thesis_usability"].str.lower().eq("false").all()
+    assert configuration_tag_mapping["approval_status"].isin({"not_approved", "scope_mapping_only", "blocked"}).all()
+    c1s_rows = configuration_tag_mapping["mapped_configuration_id"].eq("C1S_phase1_sensitivity_variants")
+    assert configuration_tag_mapping.loc[c1s_rows, "mapped_configuration_role"].eq("sensitivity_only_within_C1").all()
+    c2_rows = configuration_tag_mapping["mapped_configuration_id"].eq("C2_exogenous_hydrogen_sensitivity_optional_later")
+    assert configuration_tag_mapping.loc[c2_rows, "mapped_configuration_role"].eq("optional_later_sensitivity_only").all()
+    mapping_scan = configuration_tag_mapping.astype(str).agg(" ".join, axis=1).str.lower()
+    assert not mapping_scan.str.contains(FORBIDDEN_HORIZON_PATTERN, regex=True).any()
 
     deepsearch_f_source_index = review_bundle.tables["s2_deepsearch_f_source_index.csv"]
     assert set(deepsearch_f_source_index["source_id"]) == {f"F{index:02d}" for index in range(1, 21)}
@@ -215,7 +240,7 @@ def test_candidate_review_mode_is_non_thesis_usable():
     assert payload["thesis_usable"] is False
     assert payload["schema_files_checked"] >= 10
     assert payload["mapping_files_checked"] == 4
-    assert payload["candidate_review_files_checked"] == 18
+    assert payload["candidate_review_files_checked"] == 19
     assert payload["approved_rows"] == 0
     assert payload["promotion_packet_rows_checked"] == 5
     assert payload["unit_sign_endpoint_note_present"] is True
@@ -223,6 +248,7 @@ def test_candidate_review_mode_is_non_thesis_usable():
     assert payload["deepsearch_f_candidate_assumption_rows_checked"] > 0
     assert payload["configuration_rows_checked"] == 4
     assert payload["main_configuration_rows"] == 2
+    assert payload["configuration_tag_mapping_rows_checked"] == 33
     assert payload["thesis_grade_numerical_rows"] == 0
     assert payload["candidate_review_executable_rows"] == 0
 

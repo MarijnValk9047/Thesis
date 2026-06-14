@@ -175,6 +175,19 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "approval_status",
         "notes",
     ],
+    "s2_configuration_tag_mapping.csv": [
+        "legacy_tag",
+        "legacy_context",
+        "mapped_configuration_id",
+        "mapped_configuration_role",
+        "allowed_use",
+        "forbidden_use",
+        "stage_relevance",
+        "executable_status",
+        "thesis_usability",
+        "approval_status",
+        "notes",
+    ],
     "s2_promotion_checklist.csv": [
         "input_category",
         "target_schema_table",
@@ -318,7 +331,40 @@ CONFIGURATION_SCOPE_BLOCKED_MAIN_PATTERNS = (
     "on-site electrolyzer",
     "on_site_electrolyzer",
 )
-CONFIGURATION_SCOPE_FORBIDDEN_HORIZON_PATTERNS = (r"d-only", r"d_only", r"d\+4", r"d_plus_4")
+CONFIGURATION_SCOPE_FORBIDDEN_HORIZON_PATTERNS = (
+    r"(?:^|[^a-z0-9])d-only(?:[^a-z0-9]|$)",
+    r"(?:^|[^a-z0-9])d_only(?:[^a-z0-9]|$)",
+    r"(?:^|[^a-z0-9])d\+4(?:[^a-z0-9]|$)",
+    r"(?:^|[^a-z0-9])d_plus_4(?:[^a-z0-9]|$)",
+)
+CONFIGURATION_TAG_MAPPING_ALLOWED_CONFIG_IDS = CONFIGURATION_SCOPE_REQUIRED_IDS | {"postponed_or_blocked"}
+CONFIGURATION_TAG_MAPPING_ALLOWED_APPROVAL_STATUSES = {"not_approved", "scope_mapping_only", "blocked"}
+CONFIGURATION_TAG_MAPPING_REQUIRED_BLOCKED_TAGS = {
+    "Phase 2",
+    "Phase 3",
+    "full_hydrogen",
+    "on_site_electrolysis",
+    "hydrogen_production_optimisation",
+    "hydrogen_storage",
+    "SAF",
+    "CCS",
+}
+CONFIGURATION_TAG_MAPPING_REQUIRED_LEGACY_TAGS = {
+    "baseline_bf_bof",
+    "phase1_hybrid_bf_bof_plus_dri_eaf",
+    "PHASE1_DRP_EAF",
+    "flag_high_scrap_eaf_variant",
+    "flag_h2_backbone_available",
+}
+CONFIGURATION_TAG_MAPPING_BLOCKED_ID = "postponed_or_blocked"
+CONFIGURATION_TAG_MAPPING_REQUIRED_ROLE_BY_ID = {
+    "C0_current_BF_BOF_reference": "reference_configuration",
+    "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF": "main_configuration",
+    "C1S_phase1_sensitivity_variants": "sensitivity_only_within_C1",
+    "C2_exogenous_hydrogen_sensitivity_optional_later": "optional_later_sensitivity_only",
+    "postponed_or_blocked": "postponed_or_blocked",
+}
+CONFIGURATION_TAG_MAPPING_FORBIDDEN_HORIZON_PATTERNS = CONFIGURATION_SCOPE_FORBIDDEN_HORIZON_PATTERNS
 DEEPSEARCH_F_REQUIRED_SOURCE_IDS = {f"F{index:02d}" for index in range(1, 21)}
 DEEPSEARCH_F_ALLOWED_EXECUTABLE_STATUSES = {"not_approved", "not_executable"}
 DEEPSEARCH_F_ALLOWED_RECOMMENDED_STATUSES = {
@@ -417,6 +463,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     deepsearch_f_register = tables["s2_deepsearch_f_candidate_assumption_register.csv"]
     deepsearch_f_matrix = tables["s2_deepsearch_f_assumption_sensitivity_matrix.csv"]
     configuration_scope_register = tables["s2_configuration_scope_register.csv"]
+    configuration_tag_mapping = tables["s2_configuration_tag_mapping.csv"]
 
     approved_rows = 0
     for filename in REVIEW_DATA_FILES:
@@ -710,6 +757,70 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     if configuration_scope_scan.str.contains(forbidden_horizon_pattern, regex=True).any():
         raise ValueError("s2_configuration_scope_register.csv must not introduce D-only/D+4 comparison categories.")
 
+    mapping_ids = set(configuration_tag_mapping["mapped_configuration_id"].astype(str).str.strip())
+    if not mapping_ids.issubset(CONFIGURATION_TAG_MAPPING_ALLOWED_CONFIG_IDS):
+        invalid = sorted(mapping_ids - CONFIGURATION_TAG_MAPPING_ALLOWED_CONFIG_IDS)
+        raise ValueError(f"s2_configuration_tag_mapping.csv contains unsupported mapped_configuration_id values: {invalid}")
+
+    legacy_tags = set(configuration_tag_mapping["legacy_tag"].astype(str).str.strip())
+    if not CONFIGURATION_TAG_MAPPING_REQUIRED_LEGACY_TAGS.issubset(legacy_tags):
+        missing = sorted(CONFIGURATION_TAG_MAPPING_REQUIRED_LEGACY_TAGS - legacy_tags)
+        raise ValueError(f"s2_configuration_tag_mapping.csv is missing required legacy tags: {missing}")
+    if not CONFIGURATION_TAG_MAPPING_REQUIRED_BLOCKED_TAGS.issubset(legacy_tags):
+        missing = sorted(CONFIGURATION_TAG_MAPPING_REQUIRED_BLOCKED_TAGS - legacy_tags)
+        raise ValueError(f"s2_configuration_tag_mapping.csv is missing required blocked legacy tags: {missing}")
+    if not CONFIGURATION_SCOPE_REQUIRED_IDS.issubset(mapping_ids):
+        missing = sorted(CONFIGURATION_SCOPE_REQUIRED_IDS - mapping_ids)
+        raise ValueError(f"s2_configuration_tag_mapping.csv does not recognise every frozen configuration ID. missing={missing}")
+
+    if (~configuration_tag_mapping["executable_status"].astype(str).str.strip().str.lower().eq("non_executable")).any():
+        raise ValueError("s2_configuration_tag_mapping.csv must keep every mapping row non_executable.")
+    if (~configuration_tag_mapping["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_configuration_tag_mapping.csv must keep thesis_usability=false for all rows.")
+    mapping_approval_statuses = set(configuration_tag_mapping["approval_status"].astype(str).str.strip().str.lower())
+    if not mapping_approval_statuses.issubset(CONFIGURATION_TAG_MAPPING_ALLOWED_APPROVAL_STATUSES):
+        raise ValueError("s2_configuration_tag_mapping.csv contains approval statuses outside not_approved/scope_mapping_only/blocked.")
+
+    for mapped_id, expected_role in CONFIGURATION_TAG_MAPPING_REQUIRED_ROLE_BY_ID.items():
+        id_rows = configuration_tag_mapping["mapped_configuration_id"].astype(str).str.strip().eq(mapped_id)
+        if id_rows.any():
+            actual_roles = set(configuration_tag_mapping.loc[id_rows, "mapped_configuration_role"].astype(str).str.strip())
+            if actual_roles != {expected_role}:
+                raise ValueError(
+                    f"s2_configuration_tag_mapping.csv must keep mapped_configuration_role={expected_role} for every {mapped_id} row."
+                )
+
+    blocked_rows = configuration_tag_mapping["approval_status"].astype(str).str.strip().str.lower().eq("blocked")
+    if blocked_rows.any():
+        bad_blocked_ids = configuration_tag_mapping.loc[blocked_rows, "mapped_configuration_id"].astype(str).str.strip().ne(CONFIGURATION_TAG_MAPPING_BLOCKED_ID)
+        if bad_blocked_ids.any():
+            raise ValueError("Blocked configuration-tag mapping rows must map to postponed_or_blocked.")
+
+    if configuration_tag_mapping["mapped_configuration_role"].astype(str).str.strip().isin({"main_configuration", "reference_configuration"}).sum() < 2:
+        raise ValueError("s2_configuration_tag_mapping.csv must preserve the main/reference mapping for C0 and C1.")
+    non_main_role_rows = configuration_tag_mapping["mapped_configuration_id"].astype(str).str.strip().isin({"C1S_phase1_sensitivity_variants", "C2_exogenous_hydrogen_sensitivity_optional_later", "postponed_or_blocked"})
+    if configuration_tag_mapping.loc[non_main_role_rows, "mapped_configuration_role"].astype(str).str.strip().isin({"main_configuration", "reference_configuration"}).any():
+        raise ValueError("C1S, C2, and blocked mapping rows must not be labelled as main/reference configurations.")
+
+    c1s_rows = configuration_tag_mapping["mapped_configuration_id"].astype(str).str.strip().eq("C1S_phase1_sensitivity_variants")
+    if c1s_rows.any():
+        if (~configuration_tag_mapping.loc[c1s_rows, "mapped_configuration_role"].astype(str).str.strip().eq("sensitivity_only_within_C1")).any():
+            raise ValueError("C1S mapping rows must remain sensitivity-only within C1.")
+    c2_rows = configuration_tag_mapping["mapped_configuration_id"].astype(str).str.strip().eq("C2_exogenous_hydrogen_sensitivity_optional_later")
+    if c2_rows.any():
+        if (~configuration_tag_mapping.loc[c2_rows, "mapped_configuration_role"].astype(str).str.strip().eq("optional_later_sensitivity_only")).any():
+            raise ValueError("C2 mapping rows must remain optional-later sensitivity-only.")
+
+    blocked_legacy_rows = configuration_tag_mapping["legacy_tag"].astype(str).str.strip().isin(CONFIGURATION_TAG_MAPPING_REQUIRED_BLOCKED_TAGS)
+    if blocked_legacy_rows.any():
+        if (~configuration_tag_mapping.loc[blocked_legacy_rows, "mapped_configuration_id"].astype(str).str.strip().eq(CONFIGURATION_TAG_MAPPING_BLOCKED_ID)).any():
+            raise ValueError("Phase 2/Phase 3/full-hydrogen/electrolysis/hydrogen-storage/SAF/CCS tags must map to postponed_or_blocked.")
+
+    mapping_scan = configuration_tag_mapping.astype(str).agg(" ".join, axis=1).str.lower()
+    mapping_forbidden_horizon_pattern = "|".join(CONFIGURATION_TAG_MAPPING_FORBIDDEN_HORIZON_PATTERNS)
+    if mapping_scan.str.contains(mapping_forbidden_horizon_pattern, regex=True).any():
+        raise ValueError("s2_configuration_tag_mapping.csv must not introduce D-only/D+4 comparison categories.")
+
     return {
         "candidate_review_files_checked": len(REVIEW_FILE_SPECS),
         "candidate_review_data_files_checked": len(REVIEW_DATA_FILES),
@@ -728,6 +839,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
         "deepsearch_f_matrix_rows_checked": int(len(deepsearch_f_matrix)),
         "configuration_rows_checked": int(len(configuration_scope_register)),
         "main_configuration_rows": int(main_case_mask.sum()),
+        "configuration_tag_mapping_rows_checked": int(len(configuration_tag_mapping)),
         "thesis_grade_numerical_rows": int(classification["thesis_grade_numerical_eligibility"].astype(str).str.strip().str.lower().eq("true").sum()),
         "candidate_review_executable_rows": int(classification["executable_status"].astype(str).str.strip().str.lower().isin(EXECUTABLE_BANNED_VALUES).sum()),
         "later_stage_s2_executable_rows": int(
