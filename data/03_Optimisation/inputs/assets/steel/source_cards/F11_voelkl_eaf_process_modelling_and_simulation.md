@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F11`
+- `title`: `Electric Arc Furnace Process Modelling and Simulation`
+- `source_type`: `academic thesis`
+- `authors_or_organisation`: `Hermann Volkl; TU Wien`
+- `year`: `2023`
+- `stable_url_or_file_reference`: `https://repositum.tuwien.at/bitstream/20.500.12708/158341/1/Voelkl%20Hermann%20-%202023%20-%20Electric%20Arc%20Furnace%20Process%20Modelling%20and%20Simulation.pdf`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `EAF heat size, tap weight, hot heel, and hourly equivalent throughput context.`
+- `modelling_use_not_allowed`: `Do not treat one thesis case as approved universal EAF-shop truth.`
+- `parameter_categories_supported`: `eaf_batch_equivalent_class; relative_asset_sizing; eaf_metallic_yield_range`
+- `validation_targets_supported`: `hourly-equivalent throughput plausibility only`
+- `modelling_role_classification`: `candidate_value_range; assumption_support; modelling_precedent`
+- `public_reportability_status`: `public_reportable`
+- `known_limitations`: `Single academic case and not a Tata-specific EAF design dataset.`
+- `relevant_pages_or_sections`: `Table 24 and batch parameter discussion`
+- `confidence`: `high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_review`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Helpful for translating heat-size logic into hourly batch-equivalent assumptions.`

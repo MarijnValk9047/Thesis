@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F15`
+- `title`: `Improving the operations of a Slab Yard through the implementation of best practices`
+- `source_type`: `academic thesis / operational-practice study`
+- `authors_or_organisation`: `Geani Kasselman`
+- `year`: `2011`
+- `stable_url_or_file_reference`: `https://repository.up.ac.za/server/api/core/bitstreams/8240a454-8f3c-4704-972b-c5201497e0ec/content`
+- `local_file_path_if_any`: `Kasselman_Operations(2011).pdf (repo-local file not found in 2026-06-14 scan)`
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `Slab-yard order-of-magnitude and sensitivity support for WIP and slab-yard classes.`
+- `modelling_use_not_allowed`: `Do not treat this non-IJmuiden slab-yard practice source as Tata truth or as an approved base-case capacity input.`
+- `parameter_categories_supported`: `cold_slab_yard_class; slab_wip_sensitivity; downstream_buffer_context`
+- `validation_targets_supported`: `slab-yard order-of-magnitude sensitivity only`
+- `modelling_role_classification`: `sensitivity_support; assumption_support; not_a_numerical_input_source_for_base_truth`
+- `public_reportability_status`: `public_reportable_with_site_transfer_caveat`
+- `known_limitations`: `Non-IJmuiden operational-practice source. Inventory levels reflect local yard practice and may include order-book or obsolete stock effects.`
+- `relevant_pages_or_sections`: `Inventory figures, safety-stock discussion, and schedule-linked inventory sections`
+- `confidence`: `medium`
+- `may_support_executable_s2_assumptions_later`: `yes_after_stronger_cross_check`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `F15 metadata was corrected in this task; it remains a sensitivity and order-of-magnitude source rather than Tata truth.`

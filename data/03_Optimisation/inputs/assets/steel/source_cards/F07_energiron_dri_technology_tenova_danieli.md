@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F07`
+- `title`: `ENERGIRON: DRI Technology by Tenova and Danieli`
+- `source_type`: `vendor technical brochure`
+- `authors_or_organisation`: `Tenova / Danieli`
+- `year`: `undated_brochure_with_2026_url_path`
+- `stable_url_or_file_reference`: `https://tenova.com/sites/default/files/files/solutions/2026/ENERGIRON_Brochure_ENG.pdf`
+- `local_file_path_if_any`: `ENERGIRON_Brochure_ENG.pdf (repo-local file not found in 2026-06-14 scan)`
+- `public_or_confidential_status`: `public_vendor`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `Ore-to-DRI coefficient range, DRI metallisation and carbon context, and CDRI/HBI handling support.`
+- `modelling_use_not_allowed`: `Do not treat vendor brochure values as neutral approved Tata numerical inputs.`
+- `parameter_categories_supported`: `drp_ore_to_dri_coefficient; dri_metallization; dri_carbon; cdri_hbi_storage_class`
+- `validation_targets_supported`: `technology-range plausibility only`
+- `modelling_role_classification`: `candidate_value_range; assumption_support; sensitivity_support`
+- `public_reportability_status`: `public_reportable_with_vendor_caveat`
+- `known_limitations`: `Vendor technical evidence and not neutral site truth.`
+- `relevant_pages_or_sections`: `DRI handling and ore-to-DRI sections`
+- `confidence`: `high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_cross_check`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `F07 local-file reference was corrected in this task; local brochure filename recorded even though the repo scan did not find the file.`

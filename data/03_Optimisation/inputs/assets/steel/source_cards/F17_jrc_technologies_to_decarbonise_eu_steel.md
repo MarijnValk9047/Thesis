@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F17`
+- `title`: `Technologies to decarbonise the EU steel industry`
+- `source_type`: `JRC technical report`
+- `authors_or_organisation`: `Julian Somers; European Commission JRC`
+- `year`: `2022`
+- `stable_url_or_file_reference`: `https://doi.org/10.2760/069150`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2; later`
+- `modelling_use_allowed`: `EU route context and technology-screening support for DRP-EAF assumptions and public framing.`
+- `modelling_use_not_allowed`: `Do not treat high-level decarbonisation screening as approved Tata process coefficients.`
+- `parameter_categories_supported`: `relative_asset_sizing; route_context; drp_eaf_context`
+- `validation_targets_supported`: `technology-screening context only`
+- `modelling_role_classification`: `topology_support; assumption_support; governance_precedent`
+- `public_reportability_status`: `public_reportable`
+- `known_limitations`: `Technology-screening report and not a site-operating dataset.`
+- `relevant_pages_or_sections`: `Technology pathway overview`
+- `confidence`: `high`
+- `may_support_executable_s2_assumptions_later`: `no_directly`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Useful for public route context, not for direct numerical promotion.`

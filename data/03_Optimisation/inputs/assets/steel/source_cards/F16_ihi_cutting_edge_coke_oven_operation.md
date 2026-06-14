@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F16`
+- `title`: `Operation of Cutting-Edge Coke Oven Having all of Durability, Safety and Efficiency`
+- `source_type`: `vendor / technical industry paper`
+- `authors_or_organisation`: `Paul Wurth IHI Co., Ltd. / IHI technical information`
+- `year`: `2017`
+- `stable_url_or_file_reference`: `https://www.ihi.co.jp/en/technology/techinfo/contents_no/__icsFiles/afieldfile/2023/06/17/e8259f5361c09473fa1f08cd63e362ca.pdf`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public_vendor`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `Coke-oven continuity context and capacity-example support.`
+- `modelling_use_not_allowed`: `Do not treat case-example capacities as approved Tata coke-oven numerical truth.`
+- `parameter_categories_supported`: `coke_product_buffer_class; coke_oven_continuity_class`
+- `validation_targets_supported`: `capacity-example plausibility only`
+- `modelling_role_classification`: `assumption_support; sensitivity_support; vendor_context`
+- `public_reportability_status`: `public_reportable_with_vendor_caveat`
+- `known_limitations`: `Technical example source; good for continuity logic, weak for site-transferable numeric buffer assumptions.`
+- `relevant_pages_or_sections`: `Capacity and continuity wording`
+- `confidence`: `medium`
+- `may_support_executable_s2_assumptions_later`: `yes_after_cross_check`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Supports near-must-run coke logic more than storage-capacity truth.`

@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F14`
+- `title`: `The Hot Strip Mill Production Scheduling Problem in the Steel Industry: A Heuristic Approach Using Tabu Search`
+- `source_type`: `academic thesis`
+- `authors_or_organisation`: `Leovigildo Lopez-Garcia`
+- `year`: `1997`
+- `stable_url_or_file_reference`: `https://www.collectionscanada.gc.ca/obj/s4/f2/dsk2/ftp02/NQ35442.pdf`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `Downstream sink logic, hot-slab thermal caveats, and reheating-time proxy support.`
+- `modelling_use_not_allowed`: `Do not use old downstream scheduling heuristics as a direct modern Tata HSM parameter source.`
+- `parameter_categories_supported`: `hot_slab_wip_class; finished_sink_treatment; hsm_context`
+- `validation_targets_supported`: `thermal-caveat and downstream-structure plausibility`
+- `modelling_role_classification`: `assumption_support; sensitivity_support; modelling_structure_precedent`
+- `public_reportability_status`: `public_reportable`
+- `known_limitations`: `Older scheduling thesis and not a modern flat-products digital twin.`
+- `relevant_pages_or_sections`: `Reheating-furnace and slab-yard scheduling sections`
+- `confidence`: `medium`
+- `may_support_executable_s2_assumptions_later`: `yes_after_review`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Useful for downstream thermal caveats, not for approved modern HSM operating numbers.`

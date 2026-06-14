@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F19`
+- `title`: `Optimising Industrial Participation in the Day-Ahead Electricity Market: A Stochastic Bidding Framework with Risk Management`
+- `source_type`: `academic thesis`
+- `authors_or_organisation`: `Mukunda Badarinath; TU Delft`
+- `year`: `2025`
+- `stable_url_or_file_reference`: `uploaded_local_reference_only`
+- `local_file_path_if_any`: `Master_Thesis_Mukunda_Badarinath.pdf (repo-local file not found in 2026-06-14 scan)`
+- `public_or_confidential_status`: `uploaded_local_modelling_precedent`
+- `stage_relevance`: `governance_only; later_market`
+- `modelling_use_allowed`: `Bidding-method, benchmark, and hydrogen-verification precedent only.`
+- `modelling_use_not_allowed`: `Do not use as an S2 numerical parameter source.`
+- `parameter_categories_supported`: `governance_precedent; benchmark_precedent`
+- `validation_targets_supported`: `none`
+- `modelling_role_classification`: `governance_precedent; not_a_numerical_input_source`
+- `public_reportability_status`: `local_only_caveated`
+- `known_limitations`: `Hydrogen and bidding thesis precedent rather than S2 parameter evidence.`
+- `relevant_pages_or_sections`: `Case-study and benchmark framing`
+- `confidence`: `medium`
+- `may_support_executable_s2_assumptions_later`: `no`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Supports benchmark and method framing outside S2 numerical promotion.`

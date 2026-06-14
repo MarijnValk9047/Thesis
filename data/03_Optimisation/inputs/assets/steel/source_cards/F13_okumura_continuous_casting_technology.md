@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F13`
+- `title`: `Recent Trends and Future Prospects of Continuous Casting Technology`
+- `source_type`: `technical report paper`
+- `authors_or_organisation`: `Hirohiko Okumura; Nippon Steel Technical Report`
+- `year`: `1994`
+- `stable_url_or_file_reference`: `https://www.nipponsteel.com/en/tech/report/nsc/pdf/6102.pdf`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `Casting-yield order-of-magnitude and continuous-sequence context.`
+- `modelling_use_not_allowed`: `Do not treat older casting-yield references as exact modern IJmuiden truth without caveat.`
+- `parameter_categories_supported`: `casting_yield; casting_sequence_context`
+- `validation_targets_supported`: `casting-yield plausibility`
+- `modelling_role_classification`: `candidate_value_range; sensitivity_support; assumption_support`
+- `public_reportability_status`: `public_reportable`
+- `known_limitations`: `Older technical source; useful structurally but should be caveated for modern direct transfer.`
+- `relevant_pages_or_sections`: `Yield table and casting discussion`
+- `confidence`: `medium_high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_review`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Strong enough for casting-yield candidate ranges, not for site-specific approval.`

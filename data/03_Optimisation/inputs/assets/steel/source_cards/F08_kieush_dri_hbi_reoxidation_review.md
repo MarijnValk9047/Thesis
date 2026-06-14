@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F08`
+- `title`: `Reoxidation Behavior of the Direct Reduced Iron and Hot Briquetted Iron during Handling and Their Integration into Electric Arc Furnace Steelmaking: A Review`
+- `source_type`: `peer-reviewed open-access review`
+- `authors_or_organisation`: `Lina Kieush et al.`
+- `year`: `2024`
+- `stable_url_or_file_reference`: `https://doi.org/10.3390/met14080873`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `EAF batch-equivalent timing context, metallic-yield range context, and DRI/HBI handling caveats.`
+- `modelling_use_not_allowed`: `Do not use the review as a site-specific approved metallic-yield table without separate review.`
+- `parameter_categories_supported`: `eaf_batch_equivalent_class; eaf_metallic_yield_range; cdri_hbi_storage_class`
+- `validation_targets_supported`: `process-range plausibility only`
+- `modelling_role_classification`: `candidate_value_range; assumption_support; sensitivity_support`
+- `public_reportability_status`: `public_reportable`
+- `known_limitations`: `Review-level source rather than site-specific operating dataset.`
+- `relevant_pages_or_sections`: `Table 6 and process-integration discussion`
+- `confidence`: `high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_review`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Strong generic review support for DRI/HBI handling caveats.`

@@ -112,6 +112,12 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     review_bundle = load_s2_candidate_review(REVIEW_ROOT)
     payload = validate_s2_candidate_review(review_bundle)
     assert payload["candidate_review_data_files_checked"] == 10
+    assert payload["candidate_review_files_checked"] == 17
+    assert payload["promotion_packet_rows_checked"] == 5
+    assert payload["unit_sign_endpoint_note_present"] is True
+    assert payload["deepsearch_f_source_rows_checked"] == 20
+    assert payload["deepsearch_f_candidate_assumption_rows_checked"] > 0
+    assert payload["deepsearch_f_matrix_rows_checked"] > 0
     assert payload["approved_rows"] == 0
     assert payload["candidate_review_total_rows"] > 0
     assert payload["thesis_grade_numerical_rows"] == 0
@@ -131,6 +137,41 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert classification["thesis_grade_numerical_eligibility"].str.lower().eq("false").all()
     assert classification["annual_value_status"].str.lower().ne("may_become_hourly_cap").all()
 
+    packet_index = review_bundle.tables["s2_numerical_promotion_packet_index.csv"]
+    assert set(packet_index["category"]) == {
+        "process_bounds",
+        "conversion_coefficients",
+        "production_targets",
+        "initial_inventories",
+        "terminal_inventory_rules",
+    }
+    assert packet_index["approval_status"].str.lower().isin({"blocked", "not_approved"}).all()
+    assert packet_index["thesis_grade_numerical_eligibility"].str.lower().eq("false").all()
+    assert packet_index["executable_use_status"].str.lower().eq("non_executable").all()
+    assert packet_index["validation_use_status"].str.lower().eq("cannot_drive_constraints").all()
+    assert packet_index["annual_to_hourly_status"].str.lower().isin({"annual_public_values_not_hourly_cap", "not_annual_value"}).all()
+
+    deepsearch_f_source_index = review_bundle.tables["s2_deepsearch_f_source_index.csv"]
+    assert set(deepsearch_f_source_index["source_id"]) == {f"F{index:02d}" for index in range(1, 21)}
+    f07 = deepsearch_f_source_index.loc[deepsearch_f_source_index["source_id"].eq("F07")].iloc[0]
+    assert f07["canonical_title"] == "ENERGIRON: DRI Technology by Tenova and Danieli"
+    assert f07["url_or_doi"] == "https://tenova.com/sites/default/files/files/solutions/2026/ENERGIRON_Brochure_ENG.pdf"
+    assert "ENERGIRON_Brochure_ENG.pdf" in f07["local_file_reference"]
+
+    f15 = deepsearch_f_source_index.loc[deepsearch_f_source_index["source_id"].eq("F15")].iloc[0]
+    assert f15["author_or_institution"] == "Geani Kasselman"
+    assert f15["year"] == "2011"
+    assert "Kasselman_Operations(2011).pdf" in f15["local_file_reference"]
+
+    deepsearch_f_register = review_bundle.tables["s2_deepsearch_f_candidate_assumption_register.csv"]
+    assert deepsearch_f_register["executable_status"].eq("non_executable").all()
+    assert deepsearch_f_register["thesis_usability"].str.lower().eq("false").all()
+    assert not deepsearch_f_register["category"].str.lower().str.contains(r"d_only|d\+4|d_plus_4", regex=True).any()
+    annual_rows = deepsearch_f_register["unit"].str.contains("per_year|/y", case=False, regex=True)
+    assert annual_rows.any()
+    assert deepsearch_f_register.loc[annual_rows, "recommended_status"].eq("validation_target_only").all()
+    assert deepsearch_f_register.loc[annual_rows, "approval_blocker"].str.lower().str.contains("hourly").all()
+
 
 def test_candidate_review_mode_is_non_thesis_usable():
     config = load_config(CANDIDATE_REVIEW_CONFIG_PATH)
@@ -147,8 +188,12 @@ def test_candidate_review_mode_is_non_thesis_usable():
     assert payload["thesis_usable"] is False
     assert payload["schema_files_checked"] >= 10
     assert payload["mapping_files_checked"] == 4
-    assert payload["candidate_review_files_checked"] == 13
+    assert payload["candidate_review_files_checked"] == 17
     assert payload["approved_rows"] == 0
+    assert payload["promotion_packet_rows_checked"] == 5
+    assert payload["unit_sign_endpoint_note_present"] is True
+    assert payload["deepsearch_f_source_rows_checked"] == 20
+    assert payload["deepsearch_f_candidate_assumption_rows_checked"] > 0
     assert payload["thesis_grade_numerical_rows"] == 0
     assert payload["candidate_review_executable_rows"] == 0
 

@@ -99,6 +99,61 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
     "terminal_inventory_rules_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["store_id", "configuration", "carrier_id", "rule_type"],
     "topology_routes_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["route_id", "configuration", "process_id", "route_sequence"],
     "validation_targets_candidate_review.csv": COMMON_REVIEW_COLUMNS + ["validation_target_id", "configuration", "metric"],
+    "s2_deepsearch_f_source_index.csv": [
+        "source_id",
+        "canonical_title",
+        "author_or_institution",
+        "year",
+        "source_type",
+        "url_or_doi",
+        "local_file_reference",
+        "public_reportability",
+        "vendor_or_neutral_status",
+        "stage_relevance",
+        "supported_parameter_rows",
+        "modelling_role",
+        "source_card_path",
+        "metadata_status",
+        "limitations",
+        "executable_approval_status",
+    ],
+    "s2_deepsearch_f_candidate_assumption_register.csv": [
+        "parameter_id",
+        "category",
+        "subcategory",
+        "process_or_buffer",
+        "carrier_input",
+        "carrier_output",
+        "candidate_value",
+        "candidate_min",
+        "candidate_max",
+        "unit",
+        "relative_unit_basis",
+        "source_ids",
+        "evidence_strength",
+        "modelling_role",
+        "recommended_status",
+        "sensitivity_required",
+        "stage_relevance",
+        "approval_blocker",
+        "executable_status",
+        "thesis_usability",
+        "notes",
+    ],
+    "s2_deepsearch_f_assumption_sensitivity_matrix.csv": [
+        "category",
+        "parameter_group",
+        "conservative_assumption",
+        "central_assumption",
+        "flexible_assumption",
+        "unit",
+        "source_ids",
+        "evidence_strength",
+        "base_case_eligible_later",
+        "sensitivity_required",
+        "approval_blocker",
+        "notes",
+    ],
     "s2_promotion_checklist.csv": [
         "input_category",
         "target_schema_table",
@@ -149,6 +204,22 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "approval_blocker",
         "notes",
     ],
+    "s2_numerical_promotion_packet_index.csv": [
+        "category",
+        "source_candidate_table",
+        "packet_file",
+        "rows_covered",
+        "unit_review_status",
+        "sign_review_status",
+        "source_review_status",
+        "annual_to_hourly_status",
+        "validation_use_status",
+        "executable_use_status",
+        "approval_status",
+        "thesis_grade_numerical_eligibility",
+        "approval_blocker",
+        "next_review_action",
+    ],
 }
 
 REVIEW_DATA_FILES = [
@@ -186,6 +257,47 @@ RISKY_NUMERICAL_CATEGORIES = {
     "initial_inventories",
     "terminal_inventory_rules",
 }
+PACKET_INDEX_REQUIRED_CATEGORIES = {
+    "process_bounds",
+    "conversion_coefficients",
+    "production_targets",
+    "initial_inventories",
+    "terminal_inventory_rules",
+}
+DEEPSEARCH_F_REQUIRED_SOURCE_IDS = {f"F{index:02d}" for index in range(1, 21)}
+DEEPSEARCH_F_ALLOWED_EXECUTABLE_STATUSES = {"not_approved", "not_executable"}
+DEEPSEARCH_F_ALLOWED_RECOMMENDED_STATUSES = {
+    "methodological_policy_candidate",
+    "assumption_backed_candidate",
+    "sensitivity_only",
+    "validation_target_only",
+    "topology_support_only",
+    "governance_only",
+    "missing_or_ambiguous",
+}
+DEEPSEARCH_F_FORBIDDEN_SCOPE_TOKENS = (
+    "d_only",
+    "d+4",
+    "d_plus_4",
+    "rolling_lookahead_comparison",
+    "s3",
+    "wag",
+    "internal_energy",
+    "ets",
+    "free_allocation",
+    "cbam",
+    "tariff",
+    "da_bidding",
+    "stochastic",
+    "scenario_probability",
+    "mfrr",
+    "cvar",
+    "product_revenue",
+    "order_book",
+    "deadline_production",
+)
+REPO_ROOT = Path(__file__).resolve().parents[4]
+UNIT_SIGN_ENDPOINT_NOTE = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_UNIT_SIGN_AND_ENDPOINT_CONVENTIONS.md"
 
 
 @dataclass(frozen=True)
@@ -245,6 +357,10 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     summary = tables["s2_review_summary.csv"]
     checklist = tables["s2_promotion_checklist.csv"]
     classification = tables["s2_structural_numerical_classification.csv"]
+    packet_index = tables["s2_numerical_promotion_packet_index.csv"]
+    deepsearch_f_source_index = tables["s2_deepsearch_f_source_index.csv"]
+    deepsearch_f_register = tables["s2_deepsearch_f_candidate_assumption_register.csv"]
+    deepsearch_f_matrix = tables["s2_deepsearch_f_assumption_sensitivity_matrix.csv"]
 
     approved_rows = 0
     for filename in REVIEW_DATA_FILES:
@@ -377,6 +493,108 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
         if classification.loc[later_stage_mask, "executable_status"].astype(str).str.strip().str.lower().isin({"s2_executable"}).any():
             raise ValueError("Later-stage categories must not be classified as S2 executable.")
 
+    packet_categories = set(packet_index["category"].astype(str).str.strip())
+    if packet_categories != PACKET_INDEX_REQUIRED_CATEGORIES:
+        missing = sorted(PACKET_INDEX_REQUIRED_CATEGORIES - packet_categories)
+        extra = sorted(packet_categories - PACKET_INDEX_REQUIRED_CATEGORIES)
+        raise ValueError(f"s2_numerical_promotion_packet_index.csv does not match required categories. missing={missing} extra={extra}")
+    if packet_index["approval_status"].astype(str).str.strip().str.lower().isin(APPROVAL_BANNED_VALUES).any():
+        raise ValueError("s2_numerical_promotion_packet_index.csv must not mark any category approved.")
+    if (~packet_index["approval_status"].astype(str).str.strip().str.lower().isin({"blocked", "not_approved"})).any():
+        raise ValueError("s2_numerical_promotion_packet_index.csv must keep approval_status as blocked or not_approved.")
+    if packet_index["thesis_grade_numerical_eligibility"].astype(str).str.strip().str.lower().eq("true").any():
+        raise ValueError("s2_numerical_promotion_packet_index.csv must report zero thesis-grade numerical eligibility rows.")
+    if (~packet_index["executable_use_status"].astype(str).str.strip().str.lower().eq("non_executable")).any():
+        raise ValueError("s2_numerical_promotion_packet_index.csv must keep all categories non_executable.")
+    if (~packet_index["validation_use_status"].astype(str).str.strip().str.lower().eq("cannot_drive_constraints")).any():
+        raise ValueError("s2_numerical_promotion_packet_index.csv must not allow validation-driven constraints.")
+    if packet_index["annual_to_hourly_status"].astype(str).str.strip().str.lower().str.contains("hourly_cap_allowed|may_become_hourly_cap").any():
+        raise ValueError("s2_numerical_promotion_packet_index.csv must not allow hidden hourly caps.")
+    if not UNIT_SIGN_ENDPOINT_NOTE.exists():
+        raise ValueError("Shared S2 unit/sign/endpoint convention note is missing.")
+    for row in packet_index.to_dict(orient="records"):
+        packet_file = REPO_ROOT / str(row["packet_file"])
+        if not packet_file.exists():
+            raise ValueError(f"Promotion packet file does not exist: {row['packet_file']}")
+        source_table = str(row["source_candidate_table"]).strip()
+        if source_table not in REVIEW_DATA_FILES:
+            raise ValueError(f"Promotion packet index references unknown candidate-review table: {source_table}")
+        expected_rows = len(tables[source_table])
+        if int(row["rows_covered"]) != expected_rows:
+            raise ValueError(
+                f"Promotion packet index rows_covered mismatch for {row['category']}: expected {expected_rows}, found {row['rows_covered']}"
+            )
+
+    source_id_set = set(deepsearch_f_source_index["source_id"].astype(str).str.strip())
+    if source_id_set != DEEPSEARCH_F_REQUIRED_SOURCE_IDS:
+        missing = sorted(DEEPSEARCH_F_REQUIRED_SOURCE_IDS - source_id_set)
+        extra = sorted(source_id_set - DEEPSEARCH_F_REQUIRED_SOURCE_IDS)
+        raise ValueError(f"s2_deepsearch_f_source_index.csv does not match F01-F20. missing={missing} extra={extra}")
+    if (~deepsearch_f_source_index["executable_approval_status"].astype(str).str.strip().isin(DEEPSEARCH_F_ALLOWED_EXECUTABLE_STATUSES)).any():
+        raise ValueError("s2_deepsearch_f_source_index.csv contains executable approval statuses outside not_approved/not_executable.")
+    for row in deepsearch_f_source_index.to_dict(orient="records"):
+        source_card_path = REPO_ROOT / str(row["source_card_path"])
+        if not source_card_path.exists():
+            raise ValueError(f"Deepsearch F source card path does not exist: {row['source_card_path']}")
+    f07 = deepsearch_f_source_index.loc[deepsearch_f_source_index["source_id"].eq("F07")]
+    if len(f07) != 1:
+        raise ValueError("s2_deepsearch_f_source_index.csv must contain exactly one F07 row.")
+    f07_row = f07.iloc[0]
+    if str(f07_row["canonical_title"]).strip() != "ENERGIRON: DRI Technology by Tenova and Danieli":
+        raise ValueError("F07 title does not match the corrected ENERGIRON metadata.")
+    if str(f07_row["url_or_doi"]).strip() != "https://tenova.com/sites/default/files/files/solutions/2026/ENERGIRON_Brochure_ENG.pdf":
+        raise ValueError("F07 URL does not match the corrected ENERGIRON metadata.")
+    if "ENERGIRON_Brochure_ENG.pdf" not in str(f07_row["local_file_reference"]):
+        raise ValueError("F07 must record the ENERGIRON brochure local-file reference.")
+    f15 = deepsearch_f_source_index.loc[deepsearch_f_source_index["source_id"].eq("F15")]
+    if len(f15) != 1:
+        raise ValueError("s2_deepsearch_f_source_index.csv must contain exactly one F15 row.")
+    f15_row = f15.iloc[0]
+    if str(f15_row["author_or_institution"]).strip() != "Geani Kasselman":
+        raise ValueError("F15 author does not match the corrected Kasselman metadata.")
+    if str(f15_row["year"]).strip() != "2011":
+        raise ValueError("F15 year does not match the corrected Kasselman metadata.")
+    if "Kasselman_Operations(2011).pdf" not in str(f15_row["local_file_reference"]):
+        raise ValueError("F15 must record the corrected Kasselman local-file reference.")
+    if str(f15_row["metadata_status"]).strip() not in {"complete_or_reviewed", "complete_metadata_local_reference_unverified"}:
+        raise ValueError("F15 metadata_status must be complete_or_reviewed or local-reference-unverified.")
+
+    if (~deepsearch_f_register["recommended_status"].astype(str).str.strip().isin(DEEPSEARCH_F_ALLOWED_RECOMMENDED_STATUSES)).any():
+        raise ValueError("s2_deepsearch_f_candidate_assumption_register.csv contains unsupported recommended_status values.")
+    if (~deepsearch_f_register["executable_status"].astype(str).str.strip().eq("non_executable")).any():
+        raise ValueError("Deepsearch F candidate assumption rows must remain non_executable.")
+    if (~deepsearch_f_register["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("Deepsearch F candidate assumption rows must keep thesis_usability=false.")
+    if deepsearch_f_register["recommended_status"].astype(str).str.strip().str.lower().eq("validation_target_only").any():
+        bad_validation = deepsearch_f_register.loc[
+            deepsearch_f_register["recommended_status"].astype(str).str.strip().str.lower().eq("validation_target_only"),
+            "modelling_role",
+        ].astype(str).str.strip().str.lower().ne("validation_target")
+        if bad_validation.any():
+            raise ValueError("Deepsearch F validation-target-only rows must use modelling_role=validation_target.")
+    annual_register_rows = deepsearch_f_register["unit"].astype(str).str.contains("per_year|/y", case=False, regex=True)
+    if annual_register_rows.any():
+        blockers = deepsearch_f_register.loc[annual_register_rows, "approval_blocker"].astype(str).str.strip().str.lower()
+        if (~blockers.str.contains("hourly cap|hourly_caps|hourly", regex=True)).any():
+            raise ValueError("Annual Deepsearch F rows must state that annual values cannot become hourly caps.")
+        annual_statuses = deepsearch_f_register.loc[annual_register_rows, "recommended_status"].astype(str).str.strip().str.lower()
+        if (~annual_statuses.eq("validation_target_only")).any():
+            raise ValueError("Annual Deepsearch F rows must remain validation_target_only.")
+    forbidden_scope_pattern = "|".join(re.escape(token) for token in DEEPSEARCH_F_FORBIDDEN_SCOPE_TOKENS)
+    scope_scan = deepsearch_f_register[["category", "subcategory", "process_or_buffer"]].astype(str).agg(" ".join, axis=1).str.lower()
+    if scope_scan.str.contains(forbidden_scope_pattern, regex=True).any():
+        raise ValueError("Deepsearch F candidate assumption register introduces forbidden later-stage or D-only/D+4 comparison categories.")
+
+    if deepsearch_f_matrix.empty:
+        raise ValueError("s2_deepsearch_f_assumption_sensitivity_matrix.csv must contain review rows.")
+    if (~deepsearch_f_matrix["base_case_eligible_later"].astype(str).str.strip().str.lower().isin({"true", "false"})).any():
+        raise ValueError("Deepsearch F assumption sensitivity matrix must keep boolean-style base_case_eligible_later values.")
+    if (~deepsearch_f_matrix["sensitivity_required"].astype(str).str.strip().str.lower().isin({"true", "false"})).any():
+        raise ValueError("Deepsearch F assumption sensitivity matrix must keep boolean-style sensitivity_required values.")
+    matrix_scan = deepsearch_f_matrix[["category", "parameter_group", "notes"]].astype(str).agg(" ".join, axis=1).str.lower()
+    if matrix_scan.str.contains(r"d\+4|d_plus_4|d_only", regex=True).any():
+        raise ValueError("Deepsearch F assumption sensitivity matrix must not introduce D-only/D+4 comparison categories.")
+
     return {
         "candidate_review_files_checked": len(REVIEW_FILE_SPECS),
         "candidate_review_data_files_checked": len(REVIEW_DATA_FILES),
@@ -388,6 +606,11 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
         "postponed_rows": total_expected["postponed_rows"],
         "approved_rows": approved_rows,
         "classification_rows_checked": int(len(classification)),
+        "promotion_packet_rows_checked": int(len(packet_index)),
+        "unit_sign_endpoint_note_present": UNIT_SIGN_ENDPOINT_NOTE.exists(),
+        "deepsearch_f_source_rows_checked": int(len(deepsearch_f_source_index)),
+        "deepsearch_f_candidate_assumption_rows_checked": int(len(deepsearch_f_register)),
+        "deepsearch_f_matrix_rows_checked": int(len(deepsearch_f_matrix)),
         "thesis_grade_numerical_rows": int(classification["thesis_grade_numerical_eligibility"].astype(str).str.strip().str.lower().eq("true").sum()),
         "candidate_review_executable_rows": int(classification["executable_status"].astype(str).str.strip().str.lower().isin(EXECUTABLE_BANNED_VALUES).sum()),
         "later_stage_s2_executable_rows": int(

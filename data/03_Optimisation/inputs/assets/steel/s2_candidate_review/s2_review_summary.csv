@@ -2,11 +2,11 @@ review_table,row_count,candidate_not_approved_rows,validation_only_rows,sensitiv
 process_units_candidate_review.csv,11,11,0,0,0,0,0,11,0,0,0,Structural topology support exists but no numerical throughput approval exists.
 carriers_candidate_review.csv,9,9,0,0,0,0,0,9,0,0,0,Carrier definitions are structurally useful but unit and sign conventions are not numerically frozen.
 stores_candidate_review.csv,2,1,0,0,1,0,0,2,0,0,0,Store classes are structurally visible while numerical capacities remain unresolved.
-conversion_coefficients_candidate_review.csv,4,4,0,0,0,0,0,0,4,0,0,Generic recipe ranges and sign conventions remain blocked from executable use.
-process_bounds_candidate_review.csv,7,3,0,0,0,0,0,4,3,0,0,Method rows are structural support only and annual anchors remain non-hourly and non-executable.
-production_targets_candidate_review.csv,4,0,4,0,0,0,0,0,4,0,0,Annual public targets remain validation or candidate anchors and cannot become active constraints.
-initial_inventories_candidate_review.csv,2,0,0,0,2,0,0,0,2,0,0,Only placeholders exist and no reviewed opening-inventory evidence is available.
-terminal_inventory_rules_candidate_review.csv,2,0,0,0,0,0,0,2,0,0,0,Endpoint-rule support is structural only and no numeric terminal-policy values are reviewed.
+conversion_coefficients_candidate_review.csv,4,4,0,0,0,0,0,0,4,0,0,Generic recipe ranges and sign conventions remain blocked from executable use; S2.5b packet records unit and sign blockers.
+process_bounds_candidate_review.csv,7,3,0,0,0,0,0,4,3,0,0,Method rows are structural support only and annual anchors remain non-hourly and non-executable; S2.5b packet records bound-translation blockers.
+production_targets_candidate_review.csv,4,0,4,0,0,0,0,0,4,0,0,Annual public targets remain validation or candidate anchors and cannot become active constraints; S2.5b packet records target-policy blockers.
+initial_inventories_candidate_review.csv,2,0,0,0,2,0,0,0,2,0,0,Only placeholders exist and no reviewed opening-inventory evidence is available; S2.5c packet records state-basis and opening-policy blockers.
+terminal_inventory_rules_candidate_review.csv,2,0,0,0,0,0,0,2,0,0,0,Endpoint-rule support is structural only and no numeric terminal-policy values are reviewed; S2.5c packet records endpoint-rule and opening-ending consistency blockers.
 topology_routes_candidate_review.csv,13,13,0,0,0,0,0,13,0,0,0,Route membership is structurally supported but cannot imply numerical route-cap approval.
 validation_targets_candidate_review.csv,8,0,8,0,0,0,0,0,8,0,0,Validation anchors remain non-executable and cannot drive constraints.
-TOTAL,62,41,12,0,3,0,0,41,21,0,0,Structural support and numerical approval remain separate and zero candidate-review rows are executable.
+TOTAL,62,41,12,0,3,0,0,41,21,0,0,Structural support and numerical approval remain separate; S2.5b and S2.5c promotion packets keep all risky numerical categories blocked and zero candidate-review rows executable.

@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F02`
+- `title`: `Flexibility options in a decarbonising iron and steel industry`
+- `source_type`: `peer-reviewed journal article`
+- `authors_or_organisation`: `Annika Boldrini et al.`
+- `year`: `2024`
+- `stable_url_or_file_reference`: `https://doi.org/10.1016/j.rser.2023.113988`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `Inventory boundary-condition logic, cyclic terminal-inventory support, anti-gaming storage logic, and annual-to-hourly utilisation support.`
+- `modelling_use_not_allowed`: `Do not treat the paper's modelling assumptions as approved Tata-like numerical values without separate review.`
+- `parameter_categories_supported`: `inventory_policy; terminal_inventory_rules; annual_to_hourly_translation_method`
+- `validation_targets_supported`: `methodological structure checks only`
+- `modelling_role_classification`: `assumption_support; governance_precedent; candidate_value_range`
+- `public_reportability_status`: `public_reportable`
+- `known_limitations`: `Model and review source rather than a Tata-specific operating dataset.`
+- `relevant_pages_or_sections`: `Storage balance equations and flexibility discussion`
+- `confidence`: `very_high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_review`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Primary support for CYC50-style cyclic terminal inventory.`

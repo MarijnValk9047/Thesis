@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F06`
+- `title`: `Hot Transport Vessel (HTV) System: Hot Transport Vessel for Hot Charging DRI`
+- `source_type`: `vendor technical brochure`
+- `authors_or_organisation`: `Midrex Technologies`
+- `year`: `2014_or_undated_brochure`
+- `stable_url_or_file_reference`: `https://www.midrex.com/wp-content/uploads/Hot_Transport_-_HTV.pdf`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public_vendor`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `HTV capacity class, HDRI short-transfer logic, and HBI storage-class support.`
+- `modelling_use_not_allowed`: `Do not promote HTV brochure examples into approved site-specific buffer capacities.`
+- `parameter_categories_supported`: `hdri_buffer_class; cdri_hbi_storage_class; thermal_caveat_support`
+- `validation_targets_supported`: `buffer-class plausibility only`
+- `modelling_role_classification`: `assumption_support; sensitivity_support; candidate_value_range`
+- `public_reportability_status`: `public_reportable_with_vendor_caveat`
+- `known_limitations`: `Vendor brochure and therefore not neutral operating-average evidence.`
+- `relevant_pages_or_sections`: `HTV size and HBI storage sections`
+- `confidence`: `medium_high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_cross_check`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Supports HDRI short-transfer and HBI storage-class separation.`

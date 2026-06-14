@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F01`
+- `title`: `Feasibility study on climate-neutral pathways for TSN IJmuiden`
+- `source_type`: `public consultancy report`
+- `authors_or_organisation`: `Roland Berger for Tata Steel Netherlands and FNV`
+- `year`: `2021`
+- `stable_url_or_file_reference`: `https://products.tatasteelnederland.com/sites/producttsn/files/TSN%20Climate%20Neutral%20Pathways%20Final%20Report.pdf`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2; governance`
+- `modelling_use_allowed`: `Public Tata-inspired topology framing, route-transition context, and annual validation-anchor support.`
+- `modelling_use_not_allowed`: `Do not treat annual public site values as hourly operating constraints or as confidential Tata operating truth.`
+- `parameter_categories_supported`: `topology_support; production_target_basis; validation_target_context`
+- `validation_targets_supported`: `site annual steel anchor; route-transition framing`
+- `modelling_role_classification`: `topology_support; validation_target; assumption_support`
+- `public_reportability_status`: `public_reportable`
+- `known_limitations`: `Public transition framing source. It is useful for scale and topology context, not for executable hourly coefficients.`
+- `relevant_pages_or_sections`: `Executive summary and public transition pathway overview`
+- `confidence`: `high`
+- `may_support_executable_s2_assumptions_later`: `no`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Useful for Tata-inspired scale and route framing only.`

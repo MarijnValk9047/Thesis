@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F09`
+- `title`: `70 Years of LD-Steelmaking - Quo Vadis?`
+- `source_type`: `peer-reviewed journal article`
+- `authors_or_organisation`: `Jurgen Cappel et al.`
+- `year`: `2022`
+- `stable_url_or_file_reference`: `https://doi.org/10.3390/met12060912`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `BOF batch-equivalent logic, hot-metal and scrap share ranges, and heat-duration support.`
+- `modelling_use_not_allowed`: `Do not treat global BOF practice ranges as approved Tata BOF-shop truth.`
+- `parameter_categories_supported`: `bof_batch_equivalent_class; bof_hot_metal_share; bof_scrap_share`
+- `validation_targets_supported`: `BOF-range plausibility only`
+- `modelling_role_classification`: `candidate_value_range; assumption_support; sensitivity_support`
+- `public_reportability_status`: `public_reportable`
+- `known_limitations`: `Generic BOF practice ranges, not a site-calibrated converter recipe.`
+- `relevant_pages_or_sections`: `Hot-metal ratio and process-time sections`
+- `confidence`: `high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_review`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Useful for BOF share sensitivity and batch-equivalent timing.`

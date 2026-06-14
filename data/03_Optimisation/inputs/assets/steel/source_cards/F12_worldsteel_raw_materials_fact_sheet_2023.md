@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F12`
+- `title`: `Steel and raw materials: Fact sheet`
+- `source_type`: `industry factsheet`
+- `authors_or_organisation`: `World Steel Association`
+- `year`: `2023`
+- `stable_url_or_file_reference`: `https://worldsteel.org/wp-content/uploads/Fact-sheet-raw-materials-2023-1.pdf`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `Route-average BF-BOF raw-material coefficient support and external-supply context.`
+- `modelling_use_not_allowed`: `Do not treat route-average global coefficients as approved Tata mass-balance truth without review.`
+- `parameter_categories_supported`: `bf_bof_route_average_coefficients; external_supply_context`
+- `validation_targets_supported`: `route-average coefficient plausibility`
+- `modelling_role_classification`: `candidate_value_range; validation_target; assumption_support`
+- `public_reportability_status`: `public_reportable`
+- `known_limitations`: `Route-average industry factsheet rather than site-specific recipe evidence.`
+- `relevant_pages_or_sections`: `Raw-material coefficient summary`
+- `confidence`: `high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_review`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Best treated as conservative coefficient context or validation support.`

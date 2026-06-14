@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F03`
+- `title`: `Best Available Techniques (BAT) Reference Document for Iron and Steel Production`
+- `source_type`: `JRC BREF / technical reference document`
+- `authors_or_organisation`: `European Commission Joint Research Centre`
+- `year`: `2013`
+- `stable_url_or_file_reference`: `https://publications.jrc.ec.europa.eu/repository/bitstream/JRC69967/lfna25521enn.pdf`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public`
+- `stage_relevance`: `S2; S3`
+- `modelling_use_allowed`: `Hot-metal buffer classes, BF to BOF coupling context, and public technical process support.`
+- `modelling_use_not_allowed`: `Do not treat generic European reference values as approved Tata numerical truth.`
+- `parameter_categories_supported`: `hot_metal_buffer_class; bf_bof_coupling; process_class_support`
+- `validation_targets_supported`: `process plausibility checks only`
+- `modelling_role_classification`: `assumption_support; candidate_value_range; topology_support`
+- `public_reportability_status`: `public_reportable`
+- `known_limitations`: `Generic technical reference. Site-specific capacities and practices still need separate review.`
+- `relevant_pages_or_sections`: `Hot-metal ladles and mixer discussion`
+- `confidence`: `very_high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_review`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Canonical source overlaps with existing `WC01` and `WD01`; retained here to preserve stable `F03` mapping for S2.5d.`

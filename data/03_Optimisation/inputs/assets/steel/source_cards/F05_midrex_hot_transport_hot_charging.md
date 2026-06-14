@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F05`
+- `title`: `Getting the Most from Direct Reduced Iron - Operational Results of MIDREX Hot Transport-Hot Charging`
+- `source_type`: `vendor technical magazine article`
+- `authors_or_organisation`: `Brian Voelker and Sean Boyle; Midrex Technologies`
+- `year`: `2022`
+- `stable_url_or_file_reference`: `https://www.midrex.com/wp-content/uploads/Midrex-DFM-3rdQtr2022-Final-1.pdf`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public_vendor`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `HDRI feed-bin class, DRI-EAF decoupling assumptions, and HDRI productivity/thermal-caveat support.`
+- `modelling_use_not_allowed`: `Do not treat hot-transport examples as approved Tata layout or default route design.`
+- `parameter_categories_supported`: `hdri_buffer_class; dri_buffer_relative_sizing; eaf_batch_context`
+- `validation_targets_supported`: `buffer and decoupling plausibility only`
+- `modelling_role_classification`: `assumption_support; sensitivity_support; candidate_value_range`
+- `public_reportability_status`: `public_reportable_with_vendor_caveat`
+- `known_limitations`: `Vendor case material; site layouts and productivity claims are not neutral plant-average evidence.`
+- `relevant_pages_or_sections`: `HTV and feed-bin discussion`
+- `confidence`: `high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_cross_check`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Useful for one-heat to multi-heat HDRI surge classes.`

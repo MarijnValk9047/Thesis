@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F20`
+- `title`: `AGENTS.md`
+- `source_type`: `repository governance file`
+- `authors_or_organisation`: `Project repository governance`
+- `year`: `current repository file`
+- `stable_url_or_file_reference`: `local_repository_governance_file`
+- `local_file_path_if_any`: `AGENTS.md`
+- `public_or_confidential_status`: `governance_only`
+- `stage_relevance`: `governance_only`
+- `modelling_use_allowed`: `Repository governance, stage discipline, and prohibition context for early steel implementation.`
+- `modelling_use_not_allowed`: `Do not treat as a numerical source of steel parameters.`
+- `parameter_categories_supported`: `governance_precedent; stage_discipline`
+- `validation_targets_supported`: `none`
+- `modelling_role_classification`: `governance_precedent; not_a_numerical_input_source`
+- `public_reportability_status`: `internal_governance`
+- `known_limitations`: `Governance document and not a technical or numerical evidence source.`
+- `relevant_pages_or_sections`: `Steel-workstream scope and optimisation-stage guardrails`
+- `confidence`: `very_high`
+- `may_support_executable_s2_assumptions_later`: `no`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Supports stage discipline and no-hardcoded-parameter governance only.`

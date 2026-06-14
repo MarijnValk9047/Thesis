@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F04`
+- `title`: `The MIDREX Process`
+- `source_type`: `vendor technical brochure`
+- `authors_or_organisation`: `Midrex Technologies`
+- `year`: `2018`
+- `stable_url_or_file_reference`: `https://www.midrex.com/wp-content/uploads/MIdrex_Process_Brochure_4-12-18.pdf`
+- `local_file_path_if_any`:
+- `public_or_confidential_status`: `public_vendor`
+- `stage_relevance`: `S2`
+- `modelling_use_allowed`: `DRP capacity-class, continuity-class, and minimum-load/turndown sensitivity support.`
+- `modelling_use_not_allowed`: `Do not treat vendor performance statements as neutral site truth or approved executable values.`
+- `parameter_categories_supported`: `drp_continuity_class; drp_min_load_class; relative_asset_sizing`
+- `validation_targets_supported`: `technology-range plausibility only`
+- `modelling_role_classification`: `candidate_value_range; assumption_support; sensitivity_support`
+- `public_reportability_status`: `public_reportable_with_vendor_caveat`
+- `known_limitations`: `Vendor source with strong technical relevance but non-neutral framing.`
+- `relevant_pages_or_sections`: `Capacity, operating-hours, and low-load statements`
+- `confidence`: `high`
+- `may_support_executable_s2_assumptions_later`: `yes_after_cross_check`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Useful for DRP continuity logic, not for approved Tata operating bounds.`

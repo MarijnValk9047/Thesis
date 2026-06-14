@@ -1,0 +1,23 @@
+# Source Card
+
+- `source_id`: `F18`
+- `title`: `Modeling the Energy Transition of an Integrated Steel Site: The Case of Tata Steel's IJmuiden Site`
+- `source_type`: `academic thesis`
+- `authors_or_organisation`: `Ioannis Athanasiadis; TU Delft`
+- `year`: `2025`
+- `stable_url_or_file_reference`: `uploaded_local_reference_only`
+- `local_file_path_if_any`: `Master_Thesis_Report_Athanasiadis (1).pdf (repo-local file not found in 2026-06-14 scan)`
+- `public_or_confidential_status`: `uploaded_local_modelling_precedent`
+- `stage_relevance`: `governance_only; later`
+- `modelling_use_allowed`: `Tata-inspired modelling-structure precedent and redacted-values warning.`
+- `modelling_use_not_allowed`: `Do not use as an approved numerical input source for S2.`
+- `parameter_categories_supported`: `governance_precedent; modelling_structure_precedent`
+- `validation_targets_supported`: `none`
+- `modelling_role_classification`: `governance_precedent; not_a_numerical_input_source`
+- `public_reportability_status`: `local_only_caveated`
+- `known_limitations`: `Contains thesis-specific modelling choices and redacted or non-public elements.`
+- `relevant_pages_or_sections`: `Methodology and confidentiality framing`
+- `confidence`: `medium`
+- `may_support_executable_s2_assumptions_later`: `no`
+- `values_remain_non_approved_in_this_task`: `yes`
+- `notes`: `Use only as precedent and warning, not as executable evidence.`
