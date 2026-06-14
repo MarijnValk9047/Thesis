@@ -1,0 +1,79 @@
+# TenneT source documents
+
+This folder contains TenneT source documents used to interpret Dutch balancing-market rules for the thesis model. The documents are related, but they should not be treated as interchangeable. They describe different products and different parts of the settlement logic.
+
+## Files
+
+### `tennet_incident_reserves_bsp_manual_2026-01-13.pdf`
+
+Primary source for the Dutch incident reserve product, also referred to as noodvermogen or mFRRda.
+
+Use this document for:
+
+* incident reserve / mFRRda product rules;
+* capacity auction rules;
+* mandatory energy-bid obligation after capacity award;
+* BEGCT for incident-reserve energy bids;
+* bid validity, bid size, divisibility and withdrawal rules;
+* activation process and merit-order logic;
+* sanctions and operational obligations.
+
+This is the controlling document for the incident-reserve implementation in the current thesis model.
+
+Important modelling interpretation:
+
+* A capacity award creates an obligation to submit energy bids for at least the contracted volume.
+* Energy bids are submitted per ISP.
+* BEGCT is 25 minutes before the validity period of the bid.
+* Incident reserve is a specific Dutch mFRR product and should not be confused with the MARI standard mFRR product.
+
+## `tennet_mari_standard_mfrr_handbook_2025.pdf`
+
+Primary source for the standard mFRR product, also referred to as the MARI product.
+
+Use this document only for:
+
+* standard mFRR / MARI product rules;
+* MARI-specific energy-bid structure;
+* standard mFRR activation and delivery profile;
+* distinction between scheduled activation and direct activation in the MARI product context;
+* interaction between the MARI product and other balancing services.
+
+Do not use this document as the controlling rulebook for the Dutch incident-reserve / mFRRda capacity-auction model. It is useful for product comparison and future extensions, but MARI is currently outside the main model scope.
+
+## `tennet_imbalance_pricing_system_v6_1_2024-10-21.pdf`
+
+Context document for the Dutch imbalance pricing system.
+
+Use this document for:
+
+* imbalance price methodology;
+* balancing energy price determination;
+* marginal pricing logic;
+* regulation states;
+* direction of payment between BSP, BRP and TenneT;
+* relation between balancing energy settlement and imbalance settlement.
+
+Do not use this document as the controlling source for current incident-reserve product obligations. It contains useful settlement context, but it is not the product manual for current incident-reserve energy-bid obligations. In particular, any older or simplified statement about mFRRda bid submission should be overridden by the 2026 incident-reserve manual when modelling current incident-reserve rules.
+
+## Source hierarchy for the thesis model
+
+For current incident reserve / mFRRda implementation:
+
+1. `tennet_incident_reserves_bsp_manual_2026-01-13.pdf`
+2. ENTSO-E 12.3.F and 17.1.B&C documentation/data
+3. `tennet_imbalance_pricing_system_v6_1_2024-10-21.pdf` for settlement context only
+
+For standard mFRR / MARI implementation:
+
+1. `tennet_mari_standard_mfrr_handbook_2025.pdf`
+2. MARI/standard mFRR data sources
+3. imbalance-pricing document only where Dutch settlement logic is relevant
+
+## Practical rule
+
+If the question is about “what must a BSP do after an incident-reserve capacity award?”, use the 2026 incident-reserve manual.
+
+If the question is about “how is activated balancing energy priced or how does imbalance settlement work?”, use the imbalance-pricing document.
+
+If the question is about “how does the standard European mFRR/MARI product work?”, use the MARI handbook.
