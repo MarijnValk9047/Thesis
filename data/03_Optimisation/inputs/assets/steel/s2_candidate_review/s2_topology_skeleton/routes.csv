@@ -1,0 +1,4 @@
+route_id,configuration_id,route_name,route_role,included_in_main_case,structural_status,numerical_status,executable_status,thesis_usability,approval_status,source_ids,notes
+C0_ROUTE_BF_BOF,C0_current_BF_BOF_reference,C0 BF-BOF route,reference_integrated_route,true,structural_candidate,no_numerical_value,non_executable,false,structural_candidate,S03;F17,Current-route integrated blast-furnace and converter path.
+C1_ROUTE_RETAINED_BF_BOF,C1_phase1_hybrid_BF_BOF_NG_DRP_EAF,C1 retained BF-BOF route,retained_integrated_route,true,structural_candidate,no_numerical_value,non_executable,false,structural_candidate,S03;F17,Retained blast-furnace and converter path inside the hybrid topology.
+C1_ROUTE_NG_DRP_EAF,C1_phase1_hybrid_BF_BOF_NG_DRP_EAF,C1 NG-DRP-EAF route,main_flexible_route,true,structural_candidate,no_numerical_value,non_executable,false,structural_candidate,S03;F04;F07;F17,Main future direct-reduction and EAF route inside the hybrid topology.

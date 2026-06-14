@@ -18,6 +18,7 @@ from steel.governance import (
     load_s2_candidate_mapping,
     load_s2_candidate_review,
     load_s2_schema,
+    load_s2_topology_skeleton,
     validate_s2_candidate_review,
 )
 from steel.input_tables import load_governed_toy_tables
@@ -122,6 +123,14 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert payload["configuration_rows_checked"] == 4
     assert payload["main_configuration_rows"] == 2
     assert payload["configuration_tag_mapping_rows_checked"] == 33
+    assert payload["topology_skeleton_files_checked"] == 7
+    assert payload["topology_configuration_rows_checked"] == 2
+    assert payload["topology_route_rows_checked"] == 3
+    assert payload["topology_process_unit_rows_checked"] == 17
+    assert payload["topology_carrier_rows_checked"] == 11
+    assert payload["topology_store_rows_checked"] == 7
+    assert payload["topology_arc_rows_checked"] == 32
+    assert payload["topology_inventory_policy_rows_checked"] == 4
     assert payload["approved_rows"] == 0
     assert payload["candidate_review_total_rows"] > 0
     assert payload["thesis_grade_numerical_rows"] == 0
@@ -203,6 +212,42 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     mapping_scan = configuration_tag_mapping.astype(str).agg(" ".join, axis=1).str.lower()
     assert not mapping_scan.str.contains(FORBIDDEN_HORIZON_PATTERN, regex=True).any()
 
+    topology_bundle = load_s2_topology_skeleton(REVIEW_ROOT)
+    topology_configurations = topology_bundle.tables["configurations.csv"]
+    assert set(topology_configurations["configuration_id"]) == {
+        "C0_current_BF_BOF_reference",
+        "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
+    }
+    assert topology_configurations["main_case_flag"].str.lower().eq("true").all()
+    assert topology_configurations["sensitivity_only_flag"].str.lower().eq("false").all()
+    assert topology_configurations["optional_later_flag"].str.lower().eq("false").all()
+
+    topology_routes = topology_bundle.tables["routes.csv"]
+    assert {
+        ("C0_current_BF_BOF_reference", "C0_ROUTE_BF_BOF"),
+        ("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "C1_ROUTE_RETAINED_BF_BOF"),
+        ("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "C1_ROUTE_NG_DRP_EAF"),
+    } == {(row["configuration_id"], row["route_id"]) for row in topology_routes.to_dict(orient="records")}
+    route_scan = topology_routes.astype(str).agg(" ".join, axis=1).str.lower()
+    assert not route_scan.str.contains(r"phase 2|phase2|phase 3|phase3|full_hydrogen|on_site_electrolysis|hydrogen_storage|saf|ccs", regex=True).any()
+
+    topology_carriers = topology_bundle.tables["carriers.csv"]
+    boundary_rows = topology_carriers["carrier_id"].isin(
+        {"coal_or_coke_input_boundary", "iron_ore_or_pellet_input_boundary", "scrap_input_boundary", "flux_input_boundary"}
+    )
+    assert topology_carriers.loc[boundary_rows, "external_supply_flag"].str.lower().eq("true").all()
+    assert topology_carriers.loc[boundary_rows, "internal_carrier_flag"].str.lower().eq("false").all()
+
+    topology_stores = topology_bundle.tables["stores.csv"]
+    assert topology_stores["bounded_store_required"].str.lower().eq("true").all()
+    assert not topology_stores["store_name"].str.lower().str.contains(r"coke|sinter|pellet", regex=True).any()
+
+    topology_inventory_policy = topology_bundle.tables["inventory_policy.csv"]
+    cyc50_rows = topology_inventory_policy["endpoint_policy"].str.contains("CYC50", case=False, regex=False)
+    assert cyc50_rows.any()
+    assert topology_inventory_policy.loc[cyc50_rows, "numerical_status"].eq("no_numerical_value").all()
+    assert topology_inventory_policy.loc[cyc50_rows, "executable_status"].eq("non_executable").all()
+
     deepsearch_f_source_index = review_bundle.tables["s2_deepsearch_f_source_index.csv"]
     assert set(deepsearch_f_source_index["source_id"]) == {f"F{index:02d}" for index in range(1, 21)}
     f07 = deepsearch_f_source_index.loc[deepsearch_f_source_index["source_id"].eq("F07")].iloc[0]
@@ -249,6 +294,14 @@ def test_candidate_review_mode_is_non_thesis_usable():
     assert payload["configuration_rows_checked"] == 4
     assert payload["main_configuration_rows"] == 2
     assert payload["configuration_tag_mapping_rows_checked"] == 33
+    assert payload["topology_skeleton_files_checked"] == 7
+    assert payload["topology_configuration_rows_checked"] == 2
+    assert payload["topology_route_rows_checked"] == 3
+    assert payload["topology_process_unit_rows_checked"] == 17
+    assert payload["topology_carrier_rows_checked"] == 11
+    assert payload["topology_store_rows_checked"] == 7
+    assert payload["topology_arc_rows_checked"] == 32
+    assert payload["topology_inventory_policy_rows_checked"] == 4
     assert payload["thesis_grade_numerical_rows"] == 0
     assert payload["candidate_review_executable_rows"] == 0
 

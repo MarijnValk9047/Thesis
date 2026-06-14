@@ -1,0 +1,3 @@
+configuration_id,configuration_name,role,main_case_flag,sensitivity_only_flag,optional_later_flag,topology_status,numerical_status,executable_status,thesis_usability,approval_status,notes
+C0_current_BF_BOF_reference,Current BF-BOF reference configuration,reference_configuration,true,false,false,structural_candidate_only,no_numerical_value,non_executable,false,structural_candidate,Reference structural topology for current-route validation and contrast only.
+C1_phase1_hybrid_BF_BOF_NG_DRP_EAF,Phase 1 hybrid BF-BOF plus NG-DRP-EAF main thesis configuration,main_configuration,true,false,false,structural_candidate_only,no_numerical_value,non_executable,false,structural_candidate,Main future structural topology for the thesis flexibility case.
