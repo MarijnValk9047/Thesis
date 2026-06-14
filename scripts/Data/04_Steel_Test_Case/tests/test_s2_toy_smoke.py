@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import inspect
+from dataclasses import fields
 from pathlib import Path
 from shutil import copytree
 import sys
@@ -29,6 +30,20 @@ from steel.model import build_model, choose_solver
 from steel.runner import run_from_config
 from steel.topology_loader import load_topology_skeleton, validate_topology_skeleton
 from steel.topology_objects import build_steel_topology, build_steel_topology_from_registry
+from steel.topology_queries import (
+    assemble_route_view,
+    assemble_topology_view,
+    assemble_topology_views,
+    ConfigurationTopologyView,
+    detect_disconnected_nodes,
+    identify_external_supply_boundary_carriers,
+    identify_internal_metallic_carriers,
+    incoming_arcs_by_node,
+    outgoing_arcs_by_node,
+    RouteTopologyView,
+    route_level_sources_and_sinks,
+    stores_with_endpoint_policies,
+)
 
 FORBIDDEN_HORIZON_PATTERN = r"(?:^|[^a-z0-9])d-only(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d_only(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d\+4(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d_plus_4(?:[^a-z0-9]|$)"
 
@@ -144,6 +159,9 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert payload["topology_object_arc_count"] == 32
     assert payload["topology_object_inventory_policy_count"] == 4
     assert payload["topology_object_warnings"] == []
+    assert payload["topology_view_configuration_count"] == 2
+    assert payload["topology_view_route_count"] == 3
+    assert payload["topology_view_warnings"] == []
     assert payload["approved_rows"] == 0
     assert payload["candidate_review_total_rows"] > 0
     assert payload["thesis_grade_numerical_rows"] == 0
@@ -378,6 +396,119 @@ def test_topology_object_builder_keeps_structural_surface_only():
     assert not any(token in module_source for token in banned_field_tokens)
 
 
+def test_topology_query_layer_assembles_configuration_and_route_views():
+    topology = build_steel_topology_from_registry(REVIEW_ROOT)
+    assembly = assemble_topology_views(topology)
+
+    assert set(assembly.configuration_views) == {
+        "C0_current_BF_BOF_reference",
+        "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
+    }
+    assert set(assembly.route_views) == {
+        "C0_ROUTE_BF_BOF",
+        "C1_ROUTE_RETAINED_BF_BOF",
+        "C1_ROUTE_NG_DRP_EAF",
+    }
+    assert assembly.warnings == ()
+
+    c0_view = assembly.configuration_views["C0_current_BF_BOF_reference"]
+    c1_view = assembly.configuration_views["C1_phase1_hybrid_BF_BOF_NG_DRP_EAF"]
+    assert c0_view.summary_counts()["routes"] == 1
+    assert c1_view.summary_counts()["routes"] == 2
+    assert c0_view.source_like_node_ids
+    assert c0_view.sink_like_node_ids
+    assert c1_view.source_like_node_ids
+    assert c1_view.sink_like_node_ids
+    assert c0_view.buffer_store_node_ids
+    assert c1_view.buffer_store_node_ids
+    assert set(c1_view.shared_downstream_node_ids) == {
+        "c1_cast_slab_handling",
+        "c1_downstream_metal_sink",
+        "c1_hot_slab_transfer_buffer",
+        "c1_slab_wip_buffer",
+    }
+    assert c0_view.disconnected_node_ids == ()
+    assert c1_view.disconnected_node_ids == ()
+
+    ng_drp_route_view = assembly.route_views["C1_ROUTE_NG_DRP_EAF"]
+    assert ng_drp_route_view.summary_counts()["process_units"] > 0
+    assert ng_drp_route_view.summary_counts()["stores"] > 0
+    assert ng_drp_route_view.summary_counts()["arcs"] > 0
+    assert ng_drp_route_view.process_chain_node_ids
+
+
+def test_topology_query_helpers_return_expected_structural_subsets():
+    topology = build_steel_topology_from_registry(REVIEW_ROOT)
+
+    c1_view = assemble_topology_view(topology, "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF")
+    retained_route_view = assemble_route_view(topology, "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "C1_ROUTE_RETAINED_BF_BOF")
+
+    incoming = incoming_arcs_by_node(topology, "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "c1_cast_slab_handling")
+    outgoing = outgoing_arcs_by_node(topology, "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "c1_cast_slab_handling")
+    assert {arc.arc_id for arc in incoming} == {"C1_ARC14", "C1_ARC15"}
+    assert {arc.arc_id for arc in outgoing} == {"C1_ARC16", "C1_ARC17"}
+
+    source_sink = route_level_sources_and_sinks(topology, "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "C1_ROUTE_RETAINED_BF_BOF")
+    assert source_sink["source_like_node_ids"]
+    assert source_sink["sink_like_node_ids"]
+    assert detect_disconnected_nodes(topology, "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF") == []
+
+    endpoint_rows = stores_with_endpoint_policies(topology, "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF")
+    assert endpoint_rows
+    assert any(row["endpoint_policy"] == "CYC50_candidate_only" for row in endpoint_rows)
+
+    assert identify_external_supply_boundary_carriers(topology) == [
+        "coal_or_coke_input_boundary",
+        "flux_input_boundary",
+        "iron_ore_or_pellet_input_boundary",
+        "scrap_input_boundary",
+    ]
+    assert identify_internal_metallic_carriers(topology) == [
+        "DRI_or_HDRI",
+        "crude_steel_or_liquid_steel",
+        "hot_metal",
+        "slab_or_WIP",
+    ]
+
+    assert retained_route_view.configuration.configuration_id == c1_view.configuration.configuration_id
+    assert retained_route_view.route.route_id == "C1_ROUTE_RETAINED_BF_BOF"
+    assert retained_route_view.disconnected_node_ids == ()
+
+
+def test_topology_query_layer_stays_structural_only():
+    topology = build_steel_topology_from_registry(REVIEW_ROOT)
+    assembly = assemble_topology_views(topology)
+    module_source = inspect.getsource(sys.modules["steel.topology_queries"]).lower()
+
+    assert "pyomo" not in module_source
+    banned_field_tokens = {
+        "capacity",
+        "yield",
+        "coefficient",
+        "cost",
+        "emission",
+        "tariff",
+        "bid_quantity",
+        "objective_value",
+    }
+    route_view_fields = {field.name for field in fields(RouteTopologyView)}
+    configuration_view_fields = {field.name for field in fields(ConfigurationTopologyView)}
+    assert route_view_fields.isdisjoint(banned_field_tokens)
+    assert configuration_view_fields.isdisjoint(banned_field_tokens)
+
+    view_text = " ".join(
+        str(value).lower()
+        for view in list(assembly.configuration_views.values()) + list(assembly.route_views.values())
+        for value in view.__dict__.values()
+    )
+    assert not any(
+        token in view_text
+        for token in ("phase 2", "phase3", "full_hydrogen", "on_site_electrolysis", "mfrr", "cvar", "da bidding")
+    )
+    for view in list(assembly.configuration_views.values()) + list(assembly.route_views.values()):
+        assert view.warnings == ()
+
+
 def test_candidate_review_mode_is_non_thesis_usable():
     config = load_config(CANDIDATE_REVIEW_CONFIG_PATH)
     schema_bundle = load_s2_schema(SCHEMA_ROOT)
@@ -418,6 +549,9 @@ def test_candidate_review_mode_is_non_thesis_usable():
     assert payload["topology_object_arc_count"] == 32
     assert payload["topology_object_inventory_policy_count"] == 4
     assert payload["topology_object_warnings"] == []
+    assert payload["topology_view_configuration_count"] == 2
+    assert payload["topology_view_route_count"] == 3
+    assert payload["topology_view_warnings"] == []
     assert payload["thesis_grade_numerical_rows"] == 0
     assert payload["candidate_review_executable_rows"] == 0
 

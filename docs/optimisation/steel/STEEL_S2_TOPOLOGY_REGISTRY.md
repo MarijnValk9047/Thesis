@@ -193,6 +193,40 @@ It is still structural only. It does not:
 
 Its role is to prepare `S2.6e` and later `S2.7` work with a small in-memory topology surface that stays inside the same governance boundary as the registry and loader.
 
+## Topology Query And Assembly Layer
+
+`S2.6e` adds a structural-only query and assembly layer under:
+
+- `scripts/Data/04_Steel_Test_Case/steel/topology_queries.py`
+
+This sits above the object layer:
+
+- the loader validates the CSV registry;
+- the object layer converts validated rows into lightweight Python objects;
+- the query layer assembles configuration-level and route-level structural views from those objects.
+
+The query layer provides structural views for:
+
+- `C0` and `C1` configuration subsets;
+- all three frozen route subsets;
+- process-chain ordering by route;
+- incoming and outgoing arc lookup by node;
+- source-like, sink-like, and buffer-store node identification;
+- shared downstream node identification in `C1`;
+- external supply boundary carrier identification;
+- internal metallic carrier identification;
+- disconnected-node checks and compact structural summaries.
+
+It is still not a model builder. It does not:
+
+- create balances, variables, constraints, or objectives;
+- create a Pyomo model;
+- create solver inputs;
+- expose numerical capacities, coefficients, costs, or market parameters;
+- approve numerical inputs or create later-stage implementation branches.
+
+Its role is narrower: it prepares `S2.6f` and later `S2.7` work with reusable structural query views while keeping the same refusal of numerical and later-stage content as the loader and object layer.
+
 ## What Is Explicitly Not Included
 
 The registry excludes:

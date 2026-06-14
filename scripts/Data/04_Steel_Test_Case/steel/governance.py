@@ -13,6 +13,7 @@ from .topology_loader import (
     validate_topology_skeleton as _validate_topology_skeleton_bundle,
 )
 from .topology_objects import SteelTopology, build_steel_topology as _build_steel_topology
+from .topology_queries import TopologyAssemblyBundle, assemble_topology_views as _assemble_topology_views
 
 
 SCHEMA_FILE_SPECS: dict[str, list[str]] = {
@@ -646,6 +647,10 @@ def build_s2_topology_objects(topology_bundle: TopologyTableBundle) -> SteelTopo
     return _build_steel_topology(topology_bundle, validate=True)
 
 
+def build_s2_topology_views(topology: SteelTopology) -> TopologyAssemblyBundle:
+    return _assemble_topology_views(topology)
+
+
 def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
     tables = review_bundle.tables
     summary = tables["s2_review_summary.csv"]
@@ -1056,6 +1061,14 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
             "topology_object_arc_count": topology_object_counts["arcs"],
             "topology_object_inventory_policy_count": topology_object_counts["inventory_policies"],
             "topology_object_warnings": list(topology_objects.warnings),
+        }
+    )
+    topology_views = build_s2_topology_views(topology_objects)
+    payload.update(
+        {
+            "topology_view_configuration_count": len(topology_views.configuration_views),
+            "topology_view_route_count": len(topology_views.route_views),
+            "topology_view_warnings": list(topology_views.warnings),
         }
     )
     return payload
