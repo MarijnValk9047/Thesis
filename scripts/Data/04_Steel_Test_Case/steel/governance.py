@@ -995,6 +995,44 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "codex_may_decide",
         "notes",
     ],
+    "s2_store_capacity_translation_audit.csv": [
+        "audit_id",
+        "store_id",
+        "configuration_id",
+        "store_class",
+        "carrier",
+        "previous_status",
+        "new_status",
+        "capacity_value_t",
+        "sizing_formula",
+        "sizing_basis",
+        "heat_or_throughput_assumption",
+        "sensitivity_case",
+        "activation_recommendation",
+        "source_ids",
+        "evidence_status",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "thesis_usability",
+        "remaining_blocker",
+        "notes",
+    ],
+    "s2_buffer_activation_readiness_register.csv": [
+        "buffer_gate_id",
+        "store_id",
+        "configuration_id",
+        "buffer_type",
+        "candidate_for_s2_10b_activation",
+        "capacity_ready",
+        "initial_inventory_ready",
+        "terminal_rule_ready",
+        "expected_model_role",
+        "fake_flexibility_risk",
+        "required_builder_guard",
+        "activation_status",
+        "next_action",
+        "thesis_usability",
+    ],
     "s2_liquid_steel_smoke_baseline_summary.csv": [
         "case_id",
         "configuration_id",
@@ -1878,6 +1916,10 @@ PROCESS_BOUND_TRANSLATION_AUDIT_COLUMNS = REVIEW_FILE_SPECS["s2_process_bound_tr
 PROCESS_BOUND_TRANSLATION_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_process_bound_translation_audit.csv"
 TARGET_CAPACITY_RECONCILIATION_AUDIT_COLUMNS = REVIEW_FILE_SPECS["s2_target_capacity_reconciliation_audit.csv"]
 TARGET_CAPACITY_RECONCILIATION_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_target_capacity_reconciliation_audit.csv"
+STORE_CAPACITY_TRANSLATION_AUDIT_COLUMNS = REVIEW_FILE_SPECS["s2_store_capacity_translation_audit.csv"]
+STORE_CAPACITY_TRANSLATION_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_store_capacity_translation_audit.csv"
+BUFFER_ACTIVATION_READINESS_COLUMNS = REVIEW_FILE_SPECS["s2_buffer_activation_readiness_register.csv"]
+BUFFER_ACTIVATION_READINESS_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_buffer_activation_readiness_register.csv"
 PROVISIONAL_DEV_INPUT_ALLOWED_APPROVAL_STATUSES = {"provisional_development_only", "missing_required_dev_value"}
 PROVISIONAL_DEV_INPUT_ALLOWED_EXECUTABLE_STATUSES = {"dev_executable_only", "not_executable"}
 PROVISIONAL_DEV_INPUT_README_REQUIRED_PHRASES = (
@@ -1893,6 +1935,7 @@ PROVISIONAL_DEV_INPUT_README_REQUIRED_PHRASES = (
     "`cyc50` is endpoint policy only and not buffer-capacity approval",
 )
 DEV_INPUT_READINESS_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_PROVISIONAL_DEV_INPUT_READINESS.md"
+STORE_CAPACITY_TRANSLATION_REVIEW_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_STORE_CAPACITY_TRANSLATION_REVIEW.md"
 DEV_INPUT_READINESS_MEMO_REQUIRED_PHRASES = (
     "structurally complete enough for a future deterministic `s2` smoke-lp builder prompt",
     "not numerically complete enough",
@@ -1904,6 +1947,26 @@ DEV_INPUT_READINESS_MEMO_REQUIRED_PHRASES = (
     "what the next lp-builder prompt may consume",
     "what the lp-builder must refuse",
 )
+STORE_CAPACITY_TRANSLATION_REVIEW_REQUIRED_PHRASES = (
+    "purpose",
+    "what was translated",
+    "which buffers may be activated first",
+    "which buffers remain excluded or deferred",
+    "why cyc50 is not capacity evidence",
+    "why hot slab wip is not strategic flexibility",
+    "why coke, sinter, pellet, and finished goods are excluded",
+    "why outputs remain non-thesis-usable",
+    "what s2.10b may activate",
+    "what s2.10b must still refuse",
+)
+BUFFER_ACTIVATION_REQUIRED_BUFFER_TYPES = {
+    "hot_metal_buffer",
+    "dri_hdri_surge_buffer",
+    "cold_slab_slab_wip",
+    "hot_slab_wip",
+    "liquid_steel_ladle_tundish",
+    "excluded_scope_stocks",
+}
 LIQUID_STEEL_SMOKE_BUILDER_MODULE = REPO_ROOT / "scripts" / "Data" / "04_Steel_Test_Case" / "steel" / "liquid_steel_smoke_builder.py"
 LIQUID_STEEL_SMOKE_BUILDER_SCOPE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_BUILDER_SCOPE.md"
 LIQUID_STEEL_SMOKE_RUNNER_MODULE = REPO_ROOT / "scripts" / "Data" / "04_Steel_Test_Case" / "steel" / "liquid_steel_smoke_runner.py"
@@ -2615,6 +2678,12 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
     for phrase in DEV_INPUT_READINESS_MEMO_REQUIRED_PHRASES:
         if phrase not in readiness_text:
             raise ValueError(f"STEEL_S2_PROVISIONAL_DEV_INPUT_READINESS.md is missing required phrase: {phrase}")
+    if not STORE_CAPACITY_TRANSLATION_REVIEW_MEMO.exists():
+        raise ValueError("STEEL_S2_STORE_CAPACITY_TRANSLATION_REVIEW.md must exist.")
+    store_review_text = STORE_CAPACITY_TRANSLATION_REVIEW_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in STORE_CAPACITY_TRANSLATION_REVIEW_REQUIRED_PHRASES:
+        if phrase not in store_review_text:
+            raise ValueError(f"STEEL_S2_STORE_CAPACITY_TRANSLATION_REVIEW.md is missing required phrase: {phrase}")
 
     dev_input_index = _read_csv(PROVISIONAL_DEV_INPUT_INDEX_PATH)
     if list(dev_input_index.columns) != PROVISIONAL_DEV_INPUT_INDEX_COLUMNS:
@@ -2628,6 +2697,12 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
     target_capacity_reconciliation_audit = _read_csv(TARGET_CAPACITY_RECONCILIATION_AUDIT_PATH)
     if list(target_capacity_reconciliation_audit.columns) != TARGET_CAPACITY_RECONCILIATION_AUDIT_COLUMNS:
         raise ValueError("s2_target_capacity_reconciliation_audit.csv must match the required column order.")
+    store_capacity_translation_audit = _read_csv(STORE_CAPACITY_TRANSLATION_AUDIT_PATH)
+    if list(store_capacity_translation_audit.columns) != STORE_CAPACITY_TRANSLATION_AUDIT_COLUMNS:
+        raise ValueError("s2_store_capacity_translation_audit.csv must match the required column order.")
+    buffer_activation_readiness = _read_csv(BUFFER_ACTIVATION_READINESS_PATH)
+    if list(buffer_activation_readiness.columns) != BUFFER_ACTIVATION_READINESS_COLUMNS:
+        raise ValueError("s2_buffer_activation_readiness_register.csv must match the required column order.")
 
     total_rows = 0
     approved_row_count = 0
@@ -2671,8 +2746,12 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
                 if (~frame.loc[dev_rows, "approval_status"].astype(str).str.strip().str.lower().eq("provisional_development_only")).any():
                     raise ValueError(f"{filename} dev_executable_only rows must also be provisional_development_only.")
 
-    inventory_text = " ".join(tables["inventory_endpoint_policies.csv"].astype(str).agg(" ".join, axis=1).str.lower())
-    store_text = " ".join(tables["store_capacities.csv"].astype(str).agg(" ".join, axis=1).str.lower())
+    inventory_endpoint_policies = tables["inventory_endpoint_policies.csv"]
+    store_capacities = tables["store_capacities.csv"]
+    initial_inventories = tables["initial_inventories.csv"]
+    terminal_inventory_rules = tables["terminal_inventory_rules.csv"]
+    inventory_text = " ".join(inventory_endpoint_policies.astype(str).agg(" ".join, axis=1).str.lower())
+    store_text = " ".join(store_capacities.astype(str).agg(" ".join, axis=1).str.lower())
     process_text = " ".join(tables["process_bounds.csv"].astype(str).agg(" ".join, axis=1).str.lower())
     production_targets = tables["production_targets.csv"]
     target_text = " ".join(production_targets.astype(str).agg(" ".join, axis=1).str.lower())
@@ -2684,6 +2763,8 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
             raise ValueError("inventory_endpoint_policies.csv must keep CYC50 separate from capacity approval.")
     if "multi_hour_or_multi_day" not in store_text:
         raise ValueError("store_capacities.csv must keep hot slab WIP separate from strategic multi-hour or multi-day flexibility.")
+    if "unbounded" in store_text:
+        raise ValueError("store_capacities.csv must not introduce unbounded store language.")
     if "annual_anchor_requires_translation" not in process_text:
         raise ValueError("process_bounds.csv must explicitly record annual-anchor translation blockers.")
     if "route_neutral" not in target_text:
@@ -2732,6 +2813,64 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
         value_basis_text = process_bounds.loc[process_dev_rows, "value_basis"].astype(str).str.strip().str.lower()
         if (~value_basis_text.str.contains("process_class=")).any():
             raise ValueError("process_bounds.csv dev_executable_only rows must record process_class= in value_basis.")
+
+    store_dev_rows = store_capacities["executable_status"].astype(str).str.strip().str.lower().eq("dev_executable_only")
+    store_formula_rows = store_capacities["value_basis"].astype(str).str.strip().str.lower().str.contains("formula")
+    if store_dev_rows.any():
+        store_values = pd.to_numeric(store_capacities.loc[store_dev_rows, "value"], errors="coerce")
+        if store_values.isna().any() or (store_values <= 0).any():
+            raise ValueError("store_capacities.csv dev_executable_only rows must contain positive numeric tonnes.")
+        if (~store_capacities.loc[store_dev_rows, "unit"].astype(str).str.strip().str.lower().eq("t")).any():
+            raise ValueError("store_capacities.csv dev_executable_only rows must use unit t.")
+        if (~store_capacities.loc[store_dev_rows, "value_basis"].astype(str).str.strip().str.lower().str.contains("store_class=")).any():
+            raise ValueError("store_capacities.csv dev_executable_only rows must record store_class= in value_basis.")
+    if (store_formula_rows & store_dev_rows).any():
+        raise ValueError("store_capacities.csv formula-only rows must not be dev_executable_only.")
+
+    store_lookup = {
+        (str(row["configuration_id"]).strip(), str(row["store_id"]).strip()): row
+        for row in store_capacities.to_dict(orient="records")
+    }
+    initial_lookup = {
+        (str(row["configuration_id"]).strip(), str(row["store_id"]).strip()): row
+        for row in initial_inventories.to_dict(orient="records")
+    }
+    terminal_lookup = {
+        (str(row["configuration_id"]).strip(), str(row["store_id"]).strip()): row
+        for row in terminal_inventory_rules.to_dict(orient="records")
+    }
+    endpoint_lookup = {
+        (str(row["configuration_id"]).strip(), str(row["store_id"]).strip()): row
+        for row in inventory_endpoint_policies.to_dict(orient="records")
+    }
+    for key, store_row in store_lookup.items():
+        if key not in initial_lookup or key not in terminal_lookup or key not in endpoint_lookup:
+            raise ValueError(f"store-capacity inventory linkage is missing for {key}.")
+        initial_row = initial_lookup[key]
+        terminal_row = terminal_lookup[key]
+        endpoint_row = endpoint_lookup[key]
+        if str(store_row["executable_status"]).strip().lower() == "dev_executable_only":
+            capacity_value = float(store_row["value"])
+            initial_value = float(initial_row["value"])
+            if abs(initial_value - (0.5 * capacity_value)) > 1e-6:
+                raise ValueError(f"initial_inventories.csv must keep initial inventory at 50 percent of capacity for {key}.")
+            if str(initial_row["executable_status"]).strip().lower() != "dev_executable_only":
+                raise ValueError(f"initial_inventories.csv must keep executable status aligned for {key}.")
+            if str(terminal_row["executable_status"]).strip().lower() != "dev_executable_only":
+                raise ValueError(f"terminal_inventory_rules.csv must keep executable status aligned for {key}.")
+            if str(endpoint_row["executable_status"]).strip().lower() != "dev_executable_only":
+                raise ValueError(f"inventory_endpoint_policies.csv must keep executable status aligned for {key}.")
+            if str(endpoint_row["value"]).strip() != "CYC50":
+                raise ValueError(f"inventory_endpoint_policies.csv must keep CYC50 endpoint policy for executable stores {key}.")
+            if abs(float(terminal_row["value"]) - 1.0) > 1e-9:
+                raise ValueError(f"terminal_inventory_rules.csv must keep terminal equals beginning for executable stores {key}.")
+        else:
+            if str(initial_row["executable_status"]).strip().lower() != "not_executable":
+                raise ValueError(f"initial_inventories.csv must keep non-executable status aligned for blocked stores {key}.")
+            if str(terminal_row["executable_status"]).strip().lower() != "not_executable":
+                raise ValueError(f"terminal_inventory_rules.csv must keep non-executable status aligned for blocked stores {key}.")
+            if str(endpoint_row["executable_status"]).strip().lower() != "not_executable":
+                raise ValueError(f"inventory_endpoint_policies.csv must keep non-executable status aligned for blocked stores {key}.")
 
     audited_process_row_ids = set(process_bound_translation_audit["process_unit_or_asset"].astype(str).str.strip() + "||" + process_bound_translation_audit["configuration_id"].astype(str).str.strip() + "||" + process_bound_translation_audit["route_id"].astype(str).str.strip() + "||" + process_bound_translation_audit["bound_type"].astype(str).str.strip())
     expected_process_row_ids = set(process_bounds["process_unit_id"].astype(str).str.strip() + "||" + process_bounds["configuration_id"].astype(str).str.strip() + "||" + process_bounds["route_id"].astype(str).str.strip() + "||" + process_bounds["parameter_name"].astype(str).str.strip())
@@ -2803,6 +2942,53 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
             if not target_value > max_capacity:
                 raise ValueError(f"stress_infeasible_original target must remain above max implied capacity for {key}.")
 
+    audited_store_keys = {
+        (str(row["configuration_id"]).strip(), str(row["store_id"]).strip())
+        for row in store_capacity_translation_audit.to_dict(orient="records")
+    }
+    expected_store_keys = set(store_lookup)
+    if audited_store_keys != expected_store_keys:
+        missing = sorted(expected_store_keys - audited_store_keys)
+        extra = sorted(audited_store_keys - expected_store_keys)
+        raise ValueError(f"s2_store_capacity_translation_audit.csv store coverage mismatch. missing={missing} extra={extra}")
+    if (~store_capacity_translation_audit["reviewer_decision_required"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("s2_store_capacity_translation_audit.csv must keep reviewer_decision_required=true.")
+    if (~store_capacity_translation_audit["codex_may_decide"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_store_capacity_translation_audit.csv must keep codex_may_decide=false.")
+    if (~store_capacity_translation_audit["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_store_capacity_translation_audit.csv must keep thesis_usability=false.")
+    store_audit_text = " ".join(store_capacity_translation_audit.astype(str).agg(" ".join, axis=1).str.lower())
+    for phrase in ("not_capacity_approval", "multi_hour_or_multi_day", "downstream", "hot_metal", "dri"):
+        if phrase not in store_audit_text:
+            raise ValueError(f"s2_store_capacity_translation_audit.csv is missing required diagnostic phrase: {phrase}")
+
+    if buffer_activation_readiness["buffer_gate_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_buffer_activation_readiness_register.csv must not contain duplicate buffer_gate_id values.")
+    if (~buffer_activation_readiness["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_buffer_activation_readiness_register.csv must keep thesis_usability=false.")
+    if not BUFFER_ACTIVATION_REQUIRED_BUFFER_TYPES.issubset(set(buffer_activation_readiness["buffer_type"].astype(str).str.strip())):
+        missing = sorted(BUFFER_ACTIVATION_REQUIRED_BUFFER_TYPES - set(buffer_activation_readiness["buffer_type"].astype(str).str.strip()))
+        raise ValueError(f"s2_buffer_activation_readiness_register.csv is missing required buffer types: {missing}")
+    readiness_lookup = {
+        (str(row["configuration_id"]).strip(), str(row["store_id"]).strip()): row
+        for row in buffer_activation_readiness.to_dict(orient="records")
+        if str(row["store_id"]).strip() in set(store_capacities["store_id"].astype(str).str.strip())
+    }
+    for key, store_row in store_lookup.items():
+        if key not in readiness_lookup:
+            raise ValueError(f"s2_buffer_activation_readiness_register.csv is missing readiness coverage for {key}.")
+        readiness_row = readiness_lookup[key]
+        expected_ready = str(store_row["executable_status"]).strip().lower() == "dev_executable_only"
+        if str(readiness_row["capacity_ready"]).strip().lower() != str(expected_ready).lower():
+            raise ValueError(f"s2_buffer_activation_readiness_register.csv capacity_ready mismatch for {key}.")
+    activation_ready_rows = buffer_activation_readiness["activation_status"].astype(str).str.strip().eq("guarded_ready")
+    if activation_ready_rows.sum() != 3:
+        raise ValueError("s2_buffer_activation_readiness_register.csv must identify exactly three guarded_ready buffer rows in S2.10a.")
+    activation_text = " ".join(buffer_activation_readiness.astype(str).agg(" ".join, axis=1).str.lower())
+    for phrase in ("coke", "sinter", "pellet", "finished_goods", "liquid_steel_ladle_tundish", "hot_slab_wip"):
+        if phrase not in activation_text:
+            raise ValueError(f"s2_buffer_activation_readiness_register.csv is missing required scope text: {phrase}")
+
     expected_index_files = set(PROVISIONAL_DEV_INPUT_FILE_SPECS) - {"dev_input_completeness_report.csv"}
     actual_index_files = set(dev_input_index["dev_input_file"].astype(str).str.strip())
     if actual_index_files != expected_index_files:
@@ -2859,6 +3045,7 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
 
     return {
         "dev_input_readiness_memo_present": True,
+        "store_capacity_translation_review_memo_present": True,
         "provisional_dev_input_files_checked": int(len(PROVISIONAL_DEV_INPUT_FILE_SPECS) + 1),
         "provisional_dev_input_rows_checked": int(total_rows),
         "provisional_dev_input_index_rows_checked": int(len(dev_input_index)),
@@ -2870,8 +3057,14 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
         "provisional_dev_value_completion_audit_rows_checked": int(len(dev_value_completion_audit)),
         "process_bound_translation_audit_rows_checked": int(len(process_bound_translation_audit)),
         "target_capacity_reconciliation_audit_rows_checked": int(len(target_capacity_reconciliation_audit)),
+        "store_capacity_translation_audit_rows_checked": int(len(store_capacity_translation_audit)),
+        "buffer_activation_readiness_rows_checked": int(len(buffer_activation_readiness)),
         "process_bound_dev_executable_rows": int(process_dev_rows.sum()),
         "process_bound_non_executable_rows": int((~process_dev_rows).sum()),
+        "store_capacity_dev_executable_rows": int(store_dev_rows.sum()),
+        "store_capacity_formula_only_rows": int(store_formula_rows.sum()),
+        "store_capacity_excluded_or_deferred_rows": int((~store_dev_rows).sum()),
+        "buffer_activation_ready_rows": int(activation_ready_rows.sum()),
     }
 
 

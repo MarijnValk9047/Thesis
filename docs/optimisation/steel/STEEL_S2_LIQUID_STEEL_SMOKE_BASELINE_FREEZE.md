@@ -147,3 +147,5 @@ S2.9 outputs are not thesis results.
 - explicit validation against public annual anchors as validation only, not direct executable caps
 - reviewed entry decision for `S3` energy, cost, and emissions scope
 - continued separation between dev-only scaffolds and approved thesis inputs
+
+The corresponding `S2.10a` translation review is recorded in `STEEL_S2_STORE_CAPACITY_TRANSLATION_REVIEW.md`.

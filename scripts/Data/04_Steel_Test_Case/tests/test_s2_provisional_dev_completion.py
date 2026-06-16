@@ -13,9 +13,11 @@ if str(TEST_CASE_ROOT) not in sys.path:
 import steel.governance as governance_module
 from steel.governance import (
     DEV_INPUT_READINESS_MEMO,
+    BUFFER_ACTIVATION_READINESS_PATH,
     PROCESS_BOUND_TRANSLATION_AUDIT_PATH,
     PROVISIONAL_DEV_INPUT_ROOT,
     PROVISIONAL_DEV_VALUE_COMPLETION_AUDIT_PATH,
+    STORE_CAPACITY_TRANSLATION_AUDIT_PATH,
     load_s2_provisional_dev_input,
     validate_s2_provisional_dev_input,
 )
@@ -50,6 +52,8 @@ def _load_dev_table(filename: str) -> pd.DataFrame:
 def test_s28b_completion_audit_exists_and_validation_reports_it():
     assert PROVISIONAL_DEV_VALUE_COMPLETION_AUDIT_PATH.exists()
     assert PROCESS_BOUND_TRANSLATION_AUDIT_PATH.exists()
+    assert STORE_CAPACITY_TRANSLATION_AUDIT_PATH.exists()
+    assert BUFFER_ACTIVATION_READINESS_PATH.exists()
 
     bundle = load_s2_provisional_dev_input(PROVISIONAL_DEV_INPUT_ROOT)
     payload = validate_s2_provisional_dev_input(bundle)
@@ -57,9 +61,16 @@ def test_s28b_completion_audit_exists_and_validation_reports_it():
     assert payload["provisional_dev_value_completion_audit_rows_checked"] == 27
     assert payload["process_bound_translation_audit_rows_checked"] == 10
     assert payload["target_capacity_reconciliation_audit_rows_checked"] == 4
-    assert payload["provisional_dev_input_formula_only_rows"] == 15
+    assert payload["store_capacity_translation_audit_rows_checked"] == 7
+    assert payload["buffer_activation_readiness_rows_checked"] == 9
+    assert payload["provisional_dev_input_formula_only_rows"] == 13
     assert payload["provisional_dev_input_approved_rows"] == 0
     assert payload["provisional_dev_input_thesis_usable_rows"] == 0
+    assert payload["store_capacity_translation_review_memo_present"] is True
+    assert payload["store_capacity_dev_executable_rows"] == 3
+    assert payload["store_capacity_formula_only_rows"] == 2
+    assert payload["store_capacity_excluded_or_deferred_rows"] == 4
+    assert payload["buffer_activation_ready_rows"] == 3
     assert payload["process_bound_dev_executable_rows"] == 9
     assert payload["process_bound_non_executable_rows"] == 1
 

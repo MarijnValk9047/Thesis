@@ -102,3 +102,5 @@ That improves restricted smoke-run usability without changing process bounds, ad
 `S2.9d` further refines the smoke formulation by minimising explicit overproduction while keeping the target hard and keeping shortfall slack inactive.
 
 The resulting restricted smoke baseline and the next required scope gates are frozen in `STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md`.
+
+The first dev-only tonne translation and activation boundary for `S2.10b` is now recorded in `STEEL_S2_STORE_CAPACITY_TRANSLATION_REVIEW.md`.
