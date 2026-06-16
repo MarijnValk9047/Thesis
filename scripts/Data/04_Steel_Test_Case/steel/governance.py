@@ -442,6 +442,7 @@ PROVISIONAL_DEV_INPUT_FILE_SPECS: dict[str, list[str]] = {
         "route_id",
         "carrier_id",
         "target_name",
+        "target_variant",
         "value",
         "unit",
         "value_basis",
@@ -974,6 +975,24 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "reviewer_decision_required",
         "codex_may_decide",
         "remaining_blocker",
+        "notes",
+    ],
+    "s2_target_capacity_reconciliation_audit.csv": [
+        "audit_id",
+        "configuration_id",
+        "horizon_hours",
+        "target_variant",
+        "original_target_t",
+        "max_implied_liquid_steel_t",
+        "target_fraction_of_capacity",
+        "reconciled_target_t",
+        "feasibility_expectation",
+        "source_diagnostic_run_or_basis",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
         "notes",
     ],
     **PROMOTION_PROTOCOL_FILE_SPECS,
@@ -1808,6 +1827,8 @@ PROVISIONAL_DEV_VALUE_COMPLETION_AUDIT_COLUMNS = REVIEW_FILE_SPECS["s2_provision
 PROVISIONAL_DEV_VALUE_COMPLETION_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_provisional_dev_value_completion_audit.csv"
 PROCESS_BOUND_TRANSLATION_AUDIT_COLUMNS = REVIEW_FILE_SPECS["s2_process_bound_translation_audit.csv"]
 PROCESS_BOUND_TRANSLATION_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_process_bound_translation_audit.csv"
+TARGET_CAPACITY_RECONCILIATION_AUDIT_COLUMNS = REVIEW_FILE_SPECS["s2_target_capacity_reconciliation_audit.csv"]
+TARGET_CAPACITY_RECONCILIATION_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_target_capacity_reconciliation_audit.csv"
 PROVISIONAL_DEV_INPUT_ALLOWED_APPROVAL_STATUSES = {"provisional_development_only", "missing_required_dev_value"}
 PROVISIONAL_DEV_INPUT_ALLOWED_EXECUTABLE_STATUSES = {"dev_executable_only", "not_executable"}
 PROVISIONAL_DEV_INPUT_README_REQUIRED_PHRASES = (
@@ -1836,6 +1857,8 @@ DEV_INPUT_READINESS_MEMO_REQUIRED_PHRASES = (
 )
 LIQUID_STEEL_SMOKE_BUILDER_MODULE = REPO_ROOT / "scripts" / "Data" / "04_Steel_Test_Case" / "steel" / "liquid_steel_smoke_builder.py"
 LIQUID_STEEL_SMOKE_BUILDER_SCOPE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_BUILDER_SCOPE.md"
+LIQUID_STEEL_SMOKE_RUNNER_MODULE = REPO_ROOT / "scripts" / "Data" / "04_Steel_Test_Case" / "steel" / "liquid_steel_smoke_runner.py"
+LIQUID_STEEL_SMOKE_DIAGNOSTICS_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_DIAGNOSTICS.md"
 LIQUID_STEEL_SMOKE_BUILDER_SCOPE_REQUIRED_PHRASES = (
     "restricted deterministic `s2` liquid-steel material-flow lp scaffold",
     "development-only smoke builder",
@@ -1848,6 +1871,16 @@ LIQUID_STEEL_SMOKE_BUILDER_SCOPE_REQUIRED_PHRASES = (
     "downstream `hsm` and slab scope remain outside the executable `s2.9a` boundary",
     "all model metadata must report `thesis_usability=false`",
     "what s2.9b should test",
+)
+LIQUID_STEEL_SMOKE_DIAGNOSTICS_REQUIRED_PHRASES = (
+    "purpose of s2.9b",
+    "c0_current_bf_bof_reference",
+    "c1_phase1_hybrid_bf_bof_ng_drp_eaf",
+    "24h",
+    "no hidden shortfall slack",
+    "solve_status=not_attempted_solver_unavailable",
+    "thesis_usability=false",
+    "what should happen in s2.9c",
 )
 
 
@@ -2513,6 +2546,9 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
     process_bound_translation_audit = _read_csv(PROCESS_BOUND_TRANSLATION_AUDIT_PATH)
     if list(process_bound_translation_audit.columns) != PROCESS_BOUND_TRANSLATION_AUDIT_COLUMNS:
         raise ValueError("s2_process_bound_translation_audit.csv must match the required column order.")
+    target_capacity_reconciliation_audit = _read_csv(TARGET_CAPACITY_RECONCILIATION_AUDIT_PATH)
+    if list(target_capacity_reconciliation_audit.columns) != TARGET_CAPACITY_RECONCILIATION_AUDIT_COLUMNS:
+        raise ValueError("s2_target_capacity_reconciliation_audit.csv must match the required column order.")
 
     total_rows = 0
     approved_row_count = 0
@@ -2559,7 +2595,8 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
     inventory_text = " ".join(tables["inventory_endpoint_policies.csv"].astype(str).agg(" ".join, axis=1).str.lower())
     store_text = " ".join(tables["store_capacities.csv"].astype(str).agg(" ".join, axis=1).str.lower())
     process_text = " ".join(tables["process_bounds.csv"].astype(str).agg(" ".join, axis=1).str.lower())
-    target_text = " ".join(tables["production_targets.csv"].astype(str).agg(" ".join, axis=1).str.lower())
+    production_targets = tables["production_targets.csv"]
+    target_text = " ".join(production_targets.astype(str).agg(" ".join, axis=1).str.lower())
     validation_text = " ".join(tables["validation_targets.csv"].astype(str).agg(" ".join, axis=1).str.lower())
     process_bounds = tables["process_bounds.csv"]
 
@@ -2574,6 +2611,30 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
         raise ValueError("production_targets.csv must keep production targets route-neutral in the base case.")
     if "must_not_drive_constraints" not in validation_text:
         raise ValueError("validation_targets.csv must keep validation anchors out of live constraints.")
+    if production_targets["target_name"].astype(str).str.strip().str.lower().str.contains("horizon_total_target").sum() != len(production_targets):
+        raise ValueError("production_targets.csv must keep every target row horizon-total.")
+    if production_targets["target_variant"].astype(str).str.strip().eq("").any():
+        raise ValueError("production_targets.csv must define target_variant for every row.")
+    if production_targets.duplicated(subset=["configuration_id", "target_name", "target_variant"]).any():
+        raise ValueError("production_targets.csv must not duplicate configuration_id/target_name/target_variant combinations.")
+
+    required_target_variants = {
+        ("C0_current_BF_BOF_reference", "horizon_total_target_24h_debug", "feasible_smoke"),
+        ("C0_current_BF_BOF_reference", "horizon_total_target_24h_debug", "stress_infeasible_original"),
+        ("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "horizon_total_target_24h_debug", "feasible_smoke"),
+        ("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "horizon_total_target_24h_debug", "stress_infeasible_original"),
+    }
+    actual_target_variants = {
+        (
+            str(row["configuration_id"]).strip(),
+            str(row["target_name"]).strip(),
+            str(row["target_variant"]).strip(),
+        )
+        for row in production_targets.to_dict(orient="records")
+    }
+    if not required_target_variants.issubset(actual_target_variants):
+        missing = sorted(required_target_variants - actual_target_variants)
+        raise ValueError(f"production_targets.csv is missing required 24h target variants: {missing}")
 
     process_dev_rows = process_bounds["executable_status"].astype(str).str.strip().str.lower().eq("dev_executable_only")
     if process_dev_rows.any():
@@ -2605,6 +2666,63 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
         raise ValueError("s2_process_bound_translation_audit.csv must keep reviewer_decision_required=true.")
     if (~process_bound_translation_audit["codex_may_decide"].astype(str).str.strip().str.lower().eq("false")).any():
         raise ValueError("s2_process_bound_translation_audit.csv must keep codex_may_decide=false.")
+
+    if target_capacity_reconciliation_audit["audit_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_target_capacity_reconciliation_audit.csv must not contain duplicate audit_id values.")
+    if (~target_capacity_reconciliation_audit["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_target_capacity_reconciliation_audit.csv must keep thesis_usability=false.")
+    if (~target_capacity_reconciliation_audit["reviewer_decision_required"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("s2_target_capacity_reconciliation_audit.csv must keep reviewer_decision_required=true.")
+    if (~target_capacity_reconciliation_audit["codex_may_decide"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_target_capacity_reconciliation_audit.csv must keep codex_may_decide=false.")
+    if (~target_capacity_reconciliation_audit["approval_status"].astype(str).str.strip().str.lower().eq("provisional_development_only")).any():
+        raise ValueError("s2_target_capacity_reconciliation_audit.csv must keep approval_status=provisional_development_only.")
+    if (~target_capacity_reconciliation_audit["executable_status"].astype(str).str.strip().str.lower().eq("dev_executable_only")).any():
+        raise ValueError("s2_target_capacity_reconciliation_audit.csv must keep executable_status=dev_executable_only.")
+
+    audited_variants = {
+        (
+            str(row["configuration_id"]).strip(),
+            f"horizon_total_target_{str(row['horizon_hours']).strip()}h_debug",
+            str(row["target_variant"]).strip(),
+        )
+        for row in target_capacity_reconciliation_audit.to_dict(orient="records")
+    }
+    if audited_variants != required_target_variants:
+        missing = sorted(required_target_variants - audited_variants)
+        extra = sorted(audited_variants - required_target_variants)
+        raise ValueError(f"s2_target_capacity_reconciliation_audit.csv must cover the required 24h target variants exactly. missing={missing} extra={extra}")
+
+    target_lookup = {
+        (
+            str(row["configuration_id"]).strip(),
+            str(row["target_name"]).strip(),
+            str(row["target_variant"]).strip(),
+        ): row
+        for row in production_targets.to_dict(orient="records")
+    }
+    for row in target_capacity_reconciliation_audit.to_dict(orient="records"):
+        key = (
+            str(row["configuration_id"]).strip(),
+            f"horizon_total_target_{str(row['horizon_hours']).strip()}h_debug",
+            str(row["target_variant"]).strip(),
+        )
+        if key not in target_lookup:
+            raise ValueError(f"s2_target_capacity_reconciliation_audit.csv references a missing production-target row: {key}")
+        target_row = target_lookup[key]
+        target_value = float(target_row["value"])
+        reconciled_target = float(row["reconciled_target_t"])
+        max_capacity = float(row["max_implied_liquid_steel_t"])
+        if abs(target_value - reconciled_target) > 1e-6:
+            raise ValueError(f"s2_target_capacity_reconciliation_audit.csv reconciled target does not match production_targets.csv for {key}.")
+        if row["target_variant"] == "feasible_smoke":
+            if not target_value < max_capacity:
+                raise ValueError(f"feasible_smoke target must remain below max implied capacity for {key}.")
+            if abs(float(row["target_fraction_of_capacity"]) - 0.85) > 1e-9:
+                raise ValueError(f"feasible_smoke target fraction must equal 0.85 for {key}.")
+        if row["target_variant"] == "stress_infeasible_original":
+            if not target_value > max_capacity:
+                raise ValueError(f"stress_infeasible_original target must remain above max implied capacity for {key}.")
 
     expected_index_files = set(PROVISIONAL_DEV_INPUT_FILE_SPECS) - {"dev_input_completeness_report.csv"}
     actual_index_files = set(dev_input_index["dev_input_file"].astype(str).str.strip())
@@ -2672,6 +2790,7 @@ def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTa
         "provisional_dev_input_missing_required_rows": int(missing_required_row_count),
         "provisional_dev_value_completion_audit_rows_checked": int(len(dev_value_completion_audit)),
         "process_bound_translation_audit_rows_checked": int(len(process_bound_translation_audit)),
+        "target_capacity_reconciliation_audit_rows_checked": int(len(target_capacity_reconciliation_audit)),
         "process_bound_dev_executable_rows": int(process_dev_rows.sum()),
         "process_bound_non_executable_rows": int((~process_dev_rows).sum()),
     }
@@ -2695,6 +2814,10 @@ def validate_s2_liquid_steel_smoke_builder_artifacts() -> dict[str, Any]:
         "thesis_usability",
         "dev_executable_only",
         "not_executable",
+        "target_variant",
+        "overproduction",
+        "minimise_overproduction_dev_only",
+        "shortfall_slack_active",
     )
     for token in required_builder_tokens:
         if token not in builder_source:
@@ -2703,6 +2826,41 @@ def validate_s2_liquid_steel_smoke_builder_artifacts() -> dict[str, Any]:
     return {
         "liquid_steel_smoke_builder_module_present": True,
         "liquid_steel_smoke_builder_scope_memo_present": True,
+    }
+
+
+def validate_s2_liquid_steel_smoke_runner_artifacts() -> dict[str, Any]:
+    if not LIQUID_STEEL_SMOKE_RUNNER_MODULE.exists():
+        raise ValueError("liquid_steel_smoke_runner.py must exist for S2.9b.")
+    if not LIQUID_STEEL_SMOKE_DIAGNOSTICS_MEMO.exists():
+        raise ValueError("STEEL_S2_LIQUID_STEEL_SMOKE_DIAGNOSTICS.md must exist for S2.9b.")
+
+    memo_text = LIQUID_STEEL_SMOKE_DIAGNOSTICS_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in LIQUID_STEEL_SMOKE_DIAGNOSTICS_REQUIRED_PHRASES:
+        if phrase not in memo_text:
+            raise ValueError(f"STEEL_S2_LIQUID_STEEL_SMOKE_DIAGNOSTICS.md is missing required phrase: {phrase}")
+
+    runner_source = LIQUID_STEEL_SMOKE_RUNNER_MODULE.read_text(encoding="utf-8").lower()
+    required_tokens = (
+        "s2_provisional_dev_input",
+        "s2_approved_model_input",
+        "thesis_usability",
+        "dev_executable_only",
+        "not_attempted_solver_unavailable",
+        "target_variant",
+        "overproduction",
+        "minimise_overproduction_dev_only",
+        "shortfall_slack_active",
+        "inventory_active",
+        "downstream_active",
+    )
+    for token in required_tokens:
+        if token not in runner_source:
+            raise ValueError(f"liquid_steel_smoke_runner.py is missing required guard token: {token}")
+
+    return {
+        "liquid_steel_smoke_runner_module_present": True,
+        "liquid_steel_smoke_diagnostics_memo_present": True,
     }
 
 
@@ -2732,6 +2890,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     minimal_numerical_policy_payload = validate_s2_minimal_numerical_policy_bundle(review_bundle)
     provisional_dev_input_payload = validate_s2_provisional_dev_input(load_s2_provisional_dev_input(PROVISIONAL_DEV_INPUT_ROOT))
     liquid_steel_smoke_builder_payload = validate_s2_liquid_steel_smoke_builder_artifacts()
+    liquid_steel_smoke_runner_payload = validate_s2_liquid_steel_smoke_runner_artifacts()
 
     if not PROMOTION_PROTOCOL_MEMO.exists():
         raise ValueError("STEEL_S2_APPROVED_INPUT_PROMOTION_PROTOCOL.md must exist.")
@@ -3383,6 +3542,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     payload.update(minimal_numerical_policy_payload)
     payload.update(provisional_dev_input_payload)
     payload.update(liquid_steel_smoke_builder_payload)
+    payload.update(liquid_steel_smoke_runner_payload)
     return payload
 
 

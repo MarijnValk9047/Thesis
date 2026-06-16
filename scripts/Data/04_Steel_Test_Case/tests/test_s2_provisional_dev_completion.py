@@ -54,8 +54,9 @@ def test_s28b_completion_audit_exists_and_validation_reports_it():
     bundle = load_s2_provisional_dev_input(PROVISIONAL_DEV_INPUT_ROOT)
     payload = validate_s2_provisional_dev_input(bundle)
 
-    assert payload["provisional_dev_value_completion_audit_rows_checked"] == 25
+    assert payload["provisional_dev_value_completion_audit_rows_checked"] == 27
     assert payload["process_bound_translation_audit_rows_checked"] == 10
+    assert payload["target_capacity_reconciliation_audit_rows_checked"] == 4
     assert payload["provisional_dev_input_formula_only_rows"] == 15
     assert payload["provisional_dev_input_approved_rows"] == 0
     assert payload["provisional_dev_input_thesis_usable_rows"] == 0
@@ -112,8 +113,31 @@ def test_s28b_production_targets_are_horizon_total_and_route_neutral():
     assert (numeric_values > 0).all()
     assert targets["carrier_id"].str.lower().eq("liquid_steel").all()
     assert targets["target_name"].str.lower().str.contains("horizon_total_target").all()
+    assert targets["target_variant"].astype(str).str.strip().ne("").all()
     assert targets["value_basis"].str.lower().str.contains("route_neutral").all()
     assert not targets["notes"].str.lower().str.contains("route-specific").any()
+
+
+def test_s29c_target_variants_are_reconciled_and_guarded():
+    targets = _load_dev_table("production_targets.csv")
+    audit = pd.read_csv(
+        governance_module.TARGET_CAPACITY_RECONCILIATION_AUDIT_PATH,
+        dtype=str,
+        keep_default_na=False,
+    )
+
+    for configuration_id in ("C0_current_BF_BOF_reference", "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF"):
+        config_rows = targets.loc[
+            targets["configuration_id"].eq(configuration_id)
+            & targets["target_name"].eq("horizon_total_target_24h_debug")
+        ]
+        assert {"feasible_smoke", "stress_infeasible_original"}.issubset(set(config_rows["target_variant"]))
+
+    feasible_rows = audit.loc[audit["target_variant"].eq("feasible_smoke")].copy()
+    stress_rows = audit.loc[audit["target_variant"].eq("stress_infeasible_original")].copy()
+    assert (pd.to_numeric(feasible_rows["reconciled_target_t"], errors="coerce") < pd.to_numeric(feasible_rows["max_implied_liquid_steel_t"], errors="coerce")).all()
+    assert (pd.to_numeric(stress_rows["reconciled_target_t"], errors="coerce") > pd.to_numeric(stress_rows["max_implied_liquid_steel_t"], errors="coerce")).all()
+    assert pd.to_numeric(feasible_rows["target_fraction_of_capacity"], errors="coerce").eq(0.85).all()
 
 
 def test_s28b_existing_policy_guardrails_remain_intact():

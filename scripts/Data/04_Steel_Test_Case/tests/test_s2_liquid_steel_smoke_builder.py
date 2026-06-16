@@ -88,6 +88,9 @@ def test_s29a_builder_builds_c0_and_c1_continuous_lp_models():
     for model in (c0_model, c1_model):
         assert model.s2_metadata["thesis_usability"] is False
         assert model.s2_metadata["input_surface"] == "s2_provisional_dev_input"
+        assert model.s2_metadata["target_variant"] == "feasible_smoke"
+        assert model.s2_metadata["objective_type"] == "minimise_overproduction_dev_only"
+        assert model.s2_metadata["shortfall_slack_active"] is False
         assert model.s2_metadata["inventory_scope_active"] is False
         assert model.s2_metadata["downstream_scope_active"] is False
         assert model.s2_metadata["route_neutral_target"] is True
@@ -98,6 +101,9 @@ def test_s29a_builder_builds_c0_and_c1_continuous_lp_models():
     assert set(c0_model.PROCESSES.data()) == {"c0_blast_furnace", "c0_bof_converter"}
     assert set(c1_model.PROCESSES.data()) == {"c1_blast_furnace", "c1_bof_converter", "c1_ng_drp", "c1_eaf"}
     assert "shortfall" not in " ".join(c0_model.component_map().keys()).lower()
+    assert "overproduction" in c0_model.component_map()
+    assert "overproduction_accounting" in c0_model.component_map()
+    assert "minimise_overproduction_objective" in c0_model.component_map()
 
 
 def test_s29a_builder_reports_refused_downstream_and_inventory_rows():
@@ -146,6 +152,7 @@ def test_s29a_builder_keeps_route_neutral_horizon_total_targets():
         configuration_id="C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
         horizon_hours=168,
     ).validation_report
+    assert report.selected_target_variant == "one_week_base"
     assert report.consumed_production_target_rows == ("DEV_PT_004",)
 
     targets = pd.read_csv(PROVISIONAL_DEV_INPUT_ROOT / "production_targets.csv", dtype=str, keep_default_na=False)
@@ -153,6 +160,15 @@ def test_s29a_builder_keeps_route_neutral_horizon_total_targets():
     assert consumed["carrier_id"] == "liquid_steel"
     assert "horizon_total_target" in consumed["target_name"]
     assert "route_neutral" in consumed["value_basis"]
+
+
+def test_s29c_builder_defaults_24h_to_feasible_smoke_variant():
+    report = validate_liquid_steel_smoke_inputs(
+        configuration_id="C0_current_BF_BOF_reference",
+        horizon_hours=24,
+    ).validation_report
+    assert report.selected_target_variant == "feasible_smoke"
+    assert report.consumed_production_target_rows == ("DEV_PT_005",)
 
 
 def test_s29a_builder_surface_excludes_later_stage_logic():

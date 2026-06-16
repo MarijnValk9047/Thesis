@@ -83,9 +83,11 @@ Annual public anchors, translated `t/h` bounds, and horizon-total production tar
 
 - build-time validation diagnostics
 - infeasibility diagnostics under hard route-neutral targets
-- explicit optional shortfall mode only if requested
+- explicit overproduction accounting with a non-economic minimisation objective
 - restricted smoke solves for `24h` and `168h`
 - reporting of variable, constraint, and refusal counts
+
+See `STEEL_S2_LIQUID_STEEL_SMOKE_DIAGNOSTICS.md` for the guarded `24h` smoke-run and infeasibility-reporting contract.
 
 ## What Must Be Added Before S3
 

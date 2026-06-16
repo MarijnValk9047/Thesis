@@ -95,6 +95,7 @@ class RefusedRow:
 class InputValidationReport:
     configuration_id: str
     horizon_hours: int
+    selected_target_variant: str
     available_configurations: tuple[str, ...]
     selected_configurations: tuple[str, ...]
     consumed_process_bound_rows: tuple[str, ...]
@@ -317,16 +318,34 @@ def _prepare_production_target(
     *,
     configuration_id: str,
     horizon_hours: int,
+    target_variant: str | None,
     refused_rows: list[RefusedRow],
-) -> float:
+) -> tuple[float, str, str]:
     target_name = _selected_target_name(horizon_hours)
     selected = frame.loc[frame["configuration_id"].eq(configuration_id)].copy()
+    horizon_rows = selected.loc[selected["target_name"].eq(target_name)].copy()
     for row in selected.loc[~selected["target_name"].eq(target_name)].to_dict(orient="records"):
         refused_rows.append(RefusedRow("production_targets.csv", row["row_id"], "horizon_not_selected"))
-    chosen = selected.loc[selected["target_name"].eq(target_name)]
+    chosen = horizon_rows
+    resolved_target_variant = target_variant.strip() if target_variant else ""
+    if resolved_target_variant:
+        for row in horizon_rows.loc[~horizon_rows["target_variant"].eq(resolved_target_variant)].to_dict(orient="records"):
+            refused_rows.append(RefusedRow("production_targets.csv", row["row_id"], "target_variant_not_selected"))
+        chosen = horizon_rows.loc[horizon_rows["target_variant"].eq(resolved_target_variant)]
+        if chosen.empty:
+            if len(horizon_rows) == 1:
+                chosen = horizon_rows
+                resolved_target_variant = str(chosen.iloc[0]["target_variant"]).strip()
+            else:
+                raise LiquidSteelSmokeBuilderError(
+                    f"Expected exactly one production-target row for {configuration_id}, {target_name}, target_variant={target_variant!r}; found 0."
+                )
+    elif len(horizon_rows) == 1:
+        chosen = horizon_rows
+        resolved_target_variant = str(chosen.iloc[0]["target_variant"]).strip()
     if len(chosen) != 1:
         raise LiquidSteelSmokeBuilderError(
-            f"Expected exactly one production-target row for {configuration_id} and {target_name}, found {len(chosen)}."
+            f"Expected exactly one production-target row for {configuration_id}, {target_name}, target_variant={target_variant!r}; found {len(chosen)}."
         )
     row = chosen.iloc[0]
     if _normalise_lower(row["carrier_id"]) != TARGET_CARRIER:
@@ -337,13 +356,14 @@ def _prepare_production_target(
     value = pd.to_numeric(row["value"], errors="coerce")
     if pd.isna(value) or float(value) <= 0.0:
         raise LiquidSteelSmokeBuilderError("Production target must carry a positive numeric horizon-total value.")
-    return float(value)
+    return float(value), str(row["row_id"]).strip(), resolved_target_variant
 
 
 def validate_liquid_steel_smoke_inputs(
     *,
     configuration_id: str,
     horizon_hours: int = 24,
+    target_variant: str | None = "feasible_smoke",
     provisional_dev_input_root: str | Path = DEFAULT_PROVISIONAL_DEV_INPUT_ROOT,
     review_root: str | Path = DEFAULT_REVIEW_ROOT,
     enable_inventory_rows: bool = False,
@@ -370,10 +390,11 @@ def validate_liquid_steel_smoke_inputs(
         configuration_id=configuration_id,
         refused_rows=refused_rows,
     )
-    production_target_value = _prepare_production_target(
+    production_target_value, production_target_row_id, resolved_target_variant = _prepare_production_target(
         dev_tables["production_targets.csv"],
         configuration_id=configuration_id,
         horizon_hours=horizon_hours,
+        target_variant=target_variant,
         refused_rows=refused_rows,
     )
 
@@ -415,6 +436,7 @@ def validate_liquid_steel_smoke_inputs(
     validation_report = InputValidationReport(
         configuration_id=configuration_id,
         horizon_hours=horizon_hours,
+        selected_target_variant=resolved_target_variant,
         available_configurations=tuple(sorted(ALLOWED_CONFIGURATION_IDS)),
         selected_configurations=(configuration_id,),
         consumed_process_bound_rows=tuple(
@@ -429,13 +451,7 @@ def validate_liquid_steel_smoke_inputs(
         ),
         consumed_conversion_rows=tuple(conversion_rows["row_id"].astype(str).tolist()),
         consumed_production_target_rows=tuple(
-            dev_tables["production_targets.csv"]
-            .loc[
-                dev_tables["production_targets.csv"]["configuration_id"].eq(configuration_id)
-                & dev_tables["production_targets.csv"]["target_name"].eq(_selected_target_name(horizon_hours)),
-                "row_id",
-            ]
-            .tolist()
+            [production_target_row_id]
         ),
         refused_rows=tuple(refused_rows),
         encountered_non_executable_row=encountered_non_executable,
@@ -462,6 +478,7 @@ def build_liquid_steel_smoke_model(
     *,
     configuration_id: str,
     horizon_hours: int = 24,
+    target_variant: str | None = "feasible_smoke",
     provisional_dev_input_root: str | Path = DEFAULT_PROVISIONAL_DEV_INPUT_ROOT,
     review_root: str | Path = DEFAULT_REVIEW_ROOT,
     enable_inventory_rows: bool = False,
@@ -473,6 +490,7 @@ def build_liquid_steel_smoke_model(
     prepared = validate_liquid_steel_smoke_inputs(
         configuration_id=configuration_id,
         horizon_hours=horizon_hours,
+        target_variant=target_variant,
         provisional_dev_input_root=provisional_dev_input_root,
         review_root=review_root,
         enable_inventory_rows=enable_inventory_rows,
@@ -546,8 +564,13 @@ def build_liquid_steel_smoke_model(
 
     model.liquid_steel_output = Expression(model.TIME, rule=_liquid_steel_output_rule)
     model.horizon_total_liquid_steel_output = Expression(expr=sum(model.liquid_steel_output[t] for t in model.TIME))
+    model.overproduction = Var(domain=NonNegativeReals)
     model.production_target = Constraint(expr=model.horizon_total_liquid_steel_output >= prepared.production_target_value)
-    model.zero_objective = Objective(expr=0.0, sense=minimize)
+    model.overproduction_accounting = Constraint(
+        expr=model.overproduction == model.horizon_total_liquid_steel_output - prepared.production_target_value
+    )
+    model.production_target_residual = Expression(expr=model.horizon_total_liquid_steel_output - prepared.production_target_value)
+    model.minimise_overproduction_objective = Objective(expr=model.overproduction, sense=minimize)
 
     validation_report = prepared.validation_report
     model.s2_validation_report = validation_report
@@ -555,10 +578,13 @@ def build_liquid_steel_smoke_model(
         "scope": "restricted_liquid_steel_smoke_lp",
         "configuration_id": configuration_id,
         "horizon_hours": horizon_hours,
+        "target_variant": validation_report.selected_target_variant,
         "thesis_usability": False,
         "input_surface": "s2_provisional_dev_input",
         "production_target_carrier": TARGET_CARRIER,
         "route_neutral_target": True,
+        "objective_type": "minimise_overproduction_dev_only",
+        "shortfall_slack_active": False,
         "inventory_scope_active": False,
         "downstream_scope_active": False,
         "allow_target_shortfall": False,

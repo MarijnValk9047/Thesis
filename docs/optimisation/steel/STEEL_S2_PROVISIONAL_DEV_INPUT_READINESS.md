@@ -52,7 +52,7 @@ They remain `dev-executable only`.
 - `C0` and `C1` configuration coverage
 - the dev-executable `process bounds`
 - the minimal metallic-flow conversion coefficients
-- the route-neutral `24h` debug target and `168h` one-week target rows
+- the route-neutral `24h` feasible_smoke and stress_infeasible_original target variants plus the `168h` one-week target rows
 - the `CYC50` endpoint policy rows
 - the non-strategic treatment of hot slab `WIP`
 - the validation-target separation from live constraints
@@ -90,3 +90,13 @@ The builder still refuses:
 - any thesis-usable claim
 
 That means builder construction is now allowed for the restricted liquid-steel scope, while full buffer-aware or downstream model extension remains blocked.
+
+The corresponding `S2.9b` guarded run behaviour and interpretation rules are documented in `STEEL_S2_LIQUID_STEEL_SMOKE_DIAGNOSTICS.md`.
+
+## S2.9c Target-Reconciliation Note
+
+The `24h` production-target surface now includes a default `feasible_smoke` variant for guarded LP mechanics and a retained `stress_infeasible_original` variant for explicit capacity-gap diagnostics.
+
+That improves restricted smoke-run usability without changing process bounds, adding slack, or changing the non-thesis status of the pack.
+
+`S2.9d` further refines the smoke formulation by minimising explicit overproduction while keeping the target hard and keeping shortfall slack inactive.

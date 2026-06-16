@@ -138,6 +138,7 @@ def test_dry_run_validator_reports_alignment_and_empty_approved_input_surface():
     assert payload["provisional_dev_input_index_rows_checked"] == 9
     assert payload["provisional_dev_input_approved_rows"] == 0
     assert payload["provisional_dev_input_thesis_usable_rows"] == 0
+    assert payload["target_capacity_reconciliation_audit_rows_checked"] == 4
     assert payload["approved_rows"] == 0
     assert payload["thesis_grade_numerical_rows"] == 0
     assert payload["candidate_review_executable_rows"] == 0
