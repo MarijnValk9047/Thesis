@@ -995,6 +995,55 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "codex_may_decide",
         "notes",
     ],
+    "s2_liquid_steel_smoke_baseline_summary.csv": [
+        "case_id",
+        "configuration_id",
+        "horizon_hours",
+        "target_variant",
+        "target_t",
+        "solve_status",
+        "achieved_liquid_steel_t",
+        "overproduction_t",
+        "variable_count",
+        "constraint_count",
+        "binary_count",
+        "objective_type",
+        "shortfall_slack_active",
+        "inventory_active",
+        "downstream_active",
+        "input_surface",
+        "approved_input_used",
+        "thesis_usability",
+        "interpretation",
+        "next_use",
+    ],
+    "s2_liquid_steel_infeasibility_attribution.csv": [
+        "attribution_id",
+        "configuration_id",
+        "target_variant",
+        "horizon_hours",
+        "target_t",
+        "max_implied_output_t",
+        "infeasibility_gap_t",
+        "likely_primary_cause",
+        "supporting_diagnostic",
+        "model_scope_limitation",
+        "interpretation",
+        "action_required",
+        "thesis_usability",
+    ],
+    "s2_next_scope_gate_register.csv": [
+        "gate_id",
+        "next_stage",
+        "gate_name",
+        "required_before_stage",
+        "current_status",
+        "blocking_risk",
+        "required_artifact_or_decision",
+        "allowed_next_action",
+        "forbidden_shortcut",
+        "thesis_relevance",
+    ],
     **PROMOTION_PROTOCOL_FILE_SPECS,
     **PROMOTION_REVIEW_CRITERIA_FILE_SPECS,
 }
@@ -1859,6 +1908,7 @@ LIQUID_STEEL_SMOKE_BUILDER_MODULE = REPO_ROOT / "scripts" / "Data" / "04_Steel_T
 LIQUID_STEEL_SMOKE_BUILDER_SCOPE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_BUILDER_SCOPE.md"
 LIQUID_STEEL_SMOKE_RUNNER_MODULE = REPO_ROOT / "scripts" / "Data" / "04_Steel_Test_Case" / "steel" / "liquid_steel_smoke_runner.py"
 LIQUID_STEEL_SMOKE_DIAGNOSTICS_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_DIAGNOSTICS.md"
+LIQUID_STEEL_SMOKE_BASELINE_FREEZE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md"
 LIQUID_STEEL_SMOKE_BUILDER_SCOPE_REQUIRED_PHRASES = (
     "restricted deterministic `s2` liquid-steel material-flow lp scaffold",
     "development-only smoke builder",
@@ -1882,6 +1932,35 @@ LIQUID_STEEL_SMOKE_DIAGNOSTICS_REQUIRED_PHRASES = (
     "thesis_usability=false",
     "what should happen in s2.9c",
 )
+LIQUID_STEEL_SMOKE_BASELINE_SUMMARY_COLUMNS = REVIEW_FILE_SPECS["s2_liquid_steel_smoke_baseline_summary.csv"]
+LIQUID_STEEL_SMOKE_BASELINE_SUMMARY_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_liquid_steel_smoke_baseline_summary.csv"
+LIQUID_STEEL_INFEASIBILITY_ATTRIBUTION_COLUMNS = REVIEW_FILE_SPECS["s2_liquid_steel_infeasibility_attribution.csv"]
+LIQUID_STEEL_INFEASIBILITY_ATTRIBUTION_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_liquid_steel_infeasibility_attribution.csv"
+S2_NEXT_SCOPE_GATE_REGISTER_COLUMNS = REVIEW_FILE_SPECS["s2_next_scope_gate_register.csv"]
+S2_NEXT_SCOPE_GATE_REGISTER_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_next_scope_gate_register.csv"
+LIQUID_STEEL_SMOKE_BASELINE_FREEZE_REQUIRED_PHRASES = (
+    "summary of s2.9a-s2.9d",
+    "feasible_smoke",
+    "stress_infeasible_original",
+    "minimise_overproduction_dev_only",
+    "not a tata annual-production target",
+    "no shortfall slack",
+    "inventory inactive",
+    "not thesis results",
+    "required next gates before buffer-aware s2",
+    "required next gates before s3",
+)
+S2_NEXT_SCOPE_REQUIRED_GATES = {
+    "dev_only_store_capacity_translation",
+    "hot_metal_buffer_activation",
+    "dri_hdri_surge_buffer_activation",
+    "cyc50_inventory_dynamics_activation",
+    "cold_slab_slab_wip_decision",
+    "downstream_hsm_slab_scope_decision",
+    "one_week_s2_run",
+    "validation_against_public_annual_anchors",
+    "s3_energy_cost_emissions_entry",
+}
 
 
 @dataclass(frozen=True)
@@ -2864,6 +2943,89 @@ def validate_s2_liquid_steel_smoke_runner_artifacts() -> dict[str, Any]:
     }
 
 
+def validate_s2_liquid_steel_smoke_baseline_artifacts(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    if not LIQUID_STEEL_SMOKE_BASELINE_FREEZE_MEMO.exists():
+        raise ValueError("STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md must exist for S2.9e.")
+    memo_text = LIQUID_STEEL_SMOKE_BASELINE_FREEZE_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in LIQUID_STEEL_SMOKE_BASELINE_FREEZE_REQUIRED_PHRASES:
+        if phrase not in memo_text:
+            raise ValueError(f"STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md is missing required phrase: {phrase}")
+
+    baseline = review_bundle.tables["s2_liquid_steel_smoke_baseline_summary.csv"]
+    if list(baseline.columns) != LIQUID_STEEL_SMOKE_BASELINE_SUMMARY_COLUMNS:
+        raise ValueError("s2_liquid_steel_smoke_baseline_summary.csv must match the required column order.")
+    if baseline["case_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_liquid_steel_smoke_baseline_summary.csv must not contain duplicate case_id values.")
+    required_case_keys = {
+        ("C0_current_BF_BOF_reference", "feasible_smoke"),
+        ("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "feasible_smoke"),
+        ("C0_current_BF_BOF_reference", "stress_infeasible_original"),
+        ("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "stress_infeasible_original"),
+    }
+    actual_case_keys = {
+        (str(row["configuration_id"]).strip(), str(row["target_variant"]).strip())
+        for row in baseline.to_dict(orient="records")
+    }
+    if actual_case_keys != required_case_keys:
+        missing = sorted(required_case_keys - actual_case_keys)
+        extra = sorted(actual_case_keys - required_case_keys)
+        raise ValueError(f"s2_liquid_steel_smoke_baseline_summary.csv case coverage mismatch. missing={missing} extra={extra}")
+    if (~baseline["input_surface"].astype(str).str.strip().eq("s2_provisional_dev_input")).any():
+        raise ValueError("s2_liquid_steel_smoke_baseline_summary.csv must keep input_surface=s2_provisional_dev_input.")
+    for column in ("shortfall_slack_active", "inventory_active", "downstream_active", "approved_input_used", "thesis_usability"):
+        if (~baseline[column].astype(str).str.strip().str.lower().eq("false")).any():
+            raise ValueError(f"s2_liquid_steel_smoke_baseline_summary.csv must keep {column}=false for every row.")
+    if (~baseline["objective_type"].astype(str).str.strip().eq("minimise_overproduction_dev_only")).any():
+        raise ValueError("s2_liquid_steel_smoke_baseline_summary.csv must keep objective_type=minimise_overproduction_dev_only.")
+    if (~baseline["binary_count"].astype(str).str.strip().eq("0")).any():
+        raise ValueError("s2_liquid_steel_smoke_baseline_summary.csv must keep binary_count=0 for every row.")
+    feasible_rows = baseline["target_variant"].astype(str).str.strip().eq("feasible_smoke")
+    stress_rows = baseline["target_variant"].astype(str).str.strip().eq("stress_infeasible_original")
+    if (~baseline.loc[feasible_rows, "solve_status"].astype(str).str.strip().eq("optimal")).any():
+        raise ValueError("feasible_smoke rows must be marked optimal in s2_liquid_steel_smoke_baseline_summary.csv.")
+    if (~baseline.loc[stress_rows, "solve_status"].astype(str).str.strip().eq("infeasible")).any():
+        raise ValueError("stress_infeasible_original rows must be marked infeasible in s2_liquid_steel_smoke_baseline_summary.csv.")
+
+    attribution = review_bundle.tables["s2_liquid_steel_infeasibility_attribution.csv"]
+    if list(attribution.columns) != LIQUID_STEEL_INFEASIBILITY_ATTRIBUTION_COLUMNS:
+        raise ValueError("s2_liquid_steel_infeasibility_attribution.csv must match the required column order.")
+    if attribution["attribution_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_liquid_steel_infeasibility_attribution.csv must not contain duplicate attribution_id values.")
+    required_attribution_configs = {"C0_current_BF_BOF_reference", "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF"}
+    if set(attribution["configuration_id"].astype(str).str.strip()) != required_attribution_configs:
+        raise ValueError("s2_liquid_steel_infeasibility_attribution.csv must include exactly the C0 and C1 stress cases.")
+    if (~attribution["target_variant"].astype(str).str.strip().eq("stress_infeasible_original")).any():
+        raise ValueError("s2_liquid_steel_infeasibility_attribution.csv must cover stress_infeasible_original only.")
+    if (~attribution["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_liquid_steel_infeasibility_attribution.csv must keep thesis_usability=false.")
+    attribution_text = " ".join(attribution.astype(str).agg(" ".join, axis=1).str.lower())
+    for phrase in ("dri", "eaf", "bf_bof", "diagnostic", "not yet an executable"):
+        if phrase not in attribution_text:
+            raise ValueError(f"s2_liquid_steel_infeasibility_attribution.csv is missing diagnostic phrase: {phrase}")
+
+    gates = review_bundle.tables["s2_next_scope_gate_register.csv"]
+    if list(gates.columns) != S2_NEXT_SCOPE_GATE_REGISTER_COLUMNS:
+        raise ValueError("s2_next_scope_gate_register.csv must match the required column order.")
+    if gates["gate_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_next_scope_gate_register.csv must not contain duplicate gate_id values.")
+    actual_gates = set(gates["gate_name"].astype(str).str.strip())
+    if actual_gates != S2_NEXT_SCOPE_REQUIRED_GATES:
+        missing = sorted(S2_NEXT_SCOPE_REQUIRED_GATES - actual_gates)
+        extra = sorted(actual_gates - S2_NEXT_SCOPE_REQUIRED_GATES)
+        raise ValueError(f"s2_next_scope_gate_register.csv gate coverage mismatch. missing={missing} extra={extra}")
+    if (~gates["current_status"].astype(str).str.strip().eq("blocked")).any():
+        raise ValueError("s2_next_scope_gate_register.csv must keep current_status=blocked for every row.")
+    if (~gates["blocking_risk"].astype(str).str.strip().isin({"high", "medium", "low"})).any():
+        raise ValueError("s2_next_scope_gate_register.csv must keep blocking_risk within high/medium/low.")
+
+    return {
+        "liquid_steel_smoke_baseline_freeze_memo_present": True,
+        "liquid_steel_smoke_baseline_rows_checked": int(len(baseline)),
+        "liquid_steel_smoke_infeasibility_attribution_rows_checked": int(len(attribution)),
+        "liquid_steel_next_scope_gate_rows_checked": int(len(gates)),
+    }
+
+
 def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
     tables = review_bundle.tables
     summary = tables["s2_review_summary.csv"]
@@ -2891,6 +3053,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     provisional_dev_input_payload = validate_s2_provisional_dev_input(load_s2_provisional_dev_input(PROVISIONAL_DEV_INPUT_ROOT))
     liquid_steel_smoke_builder_payload = validate_s2_liquid_steel_smoke_builder_artifacts()
     liquid_steel_smoke_runner_payload = validate_s2_liquid_steel_smoke_runner_artifacts()
+    liquid_steel_smoke_baseline_payload = validate_s2_liquid_steel_smoke_baseline_artifacts(review_bundle)
 
     if not PROMOTION_PROTOCOL_MEMO.exists():
         raise ValueError("STEEL_S2_APPROVED_INPUT_PROMOTION_PROTOCOL.md must exist.")
@@ -3543,6 +3706,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     payload.update(provisional_dev_input_payload)
     payload.update(liquid_steel_smoke_builder_payload)
     payload.update(liquid_steel_smoke_runner_payload)
+    payload.update(liquid_steel_smoke_baseline_payload)
     return payload
 
 

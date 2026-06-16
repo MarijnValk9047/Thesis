@@ -89,6 +89,8 @@ Annual public anchors, translated `t/h` bounds, and horizon-total production tar
 
 See `STEEL_S2_LIQUID_STEEL_SMOKE_DIAGNOSTICS.md` for the guarded `24h` smoke-run and infeasibility-reporting contract.
 
+See `STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md` for the frozen interpretation boundary of the restricted `S2.9` scaffold.
+
 ## What Must Be Added Before S3
 
 Before any later-stage `S3` or thesis-usable model work:

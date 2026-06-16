@@ -100,3 +100,5 @@ The `24h` production-target surface now includes a default `feasible_smoke` vari
 That improves restricted smoke-run usability without changing process bounds, adding slack, or changing the non-thesis status of the pack.
 
 `S2.9d` further refines the smoke formulation by minimising explicit overproduction while keeping the target hard and keeping shortfall slack inactive.
+
+The resulting restricted smoke baseline and the next required scope gates are frozen in `STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md`.

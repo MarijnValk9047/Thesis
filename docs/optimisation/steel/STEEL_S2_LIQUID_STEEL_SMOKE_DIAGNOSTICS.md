@@ -131,3 +131,5 @@ Any remaining overproduction should be interpreted as structurally forced by low
 Stress-infeasible variants must still remain infeasible under the same guarded scope.
 
 All outputs remain development-only and non-thesis.
+
+The frozen interpretation of the restricted `S2.9` baseline is recorded in `STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md`.
