@@ -151,3 +151,5 @@ S2.9 outputs are not thesis results.
 The corresponding `S2.10a` translation review is recorded in `STEEL_S2_STORE_CAPACITY_TRANSLATION_REVIEW.md`.
 
 The subsequent guarded activation boundary for those first buffer rows is recorded in `STEEL_S2_FIRST_BUFFER_INVENTORY_ACTIVATION.md`.
+
+The first buffer-aware interpretation checkpoint built on top of that guarded activation is recorded in `STEEL_S2_FIRST_BUFFER_AWARE_BASELINE_FREEZE.md`.

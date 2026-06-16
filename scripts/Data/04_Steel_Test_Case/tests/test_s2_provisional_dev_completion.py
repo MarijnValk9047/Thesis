@@ -58,7 +58,7 @@ def test_s28b_completion_audit_exists_and_validation_reports_it():
     bundle = load_s2_provisional_dev_input(PROVISIONAL_DEV_INPUT_ROOT)
     payload = validate_s2_provisional_dev_input(bundle)
 
-    assert payload["provisional_dev_value_completion_audit_rows_checked"] == 27
+    assert payload["provisional_dev_value_completion_audit_rows_checked"] == 29
     assert payload["process_bound_translation_audit_rows_checked"] == 10
     assert payload["target_capacity_reconciliation_audit_rows_checked"] == 4
     assert payload["store_capacity_translation_audit_rows_checked"] == 7

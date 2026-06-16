@@ -13,6 +13,7 @@ from pyomo.environ import (
     Objective,
     Set,
     Var,
+    maximize,
     minimize,
 )
 
@@ -38,6 +39,12 @@ ALLOWED_CONFIGURATION_IDS = {
     "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
 }
 ALLOWED_INVENTORY_MODES = {"inactive", "first_buffers"}
+ALLOWED_OBJECTIVE_TYPES = {
+    "minimise_overproduction_dev_only",
+    "diagnostic_maximise_min_inventory_margin",
+}
+MAX_FIRST_BUFFER_CAPACITY_MULTIPLIER = 4.0
+ZERO_CAPACITY_ALLOWED_STORE_IDS = {"c1_dri_hdri_buffer"}
 TARGET_NAME_BY_HOURS = {
     24: "horizon_total_target_24h_debug",
     168: "horizon_total_target_168h_one_week",
@@ -130,6 +137,7 @@ class PreparedSmokeInputs:
     liquid_steel_process_ids: tuple[str, ...]
     internal_balance_carriers: tuple[str, ...]
     inventory_mode: str
+    sensitivity_id: str
     active_inventory_stores: tuple["ActiveInventoryStore", ...]
 
 
@@ -139,8 +147,12 @@ class ActiveInventoryStore:
     configuration_id: str
     route_id: str
     carrier_id: str
+    base_capacity_tonnes: float
+    base_initial_inventory_tonnes: float
     capacity_tonnes: float
     initial_inventory_tonnes: float
+    initial_inventory_fraction: float
+    capacity_multiplier: float
     terminal_inventory_ratio: float
     endpoint_policy: str
     value_basis: str
@@ -354,7 +366,10 @@ def _prepare_production_target(
     for row in selected.loc[~selected["target_name"].eq(target_name)].to_dict(orient="records"):
         refused_rows.append(RefusedRow("production_targets.csv", row["row_id"], "horizon_not_selected"))
     chosen = horizon_rows
-    resolved_target_variant = target_variant.strip() if target_variant else ""
+    if target_variant:
+        resolved_target_variant = target_variant.strip()
+    else:
+        resolved_target_variant = "feasible_smoke" if horizon_hours == 24 else "one_week_base"
     if resolved_target_variant:
         for row in horizon_rows.loc[~horizon_rows["target_variant"].eq(resolved_target_variant)].to_dict(orient="records"):
             refused_rows.append(RefusedRow("production_targets.csv", row["row_id"], "target_variant_not_selected"))
@@ -395,11 +410,62 @@ def _validated_inventory_mode(inventory_mode: str) -> str:
     return resolved
 
 
+def _validated_objective_type(objective_type: str) -> str:
+    resolved = str(objective_type).strip()
+    if resolved not in ALLOWED_OBJECTIVE_TYPES:
+        raise LiquidSteelSmokeBuilderError(
+            f"Unsupported objective_type={objective_type!r}. Allowed values: {sorted(ALLOWED_OBJECTIVE_TYPES)}."
+        )
+    return resolved
+
+
+def _normalise_initial_inventory_fraction(initial_inventory_fraction: float | None) -> float | None:
+    if initial_inventory_fraction is None:
+        return None
+    value = float(initial_inventory_fraction)
+    if value < 0.0 or value > 1.0:
+        raise LiquidSteelSmokeBuilderError(
+            "Initial inventory fraction override must stay within [0.0, 1.0] for S2.10d."
+        )
+    return value
+
+
+def _normalise_capacity_multiplier_overrides(
+    capacity_multiplier_overrides: dict[str, float] | None,
+    *,
+    allowed_store_ids: set[str],
+) -> dict[str, float]:
+    if not capacity_multiplier_overrides:
+        return {}
+    resolved: dict[str, float] = {}
+    for raw_store_id, raw_value in capacity_multiplier_overrides.items():
+        store_id = str(raw_store_id).strip()
+        if store_id not in allowed_store_ids:
+            raise LiquidSteelSmokeBuilderError(
+                f"Capacity overrides may apply only to readiness-approved first-buffer stores. Got {store_id!r}."
+            )
+        multiplier = float(raw_value)
+        if multiplier < 0.0:
+            raise LiquidSteelSmokeBuilderError("Capacity multiplier overrides must not be negative.")
+        if multiplier == 0.0 and store_id not in ZERO_CAPACITY_ALLOWED_STORE_IDS:
+            raise LiquidSteelSmokeBuilderError(
+                f"Zero-capacity override is only allowed for explicitly reviewed no-surge stores. store_id={store_id!r}."
+            )
+        if multiplier > MAX_FIRST_BUFFER_CAPACITY_MULTIPLIER:
+            raise LiquidSteelSmokeBuilderError(
+                f"Capacity multiplier overrides must stay <= {MAX_FIRST_BUFFER_CAPACITY_MULTIPLIER} in S2.10d."
+            )
+        resolved[store_id] = multiplier
+    return resolved
+
+
 def _prepare_active_inventory_stores(
     tables: dict[str, pd.DataFrame],
     *,
     configuration_id: str,
     inventory_mode: str,
+    initial_inventory_fraction: float | None,
+    capacity_multiplier_overrides: dict[str, float] | None,
     refused_rows: list[RefusedRow],
 ) -> tuple[tuple[ActiveInventoryStore, ...], dict[str, tuple[str, ...]], bool]:
     consumed_inventory_rows = {
@@ -411,6 +477,10 @@ def _prepare_active_inventory_stores(
     encountered_non_executable = False
 
     if inventory_mode == "inactive":
+        if initial_inventory_fraction is not None or capacity_multiplier_overrides:
+            raise LiquidSteelSmokeBuilderError(
+                "Inventory sensitivity overrides require inventory_mode=first_buffers."
+            )
         for filename in INVENTORY_TABLE_FILENAMES:
             selected = tables[filename].loc[tables[filename]["configuration_id"].eq(configuration_id)]
             for row in selected.to_dict(orient="records"):
@@ -421,6 +491,12 @@ def _prepare_active_inventory_stores(
         return tuple(), consumed, encountered_non_executable
 
     allowed_store_ids = set(FIRST_BUFFER_ACTIVE_STORES_BY_CONFIGURATION[configuration_id])
+    resolved_initial_fraction = _normalise_initial_inventory_fraction(initial_inventory_fraction)
+    resolved_capacity_overrides = _normalise_capacity_multiplier_overrides(
+        capacity_multiplier_overrides,
+        allowed_store_ids=allowed_store_ids,
+    )
+
     store_capacity_rows = tables["store_capacities.csv"].loc[
         tables["store_capacities.csv"]["configuration_id"].eq(configuration_id)
     ].copy()
@@ -519,14 +595,28 @@ def _prepare_active_inventory_stores(
         consumed_inventory_rows["terminal_inventory_rules.csv"].append(str(terminal_row["row_id"]).strip())
         consumed_inventory_rows["inventory_endpoint_policies.csv"].append(str(endpoint_row["row_id"]).strip())
 
+        base_capacity_tonnes = float(capacity_value)
+        base_initial_inventory_tonnes = float(initial_value)
+        base_initial_fraction = base_initial_inventory_tonnes / base_capacity_tonnes
+        capacity_multiplier = resolved_capacity_overrides.get(store_id, 1.0)
+        effective_capacity_tonnes = base_capacity_tonnes * capacity_multiplier
+        effective_initial_fraction = (
+            resolved_initial_fraction if resolved_initial_fraction is not None else base_initial_fraction
+        )
+        effective_initial_inventory_tonnes = effective_capacity_tonnes * effective_initial_fraction
+
         active_stores.append(
             ActiveInventoryStore(
                 store_id=str(store_row["store_id"]).strip(),
                 configuration_id=configuration_id,
                 route_id=str(store_row["route_id"]).strip(),
                 carrier_id=str(store_row["carrier_id"]).strip(),
-                capacity_tonnes=float(capacity_value),
-                initial_inventory_tonnes=float(initial_value),
+                base_capacity_tonnes=base_capacity_tonnes,
+                base_initial_inventory_tonnes=base_initial_inventory_tonnes,
+                capacity_tonnes=effective_capacity_tonnes,
+                initial_inventory_tonnes=effective_initial_inventory_tonnes,
+                initial_inventory_fraction=effective_initial_fraction,
+                capacity_multiplier=capacity_multiplier,
                 terminal_inventory_ratio=float(terminal_ratio),
                 endpoint_policy=str(endpoint_row["value"]).strip(),
                 value_basis=str(store_row["value_basis"]).strip(),
@@ -545,10 +635,13 @@ def validate_liquid_steel_smoke_inputs(
     *,
     configuration_id: str,
     horizon_hours: int = 24,
-    target_variant: str | None = "feasible_smoke",
+    target_variant: str | None = None,
     provisional_dev_input_root: str | Path = DEFAULT_PROVISIONAL_DEV_INPUT_ROOT,
     review_root: str | Path = DEFAULT_REVIEW_ROOT,
     inventory_mode: str = "inactive",
+    sensitivity_id: str = "base",
+    initial_inventory_fraction: float | None = None,
+    capacity_multiplier_overrides: dict[str, float] | None = None,
 ) -> PreparedSmokeInputs:
     if configuration_id not in ALLOWED_CONFIGURATION_IDS:
         raise LiquidSteelSmokeBuilderError(
@@ -583,6 +676,8 @@ def validate_liquid_steel_smoke_inputs(
         dev_tables,
         configuration_id=configuration_id,
         inventory_mode=resolved_inventory_mode,
+        initial_inventory_fraction=initial_inventory_fraction,
+        capacity_multiplier_overrides=capacity_multiplier_overrides,
         refused_rows=refused_rows,
     )
 
@@ -645,6 +740,7 @@ def validate_liquid_steel_smoke_inputs(
             "Consumes only dev_executable_only provisional rows.",
             "Downstream scope remains refused in the restricted smoke builder.",
             f"inventory_mode={resolved_inventory_mode}",
+            f"sensitivity_id={sensitivity_id}",
         ),
     )
     return PreparedSmokeInputs(
@@ -658,6 +754,7 @@ def validate_liquid_steel_smoke_inputs(
         liquid_steel_process_ids=liquid_steel_process_ids,
         internal_balance_carriers=internal_balance_carriers,
         inventory_mode=resolved_inventory_mode,
+        sensitivity_id=str(sensitivity_id).strip() or "base",
         active_inventory_stores=active_inventory_stores,
     )
 
@@ -666,10 +763,14 @@ def build_liquid_steel_smoke_model(
     *,
     configuration_id: str,
     horizon_hours: int = 24,
-    target_variant: str | None = "feasible_smoke",
+    target_variant: str | None = None,
     provisional_dev_input_root: str | Path = DEFAULT_PROVISIONAL_DEV_INPUT_ROOT,
     review_root: str | Path = DEFAULT_REVIEW_ROOT,
     inventory_mode: str = "inactive",
+    sensitivity_id: str = "base",
+    initial_inventory_fraction: float | None = None,
+    capacity_multiplier_overrides: dict[str, float] | None = None,
+    objective_type: str = "minimise_overproduction_dev_only",
     allow_target_shortfall: bool = False,
 ):
     if allow_target_shortfall:
@@ -682,7 +783,15 @@ def build_liquid_steel_smoke_model(
         provisional_dev_input_root=provisional_dev_input_root,
         review_root=review_root,
         inventory_mode=inventory_mode,
+        sensitivity_id=sensitivity_id,
+        initial_inventory_fraction=initial_inventory_fraction,
+        capacity_multiplier_overrides=capacity_multiplier_overrides,
     )
+    resolved_objective_type = _validated_objective_type(objective_type)
+    if resolved_objective_type != "minimise_overproduction_dev_only" and prepared.inventory_mode != "first_buffers":
+        raise LiquidSteelSmokeBuilderError(
+            "Diagnostic inventory objectives require inventory_mode=first_buffers."
+        )
 
     output_carrier_by_process = {
         process_unit_id: _infer_output_carrier(prepared.topology, configuration_id, process_unit_id)
@@ -783,6 +892,16 @@ def build_liquid_steel_smoke_model(
         model.inventory_balance = Constraint(model.ACTIVE_STORES, model.TIME, rule=_inventory_balance_rule)
         model.inventory_capacity_bound = Constraint(model.ACTIVE_STORES, model.TIME, rule=_inventory_capacity_rule)
         model.terminal_inventory = Constraint(model.ACTIVE_STORES, rule=_terminal_inventory_rule)
+        model.minimum_inventory_margin = Var(domain=NonNegativeReals)
+
+        def _minimum_inventory_margin_rule(m, store_id: str, time_index: int):
+            return m.minimum_inventory_margin <= m.store_inventory[store_id, time_index]
+
+        model.minimum_inventory_margin_bound = Constraint(
+            model.ACTIVE_STORES,
+            model.TIME,
+            rule=_minimum_inventory_margin_rule,
+        )
 
     def _carrier_balance_rule(m, carrier_id: str, time_index: int):
         production = m.internal_carrier_production[carrier_id, time_index]
@@ -807,6 +926,22 @@ def build_liquid_steel_smoke_model(
     )
     model.production_target_residual = Expression(expr=model.horizon_total_liquid_steel_output - prepared.production_target_value)
     model.minimise_overproduction_objective = Objective(expr=model.overproduction, sense=minimize)
+    if len(model.ACTIVE_STORES):
+        model.diagnostic_maximise_min_inventory_margin_objective = Objective(
+            expr=model.minimum_inventory_margin,
+            sense=maximize,
+        )
+        model.diagnostic_maximise_min_inventory_margin_objective.deactivate()
+    else:
+        model.diagnostic_maximise_min_inventory_margin_objective = None
+
+    if resolved_objective_type == "diagnostic_maximise_min_inventory_margin":
+        model.minimise_overproduction_objective.deactivate()
+        if len(model.ACTIVE_STORES) == 0:
+            raise LiquidSteelSmokeBuilderError(
+                "diagnostic_maximise_min_inventory_margin requires at least one active inventory store."
+            )
+        model.diagnostic_maximise_min_inventory_margin_objective.activate()
 
     validation_report = prepared.validation_report
     model.s2_validation_report = validation_report
@@ -816,17 +951,53 @@ def build_liquid_steel_smoke_model(
         "horizon_hours": horizon_hours,
         "target_variant": validation_report.selected_target_variant,
         "inventory_mode": prepared.inventory_mode,
+        "sensitivity_id": prepared.sensitivity_id,
         "thesis_usability": False,
         "input_surface": "s2_provisional_dev_input",
         "production_target_carrier": TARGET_CARRIER,
         "route_neutral_target": True,
-        "objective_type": "minimise_overproduction_dev_only",
+        "objective_type": resolved_objective_type,
         "shortfall_slack_active": False,
         "inventory_scope_active": prepared.inventory_mode == "first_buffers",
         "downstream_scope_active": False,
         "allow_target_shortfall": False,
         "active_store_ids": [store.store_id for store in prepared.active_inventory_stores],
         "active_store_count": len(prepared.active_inventory_stores),
+        "initial_inventory_fraction_by_store": {
+            store.store_id: round(store.initial_inventory_fraction, 6) for store in prepared.active_inventory_stores
+        },
+        "capacity_multiplier_by_store": {
+            store.store_id: round(store.capacity_multiplier, 6) for store in prepared.active_inventory_stores
+        },
     }
     model.s2_model_stats = collect_model_stats(model)
     return model
+
+
+def configure_liquid_steel_smoke_objective(
+    model,
+    *,
+    objective_type: str,
+    overproduction_cap: float | None = None,
+):
+    resolved_objective_type = _validated_objective_type(objective_type)
+    if hasattr(model, "diagnostic_overproduction_cap"):
+        model.del_component(model.diagnostic_overproduction_cap)
+
+    if resolved_objective_type == "minimise_overproduction_dev_only":
+        model.minimise_overproduction_objective.activate()
+        if hasattr(model, "diagnostic_maximise_min_inventory_margin_objective") and model.diagnostic_maximise_min_inventory_margin_objective is not None:
+            model.diagnostic_maximise_min_inventory_margin_objective.deactivate()
+    else:
+        if not hasattr(model, "minimum_inventory_margin"):
+            raise LiquidSteelSmokeBuilderError(
+                "diagnostic_maximise_min_inventory_margin requires inventory_mode=first_buffers."
+            )
+        model.minimise_overproduction_objective.deactivate()
+        model.diagnostic_maximise_min_inventory_margin_objective.activate()
+        if overproduction_cap is not None:
+            model.diagnostic_overproduction_cap = Constraint(
+                expr=model.overproduction <= float(overproduction_cap) + 1e-6
+            )
+
+    model.s2_metadata["objective_type"] = resolved_objective_type

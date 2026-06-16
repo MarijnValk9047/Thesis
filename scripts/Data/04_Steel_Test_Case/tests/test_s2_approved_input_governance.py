@@ -12,6 +12,9 @@ if str(TEST_CASE_ROOT) not in sys.path:
 from steel.config import load_config
 from steel.governance import (
     APPROVED_INPUT_FILE_SPECS,
+    BUFFER_AWARE_NEXT_CHECK_REGISTER_PATH,
+    FIRST_BUFFER_AWARE_BASELINE_SUMMARY_PATH,
+    INVENTORY_USE_INTERPRETATION_PATH,
     PROMOTION_PROTOCOL_FILE_SPECS,
     PROMOTION_REVIEW_CRITERIA_FILE_SPECS,
     PROMOTION_DECISION_TEMPLATE_COLUMNS,
@@ -151,9 +154,24 @@ def test_dry_run_validator_reports_alignment_and_empty_approved_input_surface():
     assert payload["liquid_steel_first_buffer_inventory_activation_memo_present"] is True
     assert payload["buffer_inventory_smoke_summary_rows_checked"] == 4
     assert payload["buffer_inventory_active_store_rows_checked"] == 6
+    assert payload["liquid_steel_first_buffer_aware_baseline_freeze_memo_present"] is True
+    assert payload["inventory_use_interpretation_rows_checked"] == 3
+    assert payload["first_buffer_aware_baseline_rows_checked"] == 4
+    assert payload["buffer_aware_next_check_rows_checked"] == 9
+    assert payload["buffer_sensitivity_diagnostics_memo_present"] is True
+    assert payload["buffer_sensitivity_plan_rows_checked"] == 21
+    assert payload["buffer_sensitivity_result_rows_checked"] == 21
+    assert payload["zero_hit_week_gate_memo_present"] is True
+    assert payload["zero_hit_attribution_rows_checked"] == 6
+    assert payload["weekly_smoke_target_audit_rows_checked"] == 2
+    assert payload["one_week_buffer_smoke_rows_checked"] == 2
     assert payload["approved_rows"] == 0
     assert payload["thesis_grade_numerical_rows"] == 0
     assert payload["candidate_review_executable_rows"] == 0
+
+    assert INVENTORY_USE_INTERPRETATION_PATH.exists()
+    assert FIRST_BUFFER_AWARE_BASELINE_SUMMARY_PATH.exists()
+    assert BUFFER_AWARE_NEXT_CHECK_REGISTER_PATH.exists()
 
 
 def test_promotion_protocol_and_template_exist_and_remain_non_executable():

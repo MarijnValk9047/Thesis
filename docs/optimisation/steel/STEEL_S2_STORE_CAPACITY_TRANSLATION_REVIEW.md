@@ -80,3 +80,5 @@ and only under explicit guards that prevent multi-day carry, fake market-arbitra
 - any claim that these store rows are thesis-grade or approved
 
 The resulting guarded activation boundary and first inventory-balance interpretation are recorded in `STEEL_S2_FIRST_BUFFER_INVENTORY_ACTIVATION.md`.
+
+The subsequent `S2.10c` judgement on whether those buffers are acceptable as a `24h` smoke baseline is recorded in `STEEL_S2_FIRST_BUFFER_AWARE_BASELINE_FREEZE.md`.

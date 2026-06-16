@@ -101,3 +101,7 @@ Before any one-week `S2` or later `S3` extension:
 - finish cold slab/slab-`WIP` tonne translation before any downstream inventory activation
 - keep hot slab, liquid steel, ladle, tundish, and excluded bulk stocks inactive
 - preserve the separation between provisional dev inputs and approved thesis inputs
+
+The resulting first buffer-aware interpretation freeze is recorded in `STEEL_S2_FIRST_BUFFER_AWARE_BASELINE_FREEZE.md` and its companion `S2.10c` registers.
+
+The subsequent guarded initial-inventory and buffer-size sensitivity layer is recorded in `STEEL_S2_BUFFER_SENSITIVITY_DIAGNOSTICS.md`.

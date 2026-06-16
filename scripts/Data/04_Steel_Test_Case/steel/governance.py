@@ -1080,6 +1080,170 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "interpretation",
         "next_action",
     ],
+    "s2_inventory_use_interpretation_register.csv": [
+        "interpretation_id",
+        "configuration_id",
+        "target_variant",
+        "horizon_hours",
+        "inventory_mode",
+        "store_id",
+        "store_class",
+        "carrier",
+        "capacity_t",
+        "initial_inventory_t",
+        "min_inventory_t",
+        "max_inventory_t",
+        "terminal_inventory_t",
+        "terminal_target_t",
+        "hit_zero",
+        "hit_capacity",
+        "terminal_satisfied",
+        "interpretation",
+        "fake_flexibility_risk",
+        "acceptable_for_24h_smoke",
+        "acceptable_for_one_week_without_more_checks",
+        "required_next_check",
+        "thesis_usability",
+    ],
+    "s2_first_buffer_aware_baseline_summary.csv": [
+        "case_id",
+        "configuration_id",
+        "horizon_hours",
+        "target_variant",
+        "inventory_mode",
+        "solve_status",
+        "target_t",
+        "achieved_liquid_steel_t",
+        "overproduction_t",
+        "variable_count",
+        "constraint_count",
+        "binary_count",
+        "active_store_count",
+        "active_store_ids",
+        "any_store_hit_zero",
+        "all_terminal_inventory_satisfied",
+        "shortfall_slack_active",
+        "downstream_active",
+        "thesis_usability",
+        "interpretation",
+        "next_action",
+    ],
+    "s2_buffer_aware_next_check_register.csv": [
+        "check_id",
+        "next_check",
+        "purpose",
+        "required_before",
+        "current_status",
+        "blocking_risk",
+        "allowed_action",
+        "forbidden_shortcut",
+        "acceptance_signal",
+        "thesis_relevance",
+    ],
+    "s2_buffer_sensitivity_plan.csv": [
+        "sensitivity_id",
+        "sensitivity_group",
+        "configuration_id",
+        "target_variant",
+        "inventory_mode",
+        "store_id",
+        "initial_inventory_fraction",
+        "capacity_multiplier",
+        "expected_purpose",
+        "expected_risk",
+        "allowed_action",
+        "thesis_usability",
+        "notes",
+    ],
+    "s2_buffer_sensitivity_result_summary.csv": [
+        "result_id",
+        "sensitivity_id",
+        "configuration_id",
+        "horizon_hours",
+        "target_variant",
+        "inventory_mode",
+        "solve_status",
+        "target_t",
+        "achieved_liquid_steel_t",
+        "overproduction_t",
+        "active_store_ids",
+        "capacity_multiplier_summary",
+        "initial_inventory_fraction_summary",
+        "any_store_hit_zero",
+        "any_store_hit_capacity",
+        "all_terminal_inventory_satisfied",
+        "min_inventory_summary",
+        "max_inventory_summary",
+        "variable_count",
+        "constraint_count",
+        "binary_count",
+        "shortfall_slack_active",
+        "thesis_usability",
+        "interpretation",
+        "next_action",
+    ],
+    "s2_zero_hit_attribution_register.csv": [
+        "attribution_id",
+        "configuration_id",
+        "horizon_hours",
+        "target_variant",
+        "inventory_mode",
+        "objective_type",
+        "solve_status",
+        "active_store_ids",
+        "any_store_hit_zero",
+        "zero_hit_reduced_vs_default",
+        "all_terminal_inventory_satisfied",
+        "stress_case_preserved_if_applicable",
+        "likely_explanation",
+        "benign_gate_result",
+        "one_week_allowed",
+        "thesis_usability",
+        "notes",
+    ],
+    "s2_weekly_smoke_target_audit.csv": [
+        "audit_id",
+        "configuration_id",
+        "horizon_hours",
+        "target_variant",
+        "original_target_t",
+        "max_implied_liquid_steel_t",
+        "target_fraction_of_capacity",
+        "reconciled_target_t",
+        "feasibility_expectation",
+        "source_diagnostic_run_or_basis",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "notes",
+    ],
+    "s2_one_week_buffer_smoke_summary.csv": [
+        "case_id",
+        "configuration_id",
+        "horizon_hours",
+        "target_variant",
+        "inventory_mode",
+        "objective_type",
+        "solve_status",
+        "target_t",
+        "achieved_liquid_steel_t",
+        "overproduction_t",
+        "variable_count",
+        "constraint_count",
+        "binary_count",
+        "active_store_count",
+        "active_store_ids",
+        "any_store_hit_zero",
+        "any_store_hit_capacity",
+        "all_terminal_inventory_satisfied",
+        "shortfall_slack_active",
+        "downstream_active",
+        "thesis_usability",
+        "interpretation",
+        "next_action",
+    ],
     "s2_liquid_steel_infeasibility_attribution.csv": [
         "attribution_id",
         "configuration_id",
@@ -1998,6 +2162,8 @@ LIQUID_STEEL_SMOKE_RUNNER_MODULE = REPO_ROOT / "scripts" / "Data" / "04_Steel_Te
 LIQUID_STEEL_SMOKE_DIAGNOSTICS_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_DIAGNOSTICS.md"
 LIQUID_STEEL_SMOKE_BASELINE_FREEZE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md"
 LIQUID_STEEL_FIRST_BUFFER_INVENTORY_ACTIVATION_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_FIRST_BUFFER_INVENTORY_ACTIVATION.md"
+LIQUID_STEEL_FIRST_BUFFER_AWARE_BASELINE_FREEZE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_FIRST_BUFFER_AWARE_BASELINE_FREEZE.md"
+BUFFER_SENSITIVITY_DIAGNOSTICS_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_BUFFER_SENSITIVITY_DIAGNOSTICS.md"
 LIQUID_STEEL_SMOKE_BUILDER_SCOPE_REQUIRED_PHRASES = (
     "restricted deterministic `s2` liquid-steel material-flow lp scaffold",
     "development-only smoke builder",
@@ -2025,6 +2191,16 @@ LIQUID_STEEL_SMOKE_BASELINE_SUMMARY_COLUMNS = REVIEW_FILE_SPECS["s2_liquid_steel
 LIQUID_STEEL_SMOKE_BASELINE_SUMMARY_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_liquid_steel_smoke_baseline_summary.csv"
 BUFFER_INVENTORY_SMOKE_SUMMARY_COLUMNS = REVIEW_FILE_SPECS["s2_buffer_inventory_smoke_summary.csv"]
 BUFFER_INVENTORY_SMOKE_SUMMARY_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_buffer_inventory_smoke_summary.csv"
+INVENTORY_USE_INTERPRETATION_COLUMNS = REVIEW_FILE_SPECS["s2_inventory_use_interpretation_register.csv"]
+INVENTORY_USE_INTERPRETATION_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_inventory_use_interpretation_register.csv"
+FIRST_BUFFER_AWARE_BASELINE_SUMMARY_COLUMNS = REVIEW_FILE_SPECS["s2_first_buffer_aware_baseline_summary.csv"]
+FIRST_BUFFER_AWARE_BASELINE_SUMMARY_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_first_buffer_aware_baseline_summary.csv"
+BUFFER_AWARE_NEXT_CHECK_REGISTER_COLUMNS = REVIEW_FILE_SPECS["s2_buffer_aware_next_check_register.csv"]
+BUFFER_AWARE_NEXT_CHECK_REGISTER_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_buffer_aware_next_check_register.csv"
+BUFFER_SENSITIVITY_PLAN_COLUMNS = REVIEW_FILE_SPECS["s2_buffer_sensitivity_plan.csv"]
+BUFFER_SENSITIVITY_PLAN_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_buffer_sensitivity_plan.csv"
+BUFFER_SENSITIVITY_RESULT_SUMMARY_COLUMNS = REVIEW_FILE_SPECS["s2_buffer_sensitivity_result_summary.csv"]
+BUFFER_SENSITIVITY_RESULT_SUMMARY_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_buffer_sensitivity_result_summary.csv"
 LIQUID_STEEL_INFEASIBILITY_ATTRIBUTION_COLUMNS = REVIEW_FILE_SPECS["s2_liquid_steel_infeasibility_attribution.csv"]
 LIQUID_STEEL_INFEASIBILITY_ATTRIBUTION_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_liquid_steel_infeasibility_attribution.csv"
 S2_NEXT_SCOPE_GATE_REGISTER_COLUMNS = REVIEW_FILE_SPECS["s2_next_scope_gate_register.csv"]
@@ -2053,6 +2229,55 @@ LIQUID_STEEL_FIRST_BUFFER_INVENTORY_ACTIVATION_REQUIRED_PHRASES = (
     "why outputs remain non-thesis",
     "how to interpret feasible/stress runs",
     "what must be checked before one-week s2 or s3",
+)
+LIQUID_STEEL_FIRST_BUFFER_AWARE_BASELINE_FREEZE_REQUIRED_PHRASES = (
+    "s2.10b scope and non-scope",
+    "activated stores and refused stores",
+    "feasible and stress run outcomes",
+    "inventory capacity/initial/min/max/terminal summary",
+    "interpretation of buffers hitting zero",
+    "net horizon borrowing but does not prove physical credibility",
+    "hot metal remains only a synchronisation buffer",
+    "short-term surge buffer",
+    "blocked/deferred",
+    "no economic flexibility value is claimed yet",
+    "outputs remain `thesis_usability=false`",
+    "acceptable as a 24h smoke baseline",
+    "required next gates before one-week buffer-aware runs",
+    "required next gates before s3",
+)
+BUFFER_SENSITIVITY_DIAGNOSTICS_REQUIRED_PHRASES = (
+    "purpose of s2.10d",
+    "sensitivity cases tested",
+    "50% initial inventory",
+    "hot metal buffer size",
+    "dri/hdri buffer size",
+    "cyc50",
+    "stress targets remain infeasible",
+    "zero-inventory hits persist",
+    "no thesis-use claim is made",
+    "one-week buffer-aware runs",
+)
+BUFFER_SENSITIVITY_ALLOWED_CONFIGURATION_IDS = {
+    "C0_current_BF_BOF_reference",
+    "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
+}
+ZERO_HIT_ATTRIBUTION_REGISTER_COLUMNS = REVIEW_FILE_SPECS["s2_zero_hit_attribution_register.csv"]
+ZERO_HIT_ATTRIBUTION_REGISTER_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_zero_hit_attribution_register.csv"
+WEEKLY_SMOKE_TARGET_AUDIT_COLUMNS = REVIEW_FILE_SPECS["s2_weekly_smoke_target_audit.csv"]
+WEEKLY_SMOKE_TARGET_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_weekly_smoke_target_audit.csv"
+ONE_WEEK_BUFFER_SMOKE_SUMMARY_COLUMNS = REVIEW_FILE_SPECS["s2_one_week_buffer_smoke_summary.csv"]
+ONE_WEEK_BUFFER_SMOKE_SUMMARY_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_one_week_buffer_smoke_summary.csv"
+ZERO_HIT_WEEK_GATE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_ZERO_HIT_ATTRIBUTION_AND_WEEK_GATE.md"
+ZERO_HIT_WEEK_GATE_REQUIRED_PHRASES = (
+    "why zero-hit attribution was needed",
+    "diagnostic objective used",
+    "whether zero hits appear to be degeneracy or structurally forced",
+    "whether the s2.10e result is benign, ambiguous, or non-benign",
+    "whether one-week was opened",
+    "if one-week was opened",
+    "why outputs remain non-thesis",
+    "why s3 is still not entered in this task",
 )
 FIRST_BUFFER_ACTIVE_STORE_IDS = {
     "c0_hot_metal_buffer",
@@ -3346,6 +3571,268 @@ def validate_s2_first_buffer_inventory_activation_artifacts(review_bundle: Gover
     }
 
 
+def validate_s2_first_buffer_aware_baseline_artifacts(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    if not LIQUID_STEEL_FIRST_BUFFER_AWARE_BASELINE_FREEZE_MEMO.exists():
+        raise ValueError("STEEL_S2_FIRST_BUFFER_AWARE_BASELINE_FREEZE.md must exist for S2.10c.")
+    memo_text = LIQUID_STEEL_FIRST_BUFFER_AWARE_BASELINE_FREEZE_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in LIQUID_STEEL_FIRST_BUFFER_AWARE_BASELINE_FREEZE_REQUIRED_PHRASES:
+        if phrase not in memo_text:
+            raise ValueError(
+                f"STEEL_S2_FIRST_BUFFER_AWARE_BASELINE_FREEZE.md is missing required phrase: {phrase}"
+            )
+
+    interpretation = review_bundle.tables["s2_inventory_use_interpretation_register.csv"]
+    if list(interpretation.columns) != INVENTORY_USE_INTERPRETATION_COLUMNS:
+        raise ValueError("s2_inventory_use_interpretation_register.csv must match the required column order.")
+    if interpretation["interpretation_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_inventory_use_interpretation_register.csv must not contain duplicate interpretation_id values.")
+    if len(interpretation) != 3:
+        raise ValueError("s2_inventory_use_interpretation_register.csv must contain exactly 3 feasible-store rows.")
+    required_stores = {"c0_hot_metal_buffer", "c1_hot_metal_buffer", "c1_dri_hdri_buffer"}
+    if set(interpretation["store_id"].astype(str).str.strip()) != required_stores:
+        raise ValueError("s2_inventory_use_interpretation_register.csv must cover only the three activated feasible stores.")
+    for column in ("hit_zero", "terminal_satisfied", "acceptable_for_24h_smoke"):
+        if (~interpretation[column].astype(str).str.strip().str.lower().eq("true")).any():
+            raise ValueError(f"s2_inventory_use_interpretation_register.csv must keep {column}=true for every row.")
+    for column in ("hit_capacity", "acceptable_for_one_week_without_more_checks", "thesis_usability"):
+        if (~interpretation[column].astype(str).str.strip().str.lower().eq("false")).any():
+            raise ValueError(f"s2_inventory_use_interpretation_register.csv must keep {column}=false for every row.")
+    interpretation_text = " ".join(interpretation.astype(str).agg(" ".join, axis=1).str.lower())
+    for phrase in (
+        "synchronisation only",
+        "short-term surge only",
+        "initial inventory sensitivity",
+        "one-week gate review",
+    ):
+        if phrase not in interpretation_text:
+            raise ValueError(f"s2_inventory_use_interpretation_register.csv is missing required interpretation phrase: {phrase}")
+
+    baseline = review_bundle.tables["s2_first_buffer_aware_baseline_summary.csv"]
+    if list(baseline.columns) != FIRST_BUFFER_AWARE_BASELINE_SUMMARY_COLUMNS:
+        raise ValueError("s2_first_buffer_aware_baseline_summary.csv must match the required column order.")
+    if baseline["case_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_first_buffer_aware_baseline_summary.csv must not contain duplicate case_id values.")
+    if len(baseline) != 4:
+        raise ValueError("s2_first_buffer_aware_baseline_summary.csv must contain exactly 4 baseline rows.")
+    if (~baseline["inventory_mode"].astype(str).str.strip().eq("first_buffers")).any():
+        raise ValueError("s2_first_buffer_aware_baseline_summary.csv must keep inventory_mode=first_buffers.")
+    for column in ("shortfall_slack_active", "downstream_active", "thesis_usability"):
+        if (~baseline[column].astype(str).str.strip().str.lower().eq("false")).any():
+            raise ValueError(f"s2_first_buffer_aware_baseline_summary.csv must keep {column}=false for every row.")
+    if (~baseline["binary_count"].astype(str).str.strip().eq("0")).any():
+        raise ValueError("s2_first_buffer_aware_baseline_summary.csv must keep binary_count=0 for every row.")
+    feasible_rows = baseline["target_variant"].astype(str).str.strip().eq("feasible_smoke")
+    stress_rows = baseline["target_variant"].astype(str).str.strip().eq("stress_infeasible_original")
+    if (~baseline.loc[feasible_rows, "solve_status"].astype(str).str.strip().eq("optimal")).any():
+        raise ValueError("Feasible first-buffer baseline rows must be marked optimal.")
+    if (~baseline.loc[stress_rows, "solve_status"].astype(str).str.strip().eq("infeasible")).any():
+        raise ValueError("Stress first-buffer baseline rows must be marked infeasible.")
+    if (~baseline.loc[feasible_rows, "any_store_hit_zero"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("Feasible first-buffer baseline rows must record any_store_hit_zero=true.")
+    if (~baseline.loc[feasible_rows, "all_terminal_inventory_satisfied"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("Feasible first-buffer baseline rows must keep all_terminal_inventory_satisfied=true.")
+
+    next_checks = review_bundle.tables["s2_buffer_aware_next_check_register.csv"]
+    if list(next_checks.columns) != BUFFER_AWARE_NEXT_CHECK_REGISTER_COLUMNS:
+        raise ValueError("s2_buffer_aware_next_check_register.csv must match the required column order.")
+    if next_checks["check_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_buffer_aware_next_check_register.csv must not contain duplicate check_id values.")
+    if len(next_checks) != 9:
+        raise ValueError("s2_buffer_aware_next_check_register.csv must contain exactly 9 next-check rows.")
+    required_checks = {
+        "24h_inventory_min_max_interpretation",
+        "initial_inventory_sensitivity",
+        "no_initial_stock_diagnostic_gate",
+        "one_week_buffer_aware_run_gate",
+        "dri_hdri_buffer_size_sensitivity",
+        "hot_metal_buffer_size_sensitivity",
+        "cold_slab_slab_wip_tonne_grounding",
+        "downstream_hsm_activation_gate",
+        "s3_energy_cost_emissions_entry_gate",
+    }
+    if set(next_checks["next_check"].astype(str).str.strip()) != required_checks:
+        raise ValueError("s2_buffer_aware_next_check_register.csv does not match the required S2.10c check coverage.")
+    if (~next_checks["current_status"].astype(str).str.strip().eq("blocked_pending_review")).any():
+        raise ValueError("s2_buffer_aware_next_check_register.csv must keep current_status=blocked_pending_review.")
+
+    return {
+        "liquid_steel_first_buffer_aware_baseline_freeze_memo_present": True,
+        "inventory_use_interpretation_rows_checked": int(len(interpretation)),
+        "first_buffer_aware_baseline_rows_checked": int(len(baseline)),
+        "buffer_aware_next_check_rows_checked": int(len(next_checks)),
+    }
+
+
+def validate_s2_buffer_sensitivity_artifacts(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    if not BUFFER_SENSITIVITY_DIAGNOSTICS_MEMO.exists():
+        raise ValueError("STEEL_S2_BUFFER_SENSITIVITY_DIAGNOSTICS.md must exist for S2.10d.")
+    memo_text = BUFFER_SENSITIVITY_DIAGNOSTICS_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in BUFFER_SENSITIVITY_DIAGNOSTICS_REQUIRED_PHRASES:
+        if phrase not in memo_text:
+            raise ValueError(
+                f"STEEL_S2_BUFFER_SENSITIVITY_DIAGNOSTICS.md is missing required phrase: {phrase}"
+            )
+
+    plan = review_bundle.tables["s2_buffer_sensitivity_plan.csv"]
+    if list(plan.columns) != BUFFER_SENSITIVITY_PLAN_COLUMNS:
+        raise ValueError("s2_buffer_sensitivity_plan.csv must match the required column order.")
+    if plan["sensitivity_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_buffer_sensitivity_plan.csv must not contain duplicate sensitivity_id values.")
+    if len(plan) != 21:
+        raise ValueError("s2_buffer_sensitivity_plan.csv must contain exactly 21 planned sensitivity rows.")
+    if (~plan["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_buffer_sensitivity_plan.csv must keep thesis_usability=false for every row.")
+    if (~plan["inventory_mode"].astype(str).str.strip().eq("first_buffers")).any():
+        raise ValueError("s2_buffer_sensitivity_plan.csv must keep inventory_mode=first_buffers.")
+    if (~plan["configuration_id"].astype(str).str.strip().isin(BUFFER_SENSITIVITY_ALLOWED_CONFIGURATION_IDS)).any():
+        raise ValueError("s2_buffer_sensitivity_plan.csv contains unsupported configuration_id values.")
+
+    results = review_bundle.tables["s2_buffer_sensitivity_result_summary.csv"]
+    if list(results.columns) != BUFFER_SENSITIVITY_RESULT_SUMMARY_COLUMNS:
+        raise ValueError("s2_buffer_sensitivity_result_summary.csv must match the required column order.")
+    if results["result_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_buffer_sensitivity_result_summary.csv must not contain duplicate result_id values.")
+    if len(results) != 21:
+        raise ValueError("s2_buffer_sensitivity_result_summary.csv must contain exactly 21 result rows.")
+    if (~results["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_buffer_sensitivity_result_summary.csv must keep thesis_usability=false for every row.")
+    if (~results["inventory_mode"].astype(str).str.strip().eq("first_buffers")).any():
+        raise ValueError("s2_buffer_sensitivity_result_summary.csv must keep inventory_mode=first_buffers.")
+    if (~results["shortfall_slack_active"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_buffer_sensitivity_result_summary.csv must keep shortfall_slack_active=false.")
+    if (~results["binary_count"].astype(str).str.strip().eq("0")).any():
+        raise ValueError("s2_buffer_sensitivity_result_summary.csv must keep binary_count=0.")
+    expected_result_ids = set(plan["sensitivity_id"].astype(str).str.strip())
+    actual_result_ids = set(results["sensitivity_id"].astype(str).str.strip())
+    if actual_result_ids != expected_result_ids:
+        missing = sorted(expected_result_ids - actual_result_ids)
+        extra = sorted(actual_result_ids - expected_result_ids)
+        raise ValueError(f"s2_buffer_sensitivity_result_summary.csv coverage mismatch. missing={missing} extra={extra}")
+
+    return {
+        "buffer_sensitivity_diagnostics_memo_present": True,
+        "buffer_sensitivity_plan_rows_checked": int(len(plan)),
+        "buffer_sensitivity_result_rows_checked": int(len(results)),
+    }
+
+
+def validate_s210e_week_gate_artifacts(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    if not ZERO_HIT_WEEK_GATE_MEMO.exists():
+        raise ValueError("STEEL_S2_ZERO_HIT_ATTRIBUTION_AND_WEEK_GATE.md must exist for S2.10e/S2.10f.")
+    memo_text = ZERO_HIT_WEEK_GATE_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in ZERO_HIT_WEEK_GATE_REQUIRED_PHRASES:
+        if phrase not in memo_text:
+            raise ValueError(f"STEEL_S2_ZERO_HIT_ATTRIBUTION_AND_WEEK_GATE.md is missing required phrase: {phrase}")
+
+    zero_hit = review_bundle.tables["s2_zero_hit_attribution_register.csv"]
+    if list(zero_hit.columns) != ZERO_HIT_ATTRIBUTION_REGISTER_COLUMNS:
+        raise ValueError("s2_zero_hit_attribution_register.csv must match the required column order.")
+    if len(zero_hit) != 6:
+        raise ValueError("s2_zero_hit_attribution_register.csv must contain exactly six S2.10e attribution rows.")
+    if (~zero_hit["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_zero_hit_attribution_register.csv must keep thesis_usability=false.")
+    if (~zero_hit["inventory_mode"].astype(str).str.strip().eq("first_buffers")).any():
+        raise ValueError("s2_zero_hit_attribution_register.csv must keep inventory_mode=first_buffers.")
+    if (~zero_hit["configuration_id"].astype(str).str.strip().isin(BUFFER_SENSITIVITY_ALLOWED_CONFIGURATION_IDS)).any():
+        raise ValueError("s2_zero_hit_attribution_register.csv contains unsupported configuration_id values.")
+
+    diagnostic_rows = zero_hit.loc[zero_hit["objective_type"].eq("diagnostic_maximise_min_inventory_margin")]
+    if len(diagnostic_rows) != 2:
+        raise ValueError("s2_zero_hit_attribution_register.csv must contain two diagnostic objective rows.")
+    if (~diagnostic_rows["zero_hit_reduced_vs_default"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("S2.10e diagnostic rows must prove zero_hit_reduced_vs_default=true before weekly opening.")
+    if (~diagnostic_rows["benign_gate_result"].astype(str).str.strip().eq("passed")).any():
+        raise ValueError("S2.10e diagnostic rows must record benign_gate_result=passed when one-week is opened.")
+    if (~diagnostic_rows["one_week_allowed"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("S2.10e diagnostic rows must record one_week_allowed=true when one-week is opened.")
+
+    stress_rows = zero_hit.loc[zero_hit["target_variant"].eq("stress_infeasible_original")]
+    if len(stress_rows) != 2:
+        raise ValueError("s2_zero_hit_attribution_register.csv must contain two stress safeguard rows.")
+    if (~stress_rows["stress_case_preserved_if_applicable"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("S2.10e stress rows must keep stress_case_preserved_if_applicable=true.")
+    if (~stress_rows["solve_status"].astype(str).str.strip().str.lower().eq("infeasible")).any():
+        raise ValueError("S2.10e stress rows must remain infeasible.")
+
+    weekly_audit = review_bundle.tables["s2_weekly_smoke_target_audit.csv"]
+    if list(weekly_audit.columns) != WEEKLY_SMOKE_TARGET_AUDIT_COLUMNS:
+        raise ValueError("s2_weekly_smoke_target_audit.csv must match the required column order.")
+    if len(weekly_audit) != 2:
+        raise ValueError("s2_weekly_smoke_target_audit.csv must contain exactly two weekly feasible_smoke_168h rows.")
+    for column, required_value in (
+        ("approval_status", "provisional_development_only"),
+        ("executable_status", "dev_executable_only"),
+        ("thesis_usability", "false"),
+        ("reviewer_decision_required", "true"),
+        ("codex_may_decide", "false"),
+    ):
+        if (~weekly_audit[column].astype(str).str.strip().str.lower().eq(required_value)).any():
+            raise ValueError(f"s2_weekly_smoke_target_audit.csv must keep {column}={required_value}.")
+    if (~weekly_audit["target_variant"].astype(str).str.strip().eq("feasible_smoke_168h")).any():
+        raise ValueError("s2_weekly_smoke_target_audit.csv must keep target_variant=feasible_smoke_168h.")
+
+    one_week_summary = review_bundle.tables["s2_one_week_buffer_smoke_summary.csv"]
+    if list(one_week_summary.columns) != ONE_WEEK_BUFFER_SMOKE_SUMMARY_COLUMNS:
+        raise ValueError("s2_one_week_buffer_smoke_summary.csv must match the required column order.")
+    if len(one_week_summary) != 2:
+        raise ValueError("s2_one_week_buffer_smoke_summary.csv must contain exactly two one-week feasible smoke rows.")
+    if (~one_week_summary["horizon_hours"].astype(str).str.strip().eq("168")).any():
+        raise ValueError("s2_one_week_buffer_smoke_summary.csv must keep horizon_hours=168.")
+    if (~one_week_summary["target_variant"].astype(str).str.strip().eq("feasible_smoke_168h")).any():
+        raise ValueError("s2_one_week_buffer_smoke_summary.csv must keep target_variant=feasible_smoke_168h.")
+    if (~one_week_summary["objective_type"].astype(str).str.strip().eq("diagnostic_maximise_min_inventory_margin")).any():
+        raise ValueError("s2_one_week_buffer_smoke_summary.csv must record the diagnostic weekly objective explicitly.")
+    if (~one_week_summary["solve_status"].astype(str).str.strip().str.lower().eq("optimal")).any():
+        raise ValueError("s2_one_week_buffer_smoke_summary.csv must keep both one-week cases optimal.")
+    for column in ("shortfall_slack_active", "downstream_active", "thesis_usability", "any_store_hit_zero", "any_store_hit_capacity"):
+        if (~one_week_summary[column].astype(str).str.strip().str.lower().eq("false")).any():
+            raise ValueError(f"s2_one_week_buffer_smoke_summary.csv must keep {column}=false.")
+    if (~one_week_summary["all_terminal_inventory_satisfied"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("s2_one_week_buffer_smoke_summary.csv must keep all_terminal_inventory_satisfied=true.")
+
+    production_targets = _read_csv(PROVISIONAL_DEV_INPUT_ROOT / "production_targets.csv")
+    weekly_targets = production_targets.loc[
+        production_targets["target_variant"].astype(str).str.strip().eq("feasible_smoke_168h")
+    ].copy()
+    if len(weekly_targets) != 2:
+        raise ValueError("production_targets.csv must contain exactly two feasible_smoke_168h rows after weekly gate opening.")
+    if (~weekly_targets["target_name"].astype(str).str.strip().eq("horizon_total_target_168h_one_week")).any():
+        raise ValueError("feasible_smoke_168h rows must use target_name=horizon_total_target_168h_one_week.")
+    if (~weekly_targets["approval_status"].astype(str).str.strip().str.lower().eq("provisional_development_only")).any():
+        raise ValueError("feasible_smoke_168h rows must remain provisional_development_only.")
+    if (~weekly_targets["executable_status"].astype(str).str.strip().str.lower().eq("dev_executable_only")).any():
+        raise ValueError("feasible_smoke_168h rows must remain dev_executable_only.")
+    if (~weekly_targets["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("feasible_smoke_168h rows must remain thesis_usability=false.")
+
+    target_lookup = {
+        (str(row["configuration_id"]).strip(), str(row["target_variant"]).strip()): float(row["value"])
+        for row in weekly_targets.to_dict(orient="records")
+    }
+    for row in weekly_audit.to_dict(orient="records"):
+        key = (str(row["configuration_id"]).strip(), str(row["target_variant"]).strip())
+        if key not in target_lookup:
+            raise ValueError(f"s2_weekly_smoke_target_audit.csv references a missing weekly target row: {key}")
+        if abs(float(row["reconciled_target_t"]) - target_lookup[key]) > 1e-6:
+            raise ValueError(f"s2_weekly_smoke_target_audit.csv does not match production_targets.csv for {key}.")
+        if abs(float(row["target_fraction_of_capacity"]) - 0.85) > 1e-9:
+            raise ValueError(f"s2_weekly_smoke_target_audit.csv must keep target_fraction_of_capacity=0.85 for {key}.")
+        if not float(row["reconciled_target_t"]) < float(row["max_implied_liquid_steel_t"]):
+            raise ValueError(f"s2_weekly_smoke_target_audit.csv must remain capacity-consistent for {key}.")
+
+    if "one-week was opened" not in memo_text and "one week was opened" not in memo_text:
+        raise ValueError("STEEL_S2_ZERO_HIT_ATTRIBUTION_AND_WEEK_GATE.md must explicitly record that one-week was opened.")
+    if "benign" not in memo_text:
+        raise ValueError("STEEL_S2_ZERO_HIT_ATTRIBUTION_AND_WEEK_GATE.md must explicitly record the benign gate evidence.")
+
+    return {
+        "zero_hit_week_gate_memo_present": True,
+        "zero_hit_attribution_rows_checked": int(len(zero_hit)),
+        "weekly_smoke_target_audit_rows_checked": int(len(weekly_audit)),
+        "one_week_buffer_smoke_rows_checked": int(len(one_week_summary)),
+    }
+
+
 def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
     tables = review_bundle.tables
     summary = tables["s2_review_summary.csv"]
@@ -3375,6 +3862,9 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     liquid_steel_smoke_runner_payload = validate_s2_liquid_steel_smoke_runner_artifacts()
     liquid_steel_smoke_baseline_payload = validate_s2_liquid_steel_smoke_baseline_artifacts(review_bundle)
     first_buffer_inventory_payload = validate_s2_first_buffer_inventory_activation_artifacts(review_bundle)
+    first_buffer_aware_baseline_payload = validate_s2_first_buffer_aware_baseline_artifacts(review_bundle)
+    buffer_sensitivity_payload = validate_s2_buffer_sensitivity_artifacts(review_bundle)
+    zero_hit_week_gate_payload = validate_s210e_week_gate_artifacts(review_bundle)
 
     if not PROMOTION_PROTOCOL_MEMO.exists():
         raise ValueError("STEEL_S2_APPROVED_INPUT_PROMOTION_PROTOCOL.md must exist.")
@@ -4029,6 +4519,9 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     payload.update(liquid_steel_smoke_runner_payload)
     payload.update(liquid_steel_smoke_baseline_payload)
     payload.update(first_buffer_inventory_payload)
+    payload.update(first_buffer_aware_baseline_payload)
+    payload.update(buffer_sensitivity_payload)
+    payload.update(zero_hit_week_gate_payload)
     return payload
 
 
