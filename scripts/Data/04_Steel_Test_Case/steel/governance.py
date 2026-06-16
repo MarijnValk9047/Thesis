@@ -334,6 +334,198 @@ APPROVED_INPUT_FILE_SPECS: dict[str, list[str]] = {
     ],
 }
 
+PROVISIONAL_DEV_INPUT_FILE_SPECS: dict[str, list[str]] = {
+    "process_bounds.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "process_unit_id",
+        "parameter_name",
+        "value",
+        "unit",
+        "value_basis",
+        "translation_basis",
+        "source_ids",
+        "evidence_status",
+        "sensitivity_case",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "notes",
+    ],
+    "conversion_coefficients.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "process_unit_id",
+        "carrier_id",
+        "coefficient_role",
+        "parameter_name",
+        "value",
+        "unit",
+        "value_basis",
+        "source_ids",
+        "evidence_status",
+        "sensitivity_case",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "notes",
+    ],
+    "store_capacities.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "store_id",
+        "carrier_id",
+        "capacity_name",
+        "value",
+        "unit",
+        "value_basis",
+        "source_ids",
+        "evidence_status",
+        "sensitivity_case",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "notes",
+    ],
+    "initial_inventories.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "store_id",
+        "carrier_id",
+        "inventory_basis",
+        "value",
+        "unit",
+        "value_basis",
+        "source_ids",
+        "evidence_status",
+        "sensitivity_case",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "notes",
+    ],
+    "terminal_inventory_rules.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "store_id",
+        "carrier_id",
+        "rule_type",
+        "value",
+        "unit",
+        "value_basis",
+        "source_ids",
+        "evidence_status",
+        "sensitivity_case",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "notes",
+    ],
+    "production_targets.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "carrier_id",
+        "target_name",
+        "value",
+        "unit",
+        "value_basis",
+        "source_ids",
+        "evidence_status",
+        "sensitivity_case",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "notes",
+    ],
+    "inventory_endpoint_policies.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "store_id",
+        "carrier_id",
+        "policy_name",
+        "value",
+        "unit",
+        "value_basis",
+        "source_ids",
+        "evidence_status",
+        "sensitivity_case",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "notes",
+    ],
+    "validation_targets.csv": [
+        "row_id",
+        "configuration_id",
+        "route_id",
+        "carrier_id",
+        "validation_target_name",
+        "value",
+        "unit",
+        "value_basis",
+        "source_ids",
+        "evidence_status",
+        "sensitivity_case",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "constraint_usage_status",
+        "notes",
+    ],
+    "sensitivity_variants.csv": [
+        "row_id",
+        "configuration_id",
+        "sensitivity_parameter",
+        "base_structure",
+        "low_case_structure",
+        "high_case_structure",
+        "source_ids",
+        "evidence_status",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "notes",
+    ],
+    "dev_input_completeness_report.csv": [
+        "input_category",
+        "required_for_first_dev_lp",
+        "row_count",
+        "provisional_value_count",
+        "missing_required_value_count",
+        "sensitivity_row_count",
+        "dev_executable_row_count",
+        "not_executable_row_count",
+        "main_blocker",
+        "readiness_status",
+        "notes",
+    ],
+}
+
 TOPOLOGY_SKELETON_FILE_SPECS: dict[str, list[str]] = {
     "configurations.csv": [
         "configuration_id",
@@ -688,6 +880,100 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "suggested_review_stage",
         "candidate_sources_available",
         "sensitivity_likely_required",
+        "notes",
+    ],
+    "s2_minimal_numerical_policy_decision_bundle.csv": [
+        "numerical_policy_decision_id",
+        "decision_cluster",
+        "decision_item",
+        "human_decision",
+        "provisional_base_structure",
+        "provisional_sensitivity_structure",
+        "modelling_interpretation",
+        "applies_to_configuration",
+        "applies_to_stage",
+        "affected_future_approved_table",
+        "evidence_basis",
+        "sensitivity_implication",
+        "unresolved_blocker",
+        "codex_allowed_role",
+        "codex_forbidden_role",
+        "approval_status",
+        "executable_status",
+        "thesis_usability",
+        "notes",
+    ],
+    "s2_early_sensitivity_screening_plan.csv": [
+        "screening_item_id",
+        "sensitivity_parameter",
+        "baseline_structure",
+        "low_case_structure",
+        "high_case_structure",
+        "model_risk_tested",
+        "expected_diagnostic_metric",
+        "required_before_screening",
+        "thesis_use_status",
+        "executable_status",
+        "approval_status",
+        "notes",
+    ],
+    "s2_provisional_dev_input_index.csv": [
+        "dev_input_file",
+        "input_category",
+        "row_count",
+        "provisional_value_count",
+        "formula_only_row_count",
+        "missing_required_value_count",
+        "sensitivity_row_count",
+        "dev_executable_row_count",
+        "thesis_usable_row_count",
+        "approved_row_count",
+        "main_blocker",
+        "next_action",
+    ],
+    "s2_provisional_dev_value_completion_audit.csv": [
+        "audit_id",
+        "input_file",
+        "row_id",
+        "parameter_name",
+        "previous_status",
+        "new_status",
+        "value_or_formula_added",
+        "value_basis",
+        "source_ids",
+        "evidence_status",
+        "translation_or_derivation_basis",
+        "sensitivity_required",
+        "thesis_usability",
+        "approval_status",
+        "executable_status",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "remaining_blocker",
+        "notes",
+    ],
+    "s2_process_bound_translation_audit.csv": [
+        "audit_id",
+        "process_unit_or_asset",
+        "configuration_id",
+        "route_id",
+        "previous_row_status",
+        "new_row_status",
+        "annual_anchor_used",
+        "translation_formula",
+        "effective_hours_or_batch_basis",
+        "translated_value_tph",
+        "bound_type",
+        "envelope_case",
+        "source_ids",
+        "evidence_status",
+        "sensitivity_required",
+        "thesis_usability",
+        "approval_status",
+        "executable_status",
+        "reviewer_decision_required",
+        "codex_may_decide",
+        "remaining_blocker",
         "notes",
     ],
     **PROMOTION_PROTOCOL_FILE_SPECS,
@@ -1287,6 +1573,282 @@ FUTURE_PARAMETER_REVIEW_BACKLOG_REQUIRED_CATEGORIES = {
     "BOF_EAF_batch_equivalent_capacity",
     "validation_target_selection",
 }
+NUMERICAL_REVIEW_PACKET_DOC_DIR = REPO_ROOT / "docs" / "optimisation" / "steel" / "s2_numerical_review_packets"
+NUMERICAL_REVIEW_PACKET_DATA_DIR_NAME = "s2_numerical_review_packets"
+NUMERICAL_REVIEW_PACKET_SUMMARY_COLUMNS = [
+    "review_packet_id",
+    "review_category",
+    "parameter_or_rule_name",
+    "candidate_row_id",
+    "candidate_source_table",
+    "target_approved_table",
+    "candidate_value_or_range_summary",
+    "unit_or_basis",
+    "source_ids",
+    "evidence_status",
+    "modelling_interpretation",
+    "applies_to_configuration",
+    "affects_model_component",
+    "affected_flexibility_risk",
+    "sensitivity_required",
+    "approval_blockers",
+    "codex_preliminary_assessment",
+    "possible_reviewer_outcomes",
+    "reviewer_decision_required",
+    "codex_may_decide",
+    "approval_status",
+    "executable_status",
+    "thesis_usability",
+    "notes",
+]
+NUMERICAL_REVIEW_PACKET_SUMMARY_FILE_SPECS: dict[str, dict[str, str]] = {
+    "buffer_capacity_review_packet.csv": {
+        "review_category": "buffer_capacity",
+        "target_approved_table": "store_capacities.csv",
+    },
+    "process_bounds_translation_review_packet.csv": {
+        "review_category": "process_bounds_translation",
+        "target_approved_table": "process_bounds.csv",
+    },
+    "production_target_review_packet.csv": {
+        "review_category": "production_target",
+        "target_approved_table": "production_targets.csv",
+    },
+}
+NUMERICAL_REVIEW_PACKET_ALLOWED_APPROVAL_STATUSES = {
+    "review_packet_only",
+    "not_approved",
+    "blocked",
+    "defer_pending_review",
+}
+NUMERICAL_REVIEW_PACKET_DASHBOARD_COLUMNS = [
+    "review_category",
+    "decision_item",
+    "candidate_count",
+    "evidence_strength_summary",
+    "recommended_nonbinding_option",
+    "sensitivity_required",
+    "high_risk_flag",
+    "blocker_before_promotion",
+    "blocker_before_executable_use",
+    "next_human_decision_needed",
+    "notes",
+]
+NUMERICAL_REVIEW_PACKET_MEMO_REQUIRED_PHRASES: dict[str, tuple[str, ...]] = {
+    "S2_7F_BUFFER_CAPACITY_REVIEW_PACKET.md": (
+        "review purpose",
+        "relevant approved-input target table",
+        "relevant candidate-review source tables",
+        "relevant source-card ids",
+        "candidate evidence summary",
+        "modelling interpretation options",
+        "model components affected",
+        "red flags and blockers",
+        "sensitivity implications",
+        "human review questions",
+        "possible reviewer outcomes",
+        "codex is not approving any value",
+        "approved-input tables remain empty",
+        "hdri/dri",
+        "cold slab",
+        "hot metal",
+        "hot slab",
+        "liquid steel",
+        "cyc50",
+        "does not approve any store capacity",
+    ),
+    "S2_7F_PROCESS_BOUNDS_TRANSLATION_REVIEW_PACKET.md": (
+        "review purpose",
+        "relevant approved-input target table",
+        "relevant candidate-review source tables",
+        "relevant source-card ids",
+        "candidate evidence summary",
+        "modelling interpretation options",
+        "model components affected",
+        "red flags and blockers",
+        "sensitivity implications",
+        "human review questions",
+        "possible reviewer outcomes",
+        "codex is not approving any value",
+        "approved-input tables remain empty",
+        "annual-to-hourly",
+        "bf",
+        "drp",
+        "bof",
+        "eaf",
+        "annual public anchors cannot become hourly caps directly",
+        "online hours",
+        "availability",
+        "utilisation",
+    ),
+    "S2_7F_PRODUCTION_TARGET_REVIEW_PACKET.md": (
+        "review purpose",
+        "relevant approved-input target table",
+        "relevant candidate-review source tables",
+        "relevant source-card ids",
+        "candidate evidence summary",
+        "modelling interpretation options",
+        "model components affected",
+        "red flags and blockers",
+        "sensitivity implications",
+        "human review questions",
+        "possible reviewer outcomes",
+        "codex is not approving any value",
+        "approved-input tables remain empty",
+        "target sink or carrier basis",
+        "horizon-total",
+        "route-specific",
+        "validation or scaling evidence",
+        "shortfall",
+    ),
+}
+NUMERICAL_REVIEW_PACKET_DASHBOARD = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_minimal_numerical_review_dashboard.csv"
+NUMERICAL_REVIEW_PACKET_REQUIRED_DASHBOARD_ITEMS = {
+    "buffer_capacity": {
+        "HDRI_DRI_surge_capacity",
+        "cold_slab_WIP_capacity",
+        "hot_metal_synchronisation_capacity",
+        "hot_slab_WIP_treatment",
+        "liquid_steel_ladle_tundish_treatment",
+    },
+    "process_bounds_translation": {
+        "annual_to_hourly_translation_method",
+        "BF_near_must_run_band",
+        "DRP_turndown_interpretation",
+        "BOF_batch_equivalent_hourly_capacity",
+        "EAF_batch_equivalent_hourly_capacity",
+    },
+    "production_target": {
+        "target_basis_choice",
+        "horizon_total_target_scale_translation",
+        "route_specific_annual_anchors",
+        "shortfall_treatment",
+    },
+}
+MINIMAL_NUMERICAL_POLICY_DECISION_BUNDLE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_MINIMAL_NUMERICAL_POLICY_DECISION_BUNDLE.md"
+MINIMAL_NUMERICAL_POLICY_DECISION_BUNDLE_COLUMNS = REVIEW_FILE_SPECS["s2_minimal_numerical_policy_decision_bundle.csv"]
+MINIMAL_NUMERICAL_POLICY_ALLOWED_APPROVAL_STATUSES = {
+    "human_policy_recorded",
+    "numerical_policy_recorded",
+    "provisional_structure_recorded",
+    "sensitivity_strategy_recorded",
+    "not_approved_numerical",
+    "blocked_until_later_review",
+}
+MINIMAL_NUMERICAL_POLICY_REQUIRED_CLUSTERS = {
+    "process_bounds_translation_policy",
+    "buffer_capacity_treatment",
+    "production_target_policy",
+    "sensitivity_screening_strategy",
+}
+MINIMAL_NUMERICAL_POLICY_REQUIRED_ITEMS = {
+    "annual_public_anchors_not_direct_hourly_caps",
+    "positive_t_per_hour_future_process_bound_unit",
+    "effective_hours_availability_utilisation_translation_requirement",
+    "BF_continuous_near_must_run_envelope",
+    "DRP_continuous_turndown_envelope",
+    "BOF_batch_equivalent_hourly_treatment",
+    "EAF_batch_equivalent_hourly_treatment",
+    "casting_HSM_bounded_sink_treatment",
+    "HDRI_DRI_surge_included_as_main_flexibility_buffer",
+    "HDRI_DRI_surge_heat_equivalent_sizing_basis",
+    "HDRI_DRI_provisional_base_and_sensitivity_structure",
+    "cold_slab_WIP_included_as_main_downstream_flexibility_buffer",
+    "cold_slab_WIP_days_of_throughput_sizing_basis",
+    "cold_slab_WIP_provisional_base_and_sensitivity_structure",
+    "hot_metal_small_synchronisation_only",
+    "hot_slab_WIP_omitted_or_tiny_thermal_transfer_only",
+    "liquid_steel_ladle_tundish_omitted_or_tiny_feasibility_only",
+    "coke_sinter_pellet_and_finished_goods_excluded_from_base_flexibility",
+    "CYC50_not_capacity_approval",
+    "one_horizon_total_production_target",
+    "last_modelled_metallic_sink_target_basis",
+    "no_route_specific_base_target",
+    "annual_to_horizon_target_translation_requirement",
+    "one_day_debugging_vs_one_week_serious_interpretation",
+    "explicit_reportable_shortfall_only_if_later_allowed",
+    "early_sensitivity_screening_priorities",
+    "final_thesis_sensitivity_selected_by_materiality",
+}
+MINIMAL_NUMERICAL_POLICY_MEMO_REQUIRED_PHRASES = (
+    "purpose and scope",
+    "records human numerical-policy decisions",
+    "not a codex approval artifact",
+    "s2_approved_model_input remains empty",
+    "provisional development pack is development-only and not thesis-usable",
+    "process-bounds and annual-to-hourly translation policy",
+    "buffer-capacity treatment",
+    "production-target basis and translation policy",
+    "early sensitivity-screening strategy",
+    "what remains undecided",
+    "what is still blocked from thesis or executable use",
+    "why provisional base and sensitivity structures are not thesis-grade exact values",
+    "how future codex tasks should use this bundle",
+    "why this does not approve exact numerical values",
+)
+MINIMAL_NUMERICAL_POLICY_NUMERIC_FORBIDDEN_PATTERN = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:tonnes|t/h|mt/y|pj/y|mw|mwh|eur/mwh|eur/kg|â‚¬/mwh|â‚¬/kg)\b",
+    re.IGNORECASE,
+)
+EARLY_SENSITIVITY_SCREENING_PLAN_COLUMNS = REVIEW_FILE_SPECS["s2_early_sensitivity_screening_plan.csv"]
+EARLY_SENSITIVITY_REQUIRED_PARAMETERS = {
+    "HDRI_DRI_surge_size",
+    "cold_slab_slab_WIP_capacity",
+    "DRP_turndown",
+    "BF_near_must_run_band",
+    "production_target_level_or_basis",
+}
+EARLY_SENSITIVITY_ALLOWED_APPROVAL_STATUSES = {"screening_plan_only"}
+PROVISIONAL_DEV_INPUT_ROOT = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_provisional_dev_input"
+PROVISIONAL_DEV_INPUT_README = PROVISIONAL_DEV_INPUT_ROOT / "README.md"
+PROVISIONAL_DEV_INPUT_REQUIRED_TABLES = set(PROVISIONAL_DEV_INPUT_FILE_SPECS)
+PROVISIONAL_DEV_INPUT_INDEX_COLUMNS = REVIEW_FILE_SPECS["s2_provisional_dev_input_index.csv"]
+PROVISIONAL_DEV_INPUT_INDEX_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_provisional_dev_input_index.csv"
+PROVISIONAL_DEV_VALUE_COMPLETION_AUDIT_COLUMNS = REVIEW_FILE_SPECS["s2_provisional_dev_value_completion_audit.csv"]
+PROVISIONAL_DEV_VALUE_COMPLETION_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_provisional_dev_value_completion_audit.csv"
+PROCESS_BOUND_TRANSLATION_AUDIT_COLUMNS = REVIEW_FILE_SPECS["s2_process_bound_translation_audit.csv"]
+PROCESS_BOUND_TRANSLATION_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_process_bound_translation_audit.csv"
+PROVISIONAL_DEV_INPUT_ALLOWED_APPROVAL_STATUSES = {"provisional_development_only", "missing_required_dev_value"}
+PROVISIONAL_DEV_INPUT_ALLOWED_EXECUTABLE_STATUSES = {"dev_executable_only", "not_executable"}
+PROVISIONAL_DEV_INPUT_README_REQUIRED_PHRASES = (
+    "development and smoke-testing input pack",
+    "not thesis-grade",
+    "not approved",
+    "must not be cited as final model input",
+    "separate from `s2_approved_model_input`",
+    "future lp outputs that consume this pack must report `thesis_usability=false`",
+    "require later review before any thesis use",
+    "annual public anchors cannot become hourly caps",
+    "validation targets must not drive constraints",
+    "`cyc50` is endpoint policy only and not buffer-capacity approval",
+)
+DEV_INPUT_READINESS_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_PROVISIONAL_DEV_INPUT_READINESS.md"
+DEV_INPUT_READINESS_MEMO_REQUIRED_PHRASES = (
+    "structurally complete enough for a future deterministic `s2` smoke-lp builder prompt",
+    "not numerically complete enough",
+    "process bounds",
+    "conversion coefficients",
+    "production-target quantities",
+    "dev-executable only",
+    "not thesis-usable",
+    "what the next lp-builder prompt may consume",
+    "what the lp-builder must refuse",
+)
+LIQUID_STEEL_SMOKE_BUILDER_MODULE = REPO_ROOT / "scripts" / "Data" / "04_Steel_Test_Case" / "steel" / "liquid_steel_smoke_builder.py"
+LIQUID_STEEL_SMOKE_BUILDER_SCOPE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_BUILDER_SCOPE.md"
+LIQUID_STEEL_SMOKE_BUILDER_SCOPE_REQUIRED_PHRASES = (
+    "restricted deterministic `s2` liquid-steel material-flow lp scaffold",
+    "development-only smoke builder",
+    "not a thesis-result model",
+    "inputs consumed",
+    "inputs refused",
+    "s2_provisional_dev_input",
+    "s2_approved_model_input",
+    "store inventories are not active yet",
+    "downstream `hsm` and slab scope remain outside the executable `s2.9a` boundary",
+    "all model metadata must report `thesis_usability=false`",
+    "what s2.9b should test",
+)
 
 
 @dataclass(frozen=True)
@@ -1348,6 +1910,10 @@ def load_s2_approved_model_input(approved_input_root: str | Path) -> GovernanceT
     return _load_bundle(approved_input_root, APPROVED_INPUT_FILE_SPECS, require_non_empty=False)
 
 
+def load_s2_provisional_dev_input(provisional_dev_input_root: str | Path) -> GovernanceTableBundle:
+    return _load_bundle(provisional_dev_input_root, PROVISIONAL_DEV_INPUT_FILE_SPECS, require_non_empty=False)
+
+
 def load_s2_topology_skeleton(review_root: str | Path) -> TopologyTableBundle:
     return _load_topology_skeleton_bundle(review_root)
 
@@ -1364,6 +1930,14 @@ def _split_multi_value_field(raw_value: str) -> list[str]:
 
 def validate_s2_topology_skeleton(topology_bundle: TopologyTableBundle) -> dict[str, Any]:
     return _validate_topology_skeleton_bundle(topology_bundle)
+
+
+def _count_formula_only_rows(frame: pd.DataFrame) -> int:
+    formula_columns = [column for column in ("value_basis", "translation_basis") if column in frame.columns]
+    if not formula_columns:
+        return 0
+    combined = frame[formula_columns].astype(str).agg(" ".join, axis=1).str.strip().str.lower()
+    return int(combined.str.contains("formula").sum())
 
 
 def build_s2_topology_objects(topology_bundle: TopologyTableBundle) -> SteelTopology:
@@ -1726,6 +2300,412 @@ def validate_s2_human_policy_bundle(review_bundle: GovernanceTableBundle) -> dic
     }
 
 
+def validate_s2_numerical_review_packets(review_root: str | Path) -> dict[str, Any]:
+    review_root = Path(review_root).resolve()
+    data_dir = review_root / NUMERICAL_REVIEW_PACKET_DATA_DIR_NAME
+    if not data_dir.exists():
+        raise ValueError("s2_numerical_review_packets data folder must exist.")
+    if not NUMERICAL_REVIEW_PACKET_DOC_DIR.exists():
+        raise ValueError("docs/optimisation/steel/s2_numerical_review_packets must exist.")
+
+    total_rows = 0
+    frames_by_category: dict[str, pd.DataFrame] = {}
+
+    for filename, spec in NUMERICAL_REVIEW_PACKET_SUMMARY_FILE_SPECS.items():
+        path = data_dir / filename
+        if not path.exists():
+            raise ValueError(f"{filename} must exist in s2_numerical_review_packets.")
+        frame = _read_csv(path)
+        if list(frame.columns) != NUMERICAL_REVIEW_PACKET_SUMMARY_COLUMNS:
+            raise ValueError(f"{filename} must match the required S2.7f review-packet column order.")
+        if frame.empty:
+            raise ValueError(f"{filename} must contain at least one review-packet row.")
+        if frame["review_packet_id"].astype(str).str.strip().duplicated().any():
+            raise ValueError(f"{filename} must not contain duplicate review_packet_id values.")
+        if (~frame["review_category"].astype(str).str.strip().eq(spec["review_category"])).any():
+            raise ValueError(f"{filename} must use review_category={spec['review_category']} for every row.")
+        target_tables = frame["target_approved_table"].astype(str).str.strip()
+        if spec["review_category"] == "process_bounds_translation":
+            allowed_targets = {"process_bounds.csv", "process_bounds.csv;production_targets.csv"}
+            if (~target_tables.isin(allowed_targets)).any():
+                raise ValueError(f"{filename} must target process_bounds.csv or process_bounds.csv;production_targets.csv for every row.")
+        else:
+            if (~target_tables.eq(spec["target_approved_table"])).any():
+                raise ValueError(f"{filename} must target {spec['target_approved_table']} for every row.")
+        if (~frame["reviewer_decision_required"].astype(str).str.strip().str.lower().eq("true")).any():
+            raise ValueError(f"{filename} must keep reviewer_decision_required=true for every row.")
+        if (~frame["codex_may_decide"].astype(str).str.strip().str.lower().eq("false")).any():
+            raise ValueError(f"{filename} must keep codex_may_decide=false for every row.")
+        if (~frame["executable_status"].astype(str).str.strip().str.lower().eq("non_executable")).any():
+            raise ValueError(f"{filename} must keep executable_status=non_executable for every row.")
+        if (~frame["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+            raise ValueError(f"{filename} must keep thesis_usability=false for every row.")
+        if (~frame["approval_status"].astype(str).str.strip().str.lower().isin(NUMERICAL_REVIEW_PACKET_ALLOWED_APPROVAL_STATUSES)).any():
+            raise ValueError(f"{filename} contains invalid review-packet approval_status values.")
+        if frame["approval_status"].astype(str).str.strip().str.lower().eq("approved").any():
+            raise ValueError(f"{filename} must not mark any row approved.")
+        outcomes = frame["possible_reviewer_outcomes"].astype(str).str.lower()
+        required_outcome_tokens = ("later_base_assumption", "sensitivity-only", "defer", "reject")
+        for token in required_outcome_tokens:
+            if (~outcomes.str.contains(token, regex=False)).any():
+                raise ValueError(f"{filename} must enumerate reviewer outcome token {token} on every row.")
+
+        frame_text = " ".join(frame.astype(str).agg(" ".join, axis=1).str.lower())
+        if spec["review_category"] == "buffer_capacity":
+            for phrase in ("capacity_approval", "multi_hour_or_multi_day", "liquid_steel", "cyc50"):
+                if phrase not in frame_text:
+                    raise ValueError(f"{filename} must keep CYC50 and buffer-capacity review separate from strategic or hidden-slack claims.")
+        elif spec["review_category"] == "process_bounds_translation":
+            for phrase in ("annual_anchor", "hourly_cap", "online_hours", "availability", "utilisation"):
+                if phrase not in frame_text:
+                    raise ValueError(f"{filename} must keep annual-to-hourly translation blockers explicit.")
+        elif spec["review_category"] == "production_target":
+            for phrase in ("route_specific", "validation_only", "shortfall"):
+                if phrase not in frame_text:
+                    raise ValueError(f"{filename} must keep route-specific and shortfall guardrails explicit.")
+
+        total_rows += int(len(frame))
+        frames_by_category[spec["review_category"]] = frame
+
+    if not NUMERICAL_REVIEW_PACKET_DASHBOARD.exists():
+        raise ValueError("s2_minimal_numerical_review_dashboard.csv must exist.")
+    dashboard = _read_csv(NUMERICAL_REVIEW_PACKET_DASHBOARD)
+    if list(dashboard.columns) != NUMERICAL_REVIEW_PACKET_DASHBOARD_COLUMNS:
+        raise ValueError("s2_minimal_numerical_review_dashboard.csv must match the required S2.7f dashboard column order.")
+    expected_categories = {spec["review_category"] for spec in NUMERICAL_REVIEW_PACKET_SUMMARY_FILE_SPECS.values()}
+    actual_categories = set(dashboard["review_category"].astype(str).str.strip())
+    if actual_categories != expected_categories:
+        missing = sorted(expected_categories - actual_categories)
+        extra = sorted(actual_categories - expected_categories)
+        raise ValueError(f"s2_minimal_numerical_review_dashboard.csv category mismatch. missing={missing} extra={extra}")
+    for record in dashboard.to_dict(orient="records"):
+        category = str(record["review_category"]).strip()
+        if category not in NUMERICAL_REVIEW_PACKET_REQUIRED_DASHBOARD_ITEMS:
+            raise ValueError(f"s2_minimal_numerical_review_dashboard.csv contains unexpected category {category}.")
+        if str(record["decision_item"]).strip() not in NUMERICAL_REVIEW_PACKET_REQUIRED_DASHBOARD_ITEMS[category]:
+            raise ValueError(f"s2_minimal_numerical_review_dashboard.csv contains unexpected decision_item {record['decision_item']} for {category}.")
+        if int(record["candidate_count"]) <= 0:
+            raise ValueError(f"s2_minimal_numerical_review_dashboard.csv must keep candidate_count positive for {category}/{record['decision_item']}.")
+        if str(record["recommended_nonbinding_option"]).strip() == "":
+            raise ValueError(f"s2_minimal_numerical_review_dashboard.csv must keep recommended_nonbinding_option non-empty for {category}/{record['decision_item']}.")
+        if str(record["sensitivity_required"]).strip().lower() not in {"true", "false"}:
+            raise ValueError(f"s2_minimal_numerical_review_dashboard.csv must keep sensitivity_required as true/false for {category}/{record['decision_item']}.")
+        if str(record["high_risk_flag"]).strip().lower() not in {"true", "false"}:
+            raise ValueError(f"s2_minimal_numerical_review_dashboard.csv must keep high_risk_flag as true/false for {category}/{record['decision_item']}.")
+        for field_name in ("evidence_strength_summary", "blocker_before_promotion", "blocker_before_executable_use", "next_human_decision_needed", "notes"):
+            if str(record[field_name]).strip() == "":
+                raise ValueError(f"s2_minimal_numerical_review_dashboard.csv must keep {field_name} non-empty for {category}/{record['decision_item']}.")
+
+    for filename, phrases in NUMERICAL_REVIEW_PACKET_MEMO_REQUIRED_PHRASES.items():
+        path = NUMERICAL_REVIEW_PACKET_DOC_DIR / filename
+        if not path.exists():
+            raise ValueError(f"{filename} must exist in docs/optimisation/steel/s2_numerical_review_packets.")
+        text = path.read_text(encoding="utf-8").lower()
+        for phrase in phrases:
+            if phrase not in text:
+                raise ValueError(f"{filename} is missing required review-packet phrase: {phrase}")
+
+    return {
+        "numerical_review_packet_files_checked": int(len(NUMERICAL_REVIEW_PACKET_SUMMARY_FILE_SPECS)),
+        "numerical_review_packet_rows_checked": int(total_rows),
+        "numerical_review_packet_dashboard_present": True,
+        "numerical_review_packet_memos_present": int(len(NUMERICAL_REVIEW_PACKET_MEMO_REQUIRED_PHRASES)),
+    }
+
+
+def validate_s2_minimal_numerical_policy_bundle(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    if not MINIMAL_NUMERICAL_POLICY_DECISION_BUNDLE_MEMO.exists():
+        raise ValueError("STEEL_S2_MINIMAL_NUMERICAL_POLICY_DECISION_BUNDLE.md must exist.")
+    memo_text = MINIMAL_NUMERICAL_POLICY_DECISION_BUNDLE_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in MINIMAL_NUMERICAL_POLICY_MEMO_REQUIRED_PHRASES:
+        if phrase not in memo_text:
+            raise ValueError(f"STEEL_S2_MINIMAL_NUMERICAL_POLICY_DECISION_BUNDLE.md is missing required phrase: {phrase}")
+
+    decision_bundle = review_bundle.tables["s2_minimal_numerical_policy_decision_bundle.csv"]
+    if list(decision_bundle.columns) != MINIMAL_NUMERICAL_POLICY_DECISION_BUNDLE_COLUMNS:
+        raise ValueError("s2_minimal_numerical_policy_decision_bundle.csv must match the required column order.")
+    if decision_bundle["numerical_policy_decision_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_minimal_numerical_policy_decision_bundle.csv must not contain duplicate numerical_policy_decision_id values.")
+    if not MINIMAL_NUMERICAL_POLICY_REQUIRED_CLUSTERS.issubset(set(decision_bundle["decision_cluster"].astype(str).str.strip())):
+        missing = sorted(MINIMAL_NUMERICAL_POLICY_REQUIRED_CLUSTERS - set(decision_bundle["decision_cluster"].astype(str).str.strip()))
+        raise ValueError(f"s2_minimal_numerical_policy_decision_bundle.csv is missing required decision clusters: {missing}")
+    if not MINIMAL_NUMERICAL_POLICY_REQUIRED_ITEMS.issubset(set(decision_bundle["decision_item"].astype(str).str.strip())):
+        missing = sorted(MINIMAL_NUMERICAL_POLICY_REQUIRED_ITEMS - set(decision_bundle["decision_item"].astype(str).str.strip()))
+        raise ValueError(f"s2_minimal_numerical_policy_decision_bundle.csv is missing required decision items: {missing}")
+    if (~decision_bundle["approval_status"].astype(str).str.strip().str.lower().isin(MINIMAL_NUMERICAL_POLICY_ALLOWED_APPROVAL_STATUSES)).any():
+        raise ValueError("s2_minimal_numerical_policy_decision_bundle.csv contains invalid approval_status values.")
+    if (~decision_bundle["executable_status"].astype(str).str.strip().str.lower().eq("non_executable")).any():
+        raise ValueError("s2_minimal_numerical_policy_decision_bundle.csv must keep executable_status=non_executable for every row.")
+    if (~decision_bundle["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_minimal_numerical_policy_decision_bundle.csv must keep thesis_usability=false for every row.")
+    if decision_bundle["approval_status"].astype(str).str.strip().str.lower().eq("approved").any():
+        raise ValueError("s2_minimal_numerical_policy_decision_bundle.csv must not mark any row approved.")
+    if (~decision_bundle["codex_allowed_role"].astype(str).str.lower().str.contains("record")).any():
+        raise ValueError("Every minimal numerical-policy row must limit Codex to recording/applying explicit policy only.")
+    if (~decision_bundle["codex_forbidden_role"].astype(str).str.lower().str.contains("approve|promote|populate")).any():
+        raise ValueError("Every minimal numerical-policy row must explicitly forbid approval/promotion/population actions.")
+    for column in ("human_decision", "provisional_base_structure", "provisional_sensitivity_structure", "modelling_interpretation", "unresolved_blocker", "notes"):
+        if decision_bundle[column].astype(str).str.contains(MINIMAL_NUMERICAL_POLICY_NUMERIC_FORBIDDEN_PATTERN).any():
+            raise ValueError(f"s2_minimal_numerical_policy_decision_bundle.csv contains exact executable-style quantities in {column}.")
+
+    decision_text = " ".join(decision_bundle.astype(str).agg(" ".join, axis=1).str.lower())
+    for required_phrase in (
+        "annual_public_anchors_are_validation_or_scaling_evidence_not_direct_hourly_caps",
+        "around_one_eaf_heat_equivalent",
+        "around_one_to_two_days_of_downstream_throughput",
+        "last_modelled_metallic_sink",
+        "not_capacity_approval",
+        "multi_hour_or_multi_day",
+    ):
+        if required_phrase not in decision_text:
+            raise ValueError(f"s2_minimal_numerical_policy_decision_bundle.csv must include policy phrase: {required_phrase}")
+
+    screening_plan = review_bundle.tables["s2_early_sensitivity_screening_plan.csv"]
+    if list(screening_plan.columns) != EARLY_SENSITIVITY_SCREENING_PLAN_COLUMNS:
+        raise ValueError("s2_early_sensitivity_screening_plan.csv must match the required column order.")
+    if screening_plan["screening_item_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_early_sensitivity_screening_plan.csv must not contain duplicate screening_item_id values.")
+    if not EARLY_SENSITIVITY_REQUIRED_PARAMETERS.issubset(set(screening_plan["sensitivity_parameter"].astype(str).str.strip())):
+        missing = sorted(EARLY_SENSITIVITY_REQUIRED_PARAMETERS - set(screening_plan["sensitivity_parameter"].astype(str).str.strip()))
+        raise ValueError(f"s2_early_sensitivity_screening_plan.csv is missing required sensitivity parameters: {missing}")
+    if (~screening_plan["thesis_use_status"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_early_sensitivity_screening_plan.csv must keep thesis_use_status=false for every row.")
+    if (~screening_plan["executable_status"].astype(str).str.strip().str.lower().eq("non_executable")).any():
+        raise ValueError("s2_early_sensitivity_screening_plan.csv must keep executable_status=non_executable for every row.")
+    if (~screening_plan["approval_status"].astype(str).str.strip().str.lower().isin(EARLY_SENSITIVITY_ALLOWED_APPROVAL_STATUSES)).any():
+        raise ValueError("s2_early_sensitivity_screening_plan.csv contains invalid approval_status values.")
+
+    return {
+        "minimal_numerical_policy_bundle_memo_present": True,
+        "minimal_numerical_policy_decision_rows_checked": int(len(decision_bundle)),
+        "early_sensitivity_screening_plan_rows_checked": int(len(screening_plan)),
+    }
+
+
+def validate_s2_provisional_dev_input(provisional_dev_input_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    tables = provisional_dev_input_bundle.tables
+    table_names = set(tables)
+    if table_names != PROVISIONAL_DEV_INPUT_REQUIRED_TABLES:
+        missing = sorted(PROVISIONAL_DEV_INPUT_REQUIRED_TABLES - table_names)
+        extra = sorted(table_names - PROVISIONAL_DEV_INPUT_REQUIRED_TABLES)
+        raise ValueError(f"s2_provisional_dev_input tables do not match the required set. missing={missing} extra={extra}")
+
+    if not PROVISIONAL_DEV_INPUT_README.exists():
+        raise ValueError("s2_provisional_dev_input/README.md must exist.")
+    readme_text = PROVISIONAL_DEV_INPUT_README.read_text(encoding="utf-8").lower()
+    for phrase in PROVISIONAL_DEV_INPUT_README_REQUIRED_PHRASES:
+        if phrase not in readme_text:
+            raise ValueError(f"s2_provisional_dev_input/README.md is missing required phrase: {phrase}")
+
+    if not DEV_INPUT_READINESS_MEMO.exists():
+        raise ValueError("STEEL_S2_PROVISIONAL_DEV_INPUT_READINESS.md must exist.")
+    readiness_text = DEV_INPUT_READINESS_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in DEV_INPUT_READINESS_MEMO_REQUIRED_PHRASES:
+        if phrase not in readiness_text:
+            raise ValueError(f"STEEL_S2_PROVISIONAL_DEV_INPUT_READINESS.md is missing required phrase: {phrase}")
+
+    dev_input_index = _read_csv(PROVISIONAL_DEV_INPUT_INDEX_PATH)
+    if list(dev_input_index.columns) != PROVISIONAL_DEV_INPUT_INDEX_COLUMNS:
+        raise ValueError("s2_provisional_dev_input_index.csv must match the required column order.")
+    dev_value_completion_audit = _read_csv(PROVISIONAL_DEV_VALUE_COMPLETION_AUDIT_PATH)
+    if list(dev_value_completion_audit.columns) != PROVISIONAL_DEV_VALUE_COMPLETION_AUDIT_COLUMNS:
+        raise ValueError("s2_provisional_dev_value_completion_audit.csv must match the required column order.")
+    process_bound_translation_audit = _read_csv(PROCESS_BOUND_TRANSLATION_AUDIT_PATH)
+    if list(process_bound_translation_audit.columns) != PROCESS_BOUND_TRANSLATION_AUDIT_COLUMNS:
+        raise ValueError("s2_process_bound_translation_audit.csv must match the required column order.")
+
+    total_rows = 0
+    approved_row_count = 0
+    thesis_usable_row_count = 0
+    dev_executable_row_count = 0
+    missing_required_row_count = 0
+    formula_only_row_count = 0
+
+    for filename, required_columns in PROVISIONAL_DEV_INPUT_FILE_SPECS.items():
+        frame = tables[filename]
+        if list(frame.columns) != required_columns:
+            raise ValueError(f"{filename} must match the required provisional dev input column order.")
+        if frame.empty:
+            raise ValueError(f"{filename} must contain at least one provisional dev input row.")
+        total_rows += int(len(frame))
+        formula_only_row_count += _count_formula_only_rows(frame)
+
+        if "approval_status" in frame.columns:
+            if (~frame["approval_status"].astype(str).str.strip().str.lower().isin(PROVISIONAL_DEV_INPUT_ALLOWED_APPROVAL_STATUSES)).any():
+                raise ValueError(f"{filename} contains invalid provisional dev approval_status values.")
+            approved_row_count += int(frame["approval_status"].astype(str).str.strip().str.lower().eq("approved").sum())
+            missing_required_row_count += int(frame["approval_status"].astype(str).str.strip().str.lower().eq("missing_required_dev_value").sum())
+        if "executable_status" in frame.columns:
+            if (~frame["executable_status"].astype(str).str.strip().str.lower().isin(PROVISIONAL_DEV_INPUT_ALLOWED_EXECUTABLE_STATUSES)).any():
+                raise ValueError(f"{filename} contains invalid provisional dev executable_status values.")
+            dev_executable_row_count += int(frame["executable_status"].astype(str).str.strip().str.lower().eq("dev_executable_only").sum())
+        if "thesis_usability" in frame.columns:
+            if (~frame["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+                raise ValueError(f"{filename} must keep thesis_usability=false for every row.")
+            thesis_usable_row_count += int(frame["thesis_usability"].astype(str).str.strip().str.lower().eq("true").sum())
+        if "reviewer_decision_required" in frame.columns:
+            if (~frame["reviewer_decision_required"].astype(str).str.strip().str.lower().eq("true")).any():
+                raise ValueError(f"{filename} must keep reviewer_decision_required=true for every row.")
+        if "codex_may_decide" in frame.columns:
+            if (~frame["codex_may_decide"].astype(str).str.strip().str.lower().eq("false")).any():
+                raise ValueError(f"{filename} must keep codex_may_decide=false for every row.")
+
+        if "executable_status" in frame.columns and "approval_status" in frame.columns:
+            dev_rows = frame["executable_status"].astype(str).str.strip().str.lower().eq("dev_executable_only")
+            if dev_rows.any():
+                if (~frame.loc[dev_rows, "approval_status"].astype(str).str.strip().str.lower().eq("provisional_development_only")).any():
+                    raise ValueError(f"{filename} dev_executable_only rows must also be provisional_development_only.")
+
+    inventory_text = " ".join(tables["inventory_endpoint_policies.csv"].astype(str).agg(" ".join, axis=1).str.lower())
+    store_text = " ".join(tables["store_capacities.csv"].astype(str).agg(" ".join, axis=1).str.lower())
+    process_text = " ".join(tables["process_bounds.csv"].astype(str).agg(" ".join, axis=1).str.lower())
+    target_text = " ".join(tables["production_targets.csv"].astype(str).agg(" ".join, axis=1).str.lower())
+    validation_text = " ".join(tables["validation_targets.csv"].astype(str).agg(" ".join, axis=1).str.lower())
+    process_bounds = tables["process_bounds.csv"]
+
+    for phrase in ("cyc50", "not_capacity_approval"):
+        if phrase not in inventory_text:
+            raise ValueError("inventory_endpoint_policies.csv must keep CYC50 separate from capacity approval.")
+    if "multi_hour_or_multi_day" not in store_text:
+        raise ValueError("store_capacities.csv must keep hot slab WIP separate from strategic multi-hour or multi-day flexibility.")
+    if "annual_anchor_requires_translation" not in process_text:
+        raise ValueError("process_bounds.csv must explicitly record annual-anchor translation blockers.")
+    if "route_neutral" not in target_text:
+        raise ValueError("production_targets.csv must keep production targets route-neutral in the base case.")
+    if "must_not_drive_constraints" not in validation_text:
+        raise ValueError("validation_targets.csv must keep validation anchors out of live constraints.")
+
+    process_dev_rows = process_bounds["executable_status"].astype(str).str.strip().str.lower().eq("dev_executable_only")
+    if process_dev_rows.any():
+        numeric_values = pd.to_numeric(process_bounds.loc[process_dev_rows, "value"], errors="coerce")
+        if numeric_values.isna().any() or (numeric_values <= 0).any():
+            raise ValueError("process_bounds.csv dev_executable_only rows must contain positive numeric t/h values.")
+        if (~process_bounds.loc[process_dev_rows, "unit"].astype(str).str.strip().str.lower().eq("t_per_hour")).any():
+            raise ValueError("process_bounds.csv dev_executable_only rows must use unit t_per_hour.")
+        translation_text = process_bounds.loc[process_dev_rows, "translation_basis"].astype(str).str.strip().str.lower()
+        if (~translation_text.str.contains("annual_anchor=")).any():
+            raise ValueError("process_bounds.csv dev_executable_only rows must record annual_anchor= in translation_basis.")
+        if (~translation_text.str.contains("effective_hours=8760")).any():
+            raise ValueError("process_bounds.csv dev_executable_only rows must record effective_hours=8760 in translation_basis.")
+        if (~translation_text.str.contains("envelope_case=")).any():
+            raise ValueError("process_bounds.csv dev_executable_only rows must record envelope_case= in translation_basis.")
+        value_basis_text = process_bounds.loc[process_dev_rows, "value_basis"].astype(str).str.strip().str.lower()
+        if (~value_basis_text.str.contains("process_class=")).any():
+            raise ValueError("process_bounds.csv dev_executable_only rows must record process_class= in value_basis.")
+
+    audited_process_row_ids = set(process_bound_translation_audit["process_unit_or_asset"].astype(str).str.strip() + "||" + process_bound_translation_audit["configuration_id"].astype(str).str.strip() + "||" + process_bound_translation_audit["route_id"].astype(str).str.strip() + "||" + process_bound_translation_audit["bound_type"].astype(str).str.strip())
+    expected_process_row_ids = set(process_bounds["process_unit_id"].astype(str).str.strip() + "||" + process_bounds["configuration_id"].astype(str).str.strip() + "||" + process_bounds["route_id"].astype(str).str.strip() + "||" + process_bounds["parameter_name"].astype(str).str.strip())
+    if audited_process_row_ids != expected_process_row_ids:
+        missing = sorted(expected_process_row_ids - audited_process_row_ids)
+        extra = sorted(audited_process_row_ids - expected_process_row_ids)
+        raise ValueError(f"s2_process_bound_translation_audit.csv process-bound coverage mismatch. missing={missing} extra={extra}")
+    if (~process_bound_translation_audit["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_process_bound_translation_audit.csv must keep thesis_usability=false.")
+    if (~process_bound_translation_audit["reviewer_decision_required"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("s2_process_bound_translation_audit.csv must keep reviewer_decision_required=true.")
+    if (~process_bound_translation_audit["codex_may_decide"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_process_bound_translation_audit.csv must keep codex_may_decide=false.")
+
+    expected_index_files = set(PROVISIONAL_DEV_INPUT_FILE_SPECS) - {"dev_input_completeness_report.csv"}
+    actual_index_files = set(dev_input_index["dev_input_file"].astype(str).str.strip())
+    if actual_index_files != expected_index_files:
+        missing = sorted(expected_index_files - actual_index_files)
+        extra = sorted(actual_index_files - expected_index_files)
+        raise ValueError(f"s2_provisional_dev_input_index.csv file set mismatch. missing={missing} extra={extra}")
+    for record in dev_input_index.to_dict(orient="records"):
+        filename = str(record["dev_input_file"]).strip()
+        frame = tables[filename]
+        expected_counts = {
+            "row_count": int(len(frame)),
+            "provisional_value_count": int(frame["approval_status"].astype(str).str.strip().str.lower().eq("provisional_development_only").sum()),
+            "formula_only_row_count": int(_count_formula_only_rows(frame)),
+            "missing_required_value_count": int(frame["approval_status"].astype(str).str.strip().str.lower().eq("missing_required_dev_value").sum()),
+            "sensitivity_row_count": int(len(frame) if filename == "sensitivity_variants.csv" else (0 if "sensitivity_case" not in frame.columns else frame["sensitivity_case"].astype(str).str.strip().str.lower().isin({"low", "high", "sensitivity"}).sum())),
+            "dev_executable_row_count": int(0 if "executable_status" not in frame.columns else frame["executable_status"].astype(str).str.strip().str.lower().eq("dev_executable_only").sum()),
+            "thesis_usable_row_count": int(0),
+            "approved_row_count": int(0),
+        }
+        for field_name, expected_value in expected_counts.items():
+            if int(record[field_name]) != expected_value:
+                raise ValueError(f"s2_provisional_dev_input_index.csv mismatch for {filename} field {field_name}: expected {expected_value} found {record[field_name]}")
+
+    completeness = tables["dev_input_completeness_report.csv"]
+    expected_categories = {
+        "process_bounds",
+        "conversion_coefficients",
+        "store_capacities",
+        "initial_inventories",
+        "terminal_inventory_rules",
+        "production_targets",
+        "inventory_endpoint_policies",
+        "validation_targets",
+        "sensitivity_variants",
+    }
+    if set(completeness["input_category"].astype(str).str.strip()) != expected_categories:
+        raise ValueError("dev_input_completeness_report.csv must cover every required provisional dev input category exactly once.")
+
+    audited_row_ids = set(dev_value_completion_audit["row_id"].astype(str).str.strip())
+    updated_rows = set()
+    for filename in ("process_bounds.csv", "conversion_coefficients.csv", "production_targets.csv"):
+        frame = tables[filename]
+        updated_rows.update(frame["row_id"].astype(str).str.strip())
+    if audited_row_ids != updated_rows:
+        missing = sorted(updated_rows - audited_row_ids)
+        extra = sorted(audited_row_ids - updated_rows)
+        raise ValueError(f"s2_provisional_dev_value_completion_audit.csv row coverage mismatch. missing={missing} extra={extra}")
+    if (~dev_value_completion_audit["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_provisional_dev_value_completion_audit.csv must keep thesis_usability=false.")
+    if (~dev_value_completion_audit["reviewer_decision_required"].astype(str).str.strip().str.lower().eq("true")).any():
+        raise ValueError("s2_provisional_dev_value_completion_audit.csv must keep reviewer_decision_required=true.")
+    if (~dev_value_completion_audit["codex_may_decide"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_provisional_dev_value_completion_audit.csv must keep codex_may_decide=false.")
+
+    return {
+        "dev_input_readiness_memo_present": True,
+        "provisional_dev_input_files_checked": int(len(PROVISIONAL_DEV_INPUT_FILE_SPECS) + 1),
+        "provisional_dev_input_rows_checked": int(total_rows),
+        "provisional_dev_input_index_rows_checked": int(len(dev_input_index)),
+        "provisional_dev_input_formula_only_rows": int(formula_only_row_count),
+        "provisional_dev_input_approved_rows": int(approved_row_count),
+        "provisional_dev_input_thesis_usable_rows": int(thesis_usable_row_count),
+        "provisional_dev_input_dev_executable_rows": int(dev_executable_row_count),
+        "provisional_dev_input_missing_required_rows": int(missing_required_row_count),
+        "provisional_dev_value_completion_audit_rows_checked": int(len(dev_value_completion_audit)),
+        "process_bound_translation_audit_rows_checked": int(len(process_bound_translation_audit)),
+        "process_bound_dev_executable_rows": int(process_dev_rows.sum()),
+        "process_bound_non_executable_rows": int((~process_dev_rows).sum()),
+    }
+
+
+def validate_s2_liquid_steel_smoke_builder_artifacts() -> dict[str, Any]:
+    if not LIQUID_STEEL_SMOKE_BUILDER_MODULE.exists():
+        raise ValueError("liquid_steel_smoke_builder.py must exist for S2.9a.")
+    if not LIQUID_STEEL_SMOKE_BUILDER_SCOPE_MEMO.exists():
+        raise ValueError("STEEL_S2_LIQUID_STEEL_SMOKE_BUILDER_SCOPE.md must exist for S2.9a.")
+
+    scope_text = LIQUID_STEEL_SMOKE_BUILDER_SCOPE_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in LIQUID_STEEL_SMOKE_BUILDER_SCOPE_REQUIRED_PHRASES:
+        if phrase not in scope_text:
+            raise ValueError(f"STEEL_S2_LIQUID_STEEL_SMOKE_BUILDER_SCOPE.md is missing required phrase: {phrase}")
+
+    builder_source = LIQUID_STEEL_SMOKE_BUILDER_MODULE.read_text(encoding="utf-8").lower()
+    required_builder_tokens = (
+        "s2_provisional_dev_input",
+        "s2_approved_model_input",
+        "thesis_usability",
+        "dev_executable_only",
+        "not_executable",
+    )
+    for token in required_builder_tokens:
+        if token not in builder_source:
+            raise ValueError(f"liquid_steel_smoke_builder.py is missing required guard token: {token}")
+
+    return {
+        "liquid_steel_smoke_builder_module_present": True,
+        "liquid_steel_smoke_builder_scope_memo_present": True,
+    }
+
+
 def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
     tables = review_bundle.tables
     summary = tables["s2_review_summary.csv"]
@@ -1748,6 +2728,10 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     topology_bundle = load_s2_topology_skeleton(review_bundle.root)
     human_review_packet_payload = validate_s2_human_review_packets(review_bundle.root)
     human_policy_bundle_payload = validate_s2_human_policy_bundle(review_bundle)
+    numerical_review_packet_payload = validate_s2_numerical_review_packets(review_bundle.root)
+    minimal_numerical_policy_payload = validate_s2_minimal_numerical_policy_bundle(review_bundle)
+    provisional_dev_input_payload = validate_s2_provisional_dev_input(load_s2_provisional_dev_input(PROVISIONAL_DEV_INPUT_ROOT))
+    liquid_steel_smoke_builder_payload = validate_s2_liquid_steel_smoke_builder_artifacts()
 
     if not PROMOTION_PROTOCOL_MEMO.exists():
         raise ValueError("STEEL_S2_APPROVED_INPUT_PROMOTION_PROTOCOL.md must exist.")
@@ -2395,6 +3379,10 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     )
     payload.update(human_review_packet_payload)
     payload.update(human_policy_bundle_payload)
+    payload.update(numerical_review_packet_payload)
+    payload.update(minimal_numerical_policy_payload)
+    payload.update(provisional_dev_input_payload)
+    payload.update(liquid_steel_smoke_builder_payload)
     return payload
 
 

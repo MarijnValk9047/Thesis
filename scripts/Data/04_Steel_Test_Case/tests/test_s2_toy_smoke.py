@@ -149,6 +149,18 @@ def test_candidate_review_files_parse_and_have_zero_approved_rows():
     assert payload["human_policy_bundle_memo_present"] is True
     assert payload["human_policy_decision_rows_checked"] == 26
     assert payload["future_parameter_review_backlog_rows_checked"] == 12
+    assert payload["numerical_review_packet_files_checked"] == 3
+    assert payload["numerical_review_packet_rows_checked"] == 15
+    assert payload["numerical_review_packet_dashboard_present"] is True
+    assert payload["numerical_review_packet_memos_present"] == 3
+    assert payload["minimal_numerical_policy_bundle_memo_present"] is True
+    assert payload["minimal_numerical_policy_decision_rows_checked"] == 27
+    assert payload["early_sensitivity_screening_plan_rows_checked"] == 5
+    assert payload["dev_input_readiness_memo_present"] is True
+    assert payload["provisional_dev_input_files_checked"] == 11
+    assert payload["provisional_dev_input_index_rows_checked"] == 9
+    assert payload["provisional_dev_input_approved_rows"] == 0
+    assert payload["provisional_dev_input_thesis_usable_rows"] == 0
     assert payload["unit_sign_endpoint_note_present"] is True
     assert payload["deepsearch_f_source_rows_checked"] == 20
     assert payload["deepsearch_f_candidate_assumption_rows_checked"] > 0
