@@ -67,11 +67,11 @@ def test_s29a_builder_refuses_approved_input_surface():
         )
 
 
-def test_s29a_builder_refuses_inventory_activation():
-    with pytest.raises(LiquidSteelSmokeBuilderError, match="inventory activation"):
+def test_s29a_builder_refuses_unsupported_inventory_mode():
+    with pytest.raises(LiquidSteelSmokeBuilderError, match="Unsupported inventory_mode"):
         validate_liquid_steel_smoke_inputs(
             configuration_id="C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
-            enable_inventory_rows=True,
+            inventory_mode="unsupported_mode",
         )
 
 
@@ -92,6 +92,7 @@ def test_s29a_builder_builds_c0_and_c1_continuous_lp_models():
         assert model.s2_metadata["objective_type"] == "minimise_overproduction_dev_only"
         assert model.s2_metadata["shortfall_slack_active"] is False
         assert model.s2_metadata["inventory_scope_active"] is False
+        assert model.s2_metadata["inventory_mode"] == "inactive"
         assert model.s2_metadata["downstream_scope_active"] is False
         assert model.s2_metadata["route_neutral_target"] is True
         assert model.s2_model_stats.binaries == 0
@@ -114,7 +115,7 @@ def test_s29a_builder_reports_refused_downstream_and_inventory_rows():
 
     reasons = {row.reason for row in report.refused_rows}
     refused_by_table = {(row.table_name, row.row_id) for row in report.refused_rows}
-    assert "inventory_scope_deferred" in reasons
+    assert "inventory_mode_inactive" in reasons
     assert "downstream_or_casting_out_of_scope" in reasons
     assert ("process_bounds.csv", "DEV_PB_008") in refused_by_table
     assert ("conversion_coefficients.csv", "DEV_CC_008") in refused_by_table

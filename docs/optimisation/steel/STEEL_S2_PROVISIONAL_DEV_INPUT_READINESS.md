@@ -104,3 +104,5 @@ That improves restricted smoke-run usability without changing process bounds, ad
 The resulting restricted smoke baseline and the next required scope gates are frozen in `STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md`.
 
 The first dev-only tonne translation and activation boundary for `S2.10b` is now recorded in `STEEL_S2_STORE_CAPACITY_TRANSLATION_REVIEW.md`.
+
+The guarded first-buffer inventory activation that consumes only those three approved dev-only store rows is recorded in `STEEL_S2_FIRST_BUFFER_INVENTORY_ACTIVATION.md`.

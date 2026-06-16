@@ -1055,6 +1055,31 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "interpretation",
         "next_use",
     ],
+    "s2_buffer_inventory_smoke_summary.csv": [
+        "case_id",
+        "configuration_id",
+        "horizon_hours",
+        "target_variant",
+        "inventory_mode",
+        "active_store_ids",
+        "solve_status",
+        "target_t",
+        "achieved_liquid_steel_t",
+        "overproduction_t",
+        "variable_count",
+        "constraint_count",
+        "binary_count",
+        "inventory_active",
+        "active_store_count",
+        "min_inventory_t",
+        "max_inventory_t",
+        "terminal_inventory_satisfied",
+        "shortfall_slack_active",
+        "downstream_active",
+        "thesis_usability",
+        "interpretation",
+        "next_action",
+    ],
     "s2_liquid_steel_infeasibility_attribution.csv": [
         "attribution_id",
         "configuration_id",
@@ -1972,6 +1997,7 @@ LIQUID_STEEL_SMOKE_BUILDER_SCOPE_MEMO = REPO_ROOT / "docs" / "optimisation" / "s
 LIQUID_STEEL_SMOKE_RUNNER_MODULE = REPO_ROOT / "scripts" / "Data" / "04_Steel_Test_Case" / "steel" / "liquid_steel_smoke_runner.py"
 LIQUID_STEEL_SMOKE_DIAGNOSTICS_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_DIAGNOSTICS.md"
 LIQUID_STEEL_SMOKE_BASELINE_FREEZE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md"
+LIQUID_STEEL_FIRST_BUFFER_INVENTORY_ACTIVATION_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_FIRST_BUFFER_INVENTORY_ACTIVATION.md"
 LIQUID_STEEL_SMOKE_BUILDER_SCOPE_REQUIRED_PHRASES = (
     "restricted deterministic `s2` liquid-steel material-flow lp scaffold",
     "development-only smoke builder",
@@ -1997,6 +2023,8 @@ LIQUID_STEEL_SMOKE_DIAGNOSTICS_REQUIRED_PHRASES = (
 )
 LIQUID_STEEL_SMOKE_BASELINE_SUMMARY_COLUMNS = REVIEW_FILE_SPECS["s2_liquid_steel_smoke_baseline_summary.csv"]
 LIQUID_STEEL_SMOKE_BASELINE_SUMMARY_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_liquid_steel_smoke_baseline_summary.csv"
+BUFFER_INVENTORY_SMOKE_SUMMARY_COLUMNS = REVIEW_FILE_SPECS["s2_buffer_inventory_smoke_summary.csv"]
+BUFFER_INVENTORY_SMOKE_SUMMARY_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_buffer_inventory_smoke_summary.csv"
 LIQUID_STEEL_INFEASIBILITY_ATTRIBUTION_COLUMNS = REVIEW_FILE_SPECS["s2_liquid_steel_infeasibility_attribution.csv"]
 LIQUID_STEEL_INFEASIBILITY_ATTRIBUTION_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_liquid_steel_infeasibility_attribution.csv"
 S2_NEXT_SCOPE_GATE_REGISTER_COLUMNS = REVIEW_FILE_SPECS["s2_next_scope_gate_register.csv"]
@@ -2013,6 +2041,24 @@ LIQUID_STEEL_SMOKE_BASELINE_FREEZE_REQUIRED_PHRASES = (
     "required next gates before buffer-aware s2",
     "required next gates before s3",
 )
+LIQUID_STEEL_FIRST_BUFFER_INVENTORY_ACTIVATION_REQUIRED_PHRASES = (
+    "purpose of s2.10b",
+    "which stores are activated",
+    "which stores remain refused",
+    "capacity, initial, and terminal policy",
+    "how store flows are coupled to process flows",
+    "how cyc50 is applied",
+    "why cyc50 is not capacity evidence",
+    "why hot slab/slab/wip and downstream are still inactive",
+    "why outputs remain non-thesis",
+    "how to interpret feasible/stress runs",
+    "what must be checked before one-week s2 or s3",
+)
+FIRST_BUFFER_ACTIVE_STORE_IDS = {
+    "c0_hot_metal_buffer",
+    "c1_hot_metal_buffer",
+    "c1_dri_hdri_buffer",
+}
 S2_NEXT_SCOPE_REQUIRED_GATES = {
     "dev_only_store_capacity_translation",
     "hot_metal_buffer_activation",
@@ -3087,6 +3133,11 @@ def validate_s2_liquid_steel_smoke_builder_artifacts() -> dict[str, Any]:
         "dev_executable_only",
         "not_executable",
         "target_variant",
+        "inventory_mode",
+        "first_buffers",
+        "store_inventory",
+        "inventory_balance",
+        "terminal_inventory",
         "overproduction",
         "minimise_overproduction_dev_only",
         "shortfall_slack_active",
@@ -3120,6 +3171,9 @@ def validate_s2_liquid_steel_smoke_runner_artifacts() -> dict[str, Any]:
         "dev_executable_only",
         "not_attempted_solver_unavailable",
         "target_variant",
+        "inventory_mode",
+        "first_buffers",
+        "active_store_ids",
         "overproduction",
         "minimise_overproduction_dev_only",
         "shortfall_slack_active",
@@ -3219,6 +3273,79 @@ def validate_s2_liquid_steel_smoke_baseline_artifacts(review_bundle: GovernanceT
     }
 
 
+def validate_s2_first_buffer_inventory_activation_artifacts(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    if not LIQUID_STEEL_FIRST_BUFFER_INVENTORY_ACTIVATION_MEMO.exists():
+        raise ValueError("STEEL_S2_FIRST_BUFFER_INVENTORY_ACTIVATION.md must exist for S2.10b.")
+    memo_text = LIQUID_STEEL_FIRST_BUFFER_INVENTORY_ACTIVATION_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in LIQUID_STEEL_FIRST_BUFFER_INVENTORY_ACTIVATION_REQUIRED_PHRASES:
+        if phrase not in memo_text:
+            raise ValueError(
+                f"STEEL_S2_FIRST_BUFFER_INVENTORY_ACTIVATION.md is missing required phrase: {phrase}"
+            )
+
+    summary = review_bundle.tables["s2_buffer_inventory_smoke_summary.csv"]
+    if list(summary.columns) != BUFFER_INVENTORY_SMOKE_SUMMARY_COLUMNS:
+        raise ValueError("s2_buffer_inventory_smoke_summary.csv must match the required column order.")
+    if summary["case_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_buffer_inventory_smoke_summary.csv must not contain duplicate case_id values.")
+    required_case_keys = {
+        ("C0_current_BF_BOF_reference", "feasible_smoke"),
+        ("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "feasible_smoke"),
+        ("C0_current_BF_BOF_reference", "stress_infeasible_original"),
+        ("C1_phase1_hybrid_BF_BOF_NG_DRP_EAF", "stress_infeasible_original"),
+    }
+    actual_case_keys = {
+        (str(row["configuration_id"]).strip(), str(row["target_variant"]).strip())
+        for row in summary.to_dict(orient="records")
+    }
+    if actual_case_keys != required_case_keys:
+        missing = sorted(required_case_keys - actual_case_keys)
+        extra = sorted(actual_case_keys - required_case_keys)
+        raise ValueError(f"s2_buffer_inventory_smoke_summary.csv case coverage mismatch. missing={missing} extra={extra}")
+    if (~summary["inventory_mode"].astype(str).str.strip().eq("first_buffers")).any():
+        raise ValueError("s2_buffer_inventory_smoke_summary.csv must keep inventory_mode=first_buffers.")
+    for column in ("inventory_active", "thesis_usability"):
+        if (~summary[column].astype(str).str.strip().str.lower().eq("true" if column == "inventory_active" else "false")).any():
+            raise ValueError(f"s2_buffer_inventory_smoke_summary.csv must keep {column} consistent for every row.")
+    for column in ("shortfall_slack_active", "downstream_active"):
+        if (~summary[column].astype(str).str.strip().str.lower().eq("false")).any():
+            raise ValueError(f"s2_buffer_inventory_smoke_summary.csv must keep {column}=false for every row.")
+    if (~summary["binary_count"].astype(str).str.strip().eq("0")).any():
+        raise ValueError("s2_buffer_inventory_smoke_summary.csv must keep binary_count=0 for every row.")
+    if (~summary["active_store_count"].astype(str).str.strip().isin({"1", "2"})).any():
+        raise ValueError("s2_buffer_inventory_smoke_summary.csv must keep active_store_count within {1,2}.")
+
+    for row in summary.to_dict(orient="records"):
+        active_store_ids = {token for token in str(row["active_store_ids"]).split(";") if token and token != "none"}
+        if not active_store_ids:
+            raise ValueError("Each first-buffer inventory summary row must include at least one active store.")
+        if not active_store_ids.issubset(FIRST_BUFFER_ACTIVE_STORE_IDS):
+            invalid = sorted(active_store_ids - FIRST_BUFFER_ACTIVE_STORE_IDS)
+            raise ValueError(f"s2_buffer_inventory_smoke_summary.csv contains unsupported active store IDs: {invalid}")
+        if str(row["configuration_id"]).strip() == "C0_current_BF_BOF_reference" and active_store_ids != {"c0_hot_metal_buffer"}:
+            raise ValueError("C0 first-buffer runs must activate only c0_hot_metal_buffer.")
+        if str(row["configuration_id"]).strip() == "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF" and active_store_ids != {"c1_hot_metal_buffer", "c1_dri_hdri_buffer"}:
+            raise ValueError("C1 first-buffer runs must activate only c1_hot_metal_buffer and c1_dri_hdri_buffer.")
+
+    feasible_rows = summary["target_variant"].astype(str).str.strip().eq("feasible_smoke")
+    stress_rows = summary["target_variant"].astype(str).str.strip().eq("stress_infeasible_original")
+    if (~summary.loc[feasible_rows, "solve_status"].astype(str).str.strip().isin({"optimal", "feasible"})).any():
+        raise ValueError("Feasible first-buffer rows must be marked optimal or feasible.")
+    if (~summary.loc[stress_rows, "solve_status"].astype(str).str.strip().eq("infeasible")).any():
+        raise ValueError("Stress first-buffer rows must remain infeasible.")
+
+    summary_text = " ".join(summary.astype(str).agg(" ".join, axis=1).str.lower())
+    for phrase in ("c0_hot_metal_buffer", "c1_hot_metal_buffer", "c1_dri_hdri_buffer"):
+        if phrase not in summary_text:
+            raise ValueError(f"s2_buffer_inventory_smoke_summary.csv is missing required active-store phrase: {phrase}")
+
+    return {
+        "liquid_steel_first_buffer_inventory_activation_memo_present": True,
+        "buffer_inventory_smoke_summary_rows_checked": int(len(summary)),
+        "buffer_inventory_active_store_rows_checked": int(summary["active_store_count"].astype(int).sum()),
+    }
+
+
 def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
     tables = review_bundle.tables
     summary = tables["s2_review_summary.csv"]
@@ -3247,6 +3374,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     liquid_steel_smoke_builder_payload = validate_s2_liquid_steel_smoke_builder_artifacts()
     liquid_steel_smoke_runner_payload = validate_s2_liquid_steel_smoke_runner_artifacts()
     liquid_steel_smoke_baseline_payload = validate_s2_liquid_steel_smoke_baseline_artifacts(review_bundle)
+    first_buffer_inventory_payload = validate_s2_first_buffer_inventory_activation_artifacts(review_bundle)
 
     if not PROMOTION_PROTOCOL_MEMO.exists():
         raise ValueError("STEEL_S2_APPROVED_INPUT_PROMOTION_PROTOCOL.md must exist.")
@@ -3900,6 +4028,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     payload.update(liquid_steel_smoke_builder_payload)
     payload.update(liquid_steel_smoke_runner_payload)
     payload.update(liquid_steel_smoke_baseline_payload)
+    payload.update(first_buffer_inventory_payload)
     return payload
 
 

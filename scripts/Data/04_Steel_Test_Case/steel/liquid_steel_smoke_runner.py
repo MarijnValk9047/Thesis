@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 from pyomo.contrib.solver.common.util import NoFeasibleSolutionError
 from pyomo.environ import Constraint, Objective, SolverFactory, SolverStatus, TerminationCondition, minimize, value
 
@@ -26,12 +27,28 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_STEEL_SMOKE_RUN_ROOT = (
     REPO_ROOT / "scripts" / "Data" / "04_Steel_Test_Case" / "runs" / "steel_s2_liquid_smoke"
 )
+DEFAULT_BUFFER_INVENTORY_SUMMARY_PATH = (
+    REPO_ROOT
+    / "data"
+    / "03_Optimisation"
+    / "inputs"
+    / "assets"
+    / "steel"
+    / "s2_candidate_review"
+    / "s2_buffer_inventory_smoke_summary.csv"
+)
 DEFAULT_SOLVER_PREFERENCE = ("gurobi", "appsi_highs", "highs", "cbc", "glpk")
 SCOPE_ID = "restricted_liquid_steel_smoke"
 
 
-def _normalise_run_slug(configuration_id: str, horizon_hours: int, target_variant: str, timestamp: datetime) -> str:
-    return f"{timestamp.strftime('%Y%m%d_%H%M%S')}_{configuration_id}_{horizon_hours}h_{target_variant}"
+def _normalise_run_slug(
+    configuration_id: str,
+    horizon_hours: int,
+    target_variant: str,
+    inventory_mode: str,
+    timestamp: datetime,
+) -> str:
+    return f"{timestamp.strftime('%Y%m%d_%H%M%S')}_{configuration_id}_{horizon_hours}h_{target_variant}_{inventory_mode}"
 
 
 def _refused_rows_payload(prepared: PreparedSmokeInputs) -> dict[str, Any]:
@@ -164,12 +181,18 @@ def _build_input_validation_payload(prepared: PreparedSmokeInputs) -> dict[str, 
     return {
         "configuration_id": report.configuration_id,
         "horizon_hours": report.horizon_hours,
+        "inventory_mode": report.inventory_mode,
         "available_configurations": list(report.available_configurations),
         "selected_configurations": list(report.selected_configurations),
         "selected_target_variant": report.selected_target_variant,
         "consumed_process_bound_rows": list(report.consumed_process_bound_rows),
         "consumed_conversion_rows": list(report.consumed_conversion_rows),
         "consumed_production_target_rows": list(report.consumed_production_target_rows),
+        "consumed_store_capacity_rows": list(report.consumed_store_capacity_rows),
+        "consumed_initial_inventory_rows": list(report.consumed_initial_inventory_rows),
+        "consumed_terminal_inventory_rows": list(report.consumed_terminal_inventory_rows),
+        "consumed_inventory_policy_rows": list(report.consumed_inventory_policy_rows),
+        "active_store_ids": list(report.active_store_ids),
         "refused_rows": _refused_rows_payload(prepared),
         "encountered_non_executable_row": report.encountered_non_executable_row,
         "thesis_usability": report.thesis_usability,
@@ -189,13 +212,83 @@ def _build_model_stats_payload(model, prepared: PreparedSmokeInputs) -> dict[str
         "liquid_steel_producing_process_units": list(prepared.liquid_steel_process_ids),
         "target_value": prepared.production_target_value,
         "target_variant": prepared.validation_report.selected_target_variant,
+        "inventory_mode": prepared.inventory_mode,
+        "active_store_count": len(prepared.active_inventory_stores),
+        "active_store_ids": [store.store_id for store in prepared.active_inventory_stores],
+        "store_capacities_t": {store.store_id: round(store.capacity_tonnes, 6) for store in prepared.active_inventory_stores},
+        "initial_inventory_t": {store.store_id: round(store.initial_inventory_tonnes, 6) for store in prepared.active_inventory_stores},
+        "terminal_inventory_target_t": {
+            store.store_id: round(store.initial_inventory_tonnes * store.terminal_inventory_ratio, 6)
+            for store in prepared.active_inventory_stores
+        },
         "bound_summary": _active_bound_summary(prepared),
         **_objective_summary(model),
         "shortfall_slack_active": False,
-        "inventory_active": False,
+        "inventory_active": prepared.inventory_mode == "first_buffers",
         "downstream_active": False,
         "thesis_usability": False,
     }
+
+
+def _inventory_summary(model, prepared: PreparedSmokeInputs, *, solved: bool) -> dict[str, Any]:
+    if prepared.inventory_mode != "first_buffers":
+        return {
+            "inventory_mode": prepared.inventory_mode,
+            "inventory_active": False,
+            "active_store_count": 0,
+            "active_store_ids": [],
+            "store_capacities_t": {},
+            "initial_inventory_t": {},
+            "terminal_inventory_target_t": {},
+            "minimum_inventory_reached_t": {},
+            "maximum_inventory_reached_t": {},
+            "terminal_inventory_achieved_t": {},
+            "cyc50_satisfied": None if not solved else True,
+        }
+
+    summary = {
+        "inventory_mode": prepared.inventory_mode,
+        "inventory_active": True,
+        "active_store_count": len(prepared.active_inventory_stores),
+        "active_store_ids": [store.store_id for store in prepared.active_inventory_stores],
+        "store_capacities_t": {store.store_id: round(store.capacity_tonnes, 6) for store in prepared.active_inventory_stores},
+        "initial_inventory_t": {store.store_id: round(store.initial_inventory_tonnes, 6) for store in prepared.active_inventory_stores},
+        "terminal_inventory_target_t": {
+            store.store_id: round(store.initial_inventory_tonnes * store.terminal_inventory_ratio, 6)
+            for store in prepared.active_inventory_stores
+        },
+    }
+    if not solved:
+        summary.update(
+            {
+                "minimum_inventory_reached_t": {},
+                "maximum_inventory_reached_t": {},
+                "terminal_inventory_achieved_t": {},
+                "cyc50_satisfied": None,
+            }
+        )
+        return summary
+
+    min_inventory = {}
+    max_inventory = {}
+    terminal_inventory = {}
+    cyc50_satisfied = True
+    for store in prepared.active_inventory_stores:
+        values = [float(value(model.store_inventory[store.store_id, t])) for t in model.TIME]
+        min_inventory[store.store_id] = round(min(values), 6)
+        max_inventory[store.store_id] = round(max(values), 6)
+        terminal_inventory[store.store_id] = round(values[-1], 6)
+        if abs(values[-1] - store.initial_inventory_tonnes * store.terminal_inventory_ratio) > 1e-6:
+            cyc50_satisfied = False
+    summary.update(
+        {
+            "minimum_inventory_reached_t": min_inventory,
+            "maximum_inventory_reached_t": max_inventory,
+            "terminal_inventory_achieved_t": terminal_inventory,
+            "cyc50_satisfied": cyc50_satisfied,
+        }
+    )
+    return summary
 
 
 def _available_solver(preferred_solvers: tuple[str, ...] = DEFAULT_SOLVER_PREFERENCE):
@@ -266,12 +359,14 @@ def _build_solve_summary(
     result=None,
     runtime_seconds: float | None = None,
 ) -> dict[str, Any]:
+    inventory_summary = _inventory_summary(model, prepared, solved=False)
     base = {
         "solve_attempted": solve_attempted,
         "solver_name": solver_name,
         "thesis_usability": False,
         "hard_target_without_slack": True,
         "target_variant": prepared.validation_report.selected_target_variant,
+        "inventory_summary": inventory_summary,
     }
     if not solve_attempted:
         base.update(
@@ -303,6 +398,7 @@ def _build_solve_summary(
     achieved_production = float(value(model.horizon_total_liquid_steel_output)) if success else None
     overproduction_value = float(value(model.overproduction)) if success else None
     production_residual = float(value(model.production_target_residual)) if success else None
+    inventory_summary = _inventory_summary(model, prepared, solved=success)
 
     base.update(
         {
@@ -318,6 +414,7 @@ def _build_solve_summary(
             "overproduction_diagnostic_hint": None if overproduction_value is None else _overproduction_hint(model, prepared, overproduction_value),
             "carrier_balance_max_abs_residual": _carrier_balance_residual(model) if success else None,
             "process_activity_summary": _process_activity_summary(model) if success else None,
+            "inventory_summary": inventory_summary,
             "feasible": success,
             "infeasible": infeasible,
         }
@@ -327,7 +424,7 @@ def _build_solve_summary(
     return base
 
 
-def _warning_list(configuration_id: str) -> list[str]:
+def _warning_list(configuration_id: str, *, inventory_mode: str, active_store_ids: list[str]) -> list[str]:
     return [
         "All outputs in this run folder are provisional development diagnostics only.",
         "thesis_usability=false",
@@ -336,7 +433,9 @@ def _warning_list(configuration_id: str) -> list[str]:
         "consumed_rows_must_be_dev_executable_only",
         "approved_input_used=false",
         "shortfall_slack_active=false",
-        "inventory_active=false",
+        f"inventory_mode={inventory_mode}",
+        f"inventory_active={'true' if inventory_mode == 'first_buffers' else 'false'}",
+        f"active_store_ids={','.join(active_store_ids)}",
         "downstream_active=false",
         "energy_cost_emissions_active=false",
         "market_logic_active=false",
@@ -344,14 +443,15 @@ def _warning_list(configuration_id: str) -> list[str]:
     ]
 
 
-def _limitations_text(configuration_id: str) -> str:
+def _limitations_text(configuration_id: str, *, inventory_mode: str, active_store_ids: list[str]) -> str:
     return "\n".join(
         [
             "# Limitations",
             "",
             f"- configuration: `{configuration_id}`",
             "- scope: restricted liquid-steel smoke only",
-            "- no inventory activation",
+            f"- inventory_mode: `{inventory_mode}`",
+            f"- active_store_ids: `{', '.join(active_store_ids) if active_store_ids else 'none'}`",
             "- no downstream slab or HSM scope",
             "- no hidden shortfall slack",
             "- no DA, stochastic, CVaR, or mFRR logic",
@@ -381,6 +481,108 @@ def _write_run_folder(
     (run_dir / "limitations.md").write_text(limitations_text, encoding="utf-8")
 
 
+def _inventory_metric_string(summary: dict[str, Any], field_name: str) -> str:
+    mapping = summary.get(field_name, {})
+    if not mapping:
+        return "none"
+    return ";".join(f"{store_id}={mapping[store_id]}" for store_id in sorted(mapping))
+
+
+def _summary_row_from_result(result: dict[str, Any]) -> dict[str, Any]:
+    solve_summary = result["solve_summary"]
+    model_stats = result["model_stats"]
+    inventory_summary = solve_summary["inventory_summary"]
+    return {
+        "case_id": f"{result['configuration_id']}_{solve_summary['target_variant']}_{inventory_summary['inventory_mode']}",
+        "configuration_id": result["configuration_id"],
+        "horizon_hours": 24,
+        "target_variant": solve_summary["target_variant"],
+        "inventory_mode": inventory_summary["inventory_mode"],
+        "active_store_ids": ";".join(inventory_summary["active_store_ids"]) if inventory_summary["active_store_ids"] else "none",
+        "solve_status": solve_summary["termination_condition"] or solve_summary["solve_status"],
+        "target_t": round(float(solve_summary["production_target_value"]), 6),
+        "achieved_liquid_steel_t": (
+            "not_applicable_infeasible_case"
+            if solve_summary["production_target_achieved"] is None
+            else round(float(solve_summary["production_target_achieved"]), 6)
+        ),
+        "overproduction_t": (
+            "not_applicable_infeasible_case"
+            if solve_summary["overproduction"] is None
+            else round(float(solve_summary["overproduction"]), 6)
+        ),
+        "variable_count": model_stats["variable_count"],
+        "constraint_count": model_stats["constraint_count"],
+        "binary_count": model_stats["binary_count"],
+        "inventory_active": str(bool(inventory_summary["inventory_active"])).lower(),
+        "active_store_count": inventory_summary["active_store_count"],
+        "min_inventory_t": (
+            _inventory_metric_string(inventory_summary, "minimum_inventory_reached_t")
+            if solve_summary.get("feasible")
+            else "not_applicable_infeasible_case"
+        ),
+        "max_inventory_t": (
+            _inventory_metric_string(inventory_summary, "maximum_inventory_reached_t")
+            if solve_summary.get("feasible")
+            else "not_applicable_infeasible_case"
+        ),
+        "terminal_inventory_satisfied": (
+            "not_applicable_infeasible_case"
+            if inventory_summary["cyc50_satisfied"] is None
+            else str(bool(inventory_summary["cyc50_satisfied"])).lower()
+        ),
+        "shortfall_slack_active": "false",
+        "downstream_active": "false",
+        "thesis_usability": "false",
+        "interpretation": (
+            "first_buffer_inventory_smoke_mechanics"
+            if solve_summary.get("feasible")
+            else "intentional_stress_infeasibility_with_guarded_inventory_mode"
+        ),
+        "next_action": (
+            "use_for_guarded_buffer_diagnostics_only"
+            if solve_summary.get("feasible")
+            else "preserve_as_infeasibility_regression_case"
+        ),
+    }
+
+
+def write_buffer_inventory_smoke_summary(results: list[dict[str, Any]], output_path: str | Path) -> Path:
+    summary_path = Path(output_path).resolve()
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [_summary_row_from_result(result) for result in results]
+    frame = pd.DataFrame(
+        rows,
+        columns=[
+            "case_id",
+            "configuration_id",
+            "horizon_hours",
+            "target_variant",
+            "inventory_mode",
+            "active_store_ids",
+            "solve_status",
+            "target_t",
+            "achieved_liquid_steel_t",
+            "overproduction_t",
+            "variable_count",
+            "constraint_count",
+            "binary_count",
+            "inventory_active",
+            "active_store_count",
+            "min_inventory_t",
+            "max_inventory_t",
+            "terminal_inventory_satisfied",
+            "shortfall_slack_active",
+            "downstream_active",
+            "thesis_usability",
+            "interpretation",
+            "next_action",
+        ],
+    )
+    frame.to_csv(summary_path, index=False)
+    return summary_path
+
+
 def run_liquid_steel_smoke_cases(
     *,
     configuration_ids: tuple[str, ...] = (
@@ -389,10 +591,12 @@ def run_liquid_steel_smoke_cases(
     ),
     horizon_hours: int = 24,
     target_variant: str = "feasible_smoke",
+    inventory_mode: str = "inactive",
     solve_if_available: bool = True,
     provisional_dev_input_root: str | Path = DEFAULT_PROVISIONAL_DEV_INPUT_ROOT,
     review_root: str | Path = DEFAULT_REVIEW_ROOT,
     output_root: str | Path = DEFAULT_STEEL_SMOKE_RUN_ROOT,
+    summary_output_path: str | Path | None = None,
 ) -> dict[str, Any]:
     if horizon_hours != 24:
         raise LiquidSteelSmokeBuilderError("S2.9b is limited to 24h smoke cases only.")
@@ -413,7 +617,7 @@ def run_liquid_steel_smoke_cases(
             target_variant=target_variant,
             provisional_dev_input_root=provisional_dev_input_root,
             review_root=review_root,
-            enable_inventory_rows=False,
+            inventory_mode=inventory_mode,
         )
         model = build_liquid_steel_smoke_model(
             configuration_id=configuration_id,
@@ -421,7 +625,7 @@ def run_liquid_steel_smoke_cases(
             target_variant=target_variant,
             provisional_dev_input_root=provisional_dev_input_root,
             review_root=review_root,
-            enable_inventory_rows=False,
+            inventory_mode=inventory_mode,
             allow_target_shortfall=False,
         )
 
@@ -430,11 +634,16 @@ def run_liquid_steel_smoke_cases(
             configuration_id,
             horizon_hours,
             prepared.validation_report.selected_target_variant,
+            prepared.inventory_mode,
             timestamp,
         )
         input_validation_payload = _build_input_validation_payload(prepared)
         model_stats_payload = _build_model_stats_payload(model, prepared)
-        warnings = _warning_list(configuration_id)
+        warnings = _warning_list(
+            configuration_id,
+            inventory_mode=prepared.inventory_mode,
+            active_store_ids=list(prepared.validation_report.active_store_ids),
+        )
 
         runtime_seconds = None
         result = None
@@ -458,12 +667,15 @@ def run_liquid_steel_smoke_cases(
             "horizon_hours": horizon_hours,
             "scope": SCOPE_ID,
             "target_variant": prepared.validation_report.selected_target_variant,
+            "inventory_mode": prepared.inventory_mode,
             "input_surface": "s2_provisional_dev_input",
             "refused_input_surface": "s2_approved_model_input",
             "approved_input_used": False,
             "objective_type": "minimise_overproduction_dev_only",
             "shortfall_slack_active": False,
-            "inventory_active": False,
+            "inventory_active": prepared.inventory_mode == "first_buffers",
+            "active_store_count": len(prepared.active_inventory_stores),
+            "active_store_ids": [store.store_id for store in prepared.active_inventory_stores],
             "downstream_active": False,
             "energy_cost_emissions_active": False,
             "market_logic_active": False,
@@ -480,7 +692,13 @@ def run_liquid_steel_smoke_cases(
             "consumed_process_bound_rows": list(prepared.validation_report.consumed_process_bound_rows),
             "consumed_conversion_rows": list(prepared.validation_report.consumed_conversion_rows),
             "consumed_production_target_rows": list(prepared.validation_report.consumed_production_target_rows),
+            "consumed_store_capacity_rows": list(prepared.validation_report.consumed_store_capacity_rows),
+            "consumed_initial_inventory_rows": list(prepared.validation_report.consumed_initial_inventory_rows),
+            "consumed_terminal_inventory_rows": list(prepared.validation_report.consumed_terminal_inventory_rows),
+            "consumed_inventory_policy_rows": list(prepared.validation_report.consumed_inventory_policy_rows),
             "selected_target_variant": prepared.validation_report.selected_target_variant,
+            "inventory_mode": prepared.inventory_mode,
+            "active_store_ids": list(prepared.validation_report.active_store_ids),
             "refused_row_count": len(prepared.validation_report.refused_rows),
             "thesis_usability": False,
             "approved_input_used": False,
@@ -494,7 +712,11 @@ def run_liquid_steel_smoke_cases(
             input_validation_payload=input_validation_payload,
             solve_summary=solve_summary,
             warnings=warnings,
-            limitations_text=_limitations_text(configuration_id),
+            limitations_text=_limitations_text(
+                configuration_id,
+                inventory_mode=prepared.inventory_mode,
+                active_store_ids=list(prepared.validation_report.active_store_ids),
+            ),
         )
 
         results.append(
@@ -508,16 +730,20 @@ def run_liquid_steel_smoke_cases(
             }
         )
 
-    return {
+    payload = {
         "scope": SCOPE_ID,
         "horizon_hours": horizon_hours,
         "solver_name": solver_name,
         "solver_available": solver is not None,
         "target_variant": target_variant,
+        "inventory_mode": inventory_mode,
         "objective_type": "minimise_overproduction_dev_only",
         "thesis_usability": False,
         "results": results,
     }
+    if summary_output_path is not None:
+        write_buffer_inventory_smoke_summary(results, summary_output_path)
+    return payload
 
 
 def main() -> int:
@@ -536,7 +762,14 @@ def main() -> int:
         choices=("feasible_smoke", "stress_infeasible_original"),
         help="Target variant to use for 24h smoke cases.",
     )
+    parser.add_argument(
+        "--inventory-mode",
+        default="inactive",
+        choices=("inactive", "first_buffers"),
+        help="Inventory activation mode for the restricted smoke cases.",
+    )
     parser.add_argument("--output-root", type=Path, default=DEFAULT_STEEL_SMOKE_RUN_ROOT)
+    parser.add_argument("--summary-output-path", type=Path, default=None)
     args = parser.parse_args()
 
     configuration_ids = tuple(args.configuration_ids) if args.configuration_ids else (
@@ -547,8 +780,10 @@ def main() -> int:
         configuration_ids=configuration_ids,
         horizon_hours=24,
         target_variant=args.target_variant,
+        inventory_mode=args.inventory_mode,
         solve_if_available=not args.build_only,
         output_root=args.output_root,
+        summary_output_path=args.summary_output_path,
     )
     print(payload)
     return 0

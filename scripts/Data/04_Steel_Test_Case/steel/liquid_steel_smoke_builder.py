@@ -37,6 +37,7 @@ ALLOWED_CONFIGURATION_IDS = {
     "C0_current_BF_BOF_reference",
     "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF",
 }
+ALLOWED_INVENTORY_MODES = {"inactive", "first_buffers"}
 TARGET_NAME_BY_HOURS = {
     24: "horizon_total_target_24h_debug",
     168: "horizon_total_target_168h_one_week",
@@ -78,6 +79,10 @@ INVENTORY_TABLE_FILENAMES = {
     "terminal_inventory_rules.csv",
     "inventory_endpoint_policies.csv",
 }
+FIRST_BUFFER_ACTIVE_STORES_BY_CONFIGURATION: dict[str, tuple[str, ...]] = {
+    "C0_current_BF_BOF_reference": ("c0_hot_metal_buffer",),
+    "C1_phase1_hybrid_BF_BOF_NG_DRP_EAF": ("c1_hot_metal_buffer", "c1_dri_hdri_buffer"),
+}
 
 
 class LiquidSteelSmokeBuilderError(ValueError):
@@ -96,11 +101,17 @@ class InputValidationReport:
     configuration_id: str
     horizon_hours: int
     selected_target_variant: str
+    inventory_mode: str
     available_configurations: tuple[str, ...]
     selected_configurations: tuple[str, ...]
     consumed_process_bound_rows: tuple[str, ...]
     consumed_conversion_rows: tuple[str, ...]
     consumed_production_target_rows: tuple[str, ...]
+    consumed_store_capacity_rows: tuple[str, ...]
+    consumed_initial_inventory_rows: tuple[str, ...]
+    consumed_terminal_inventory_rows: tuple[str, ...]
+    consumed_inventory_policy_rows: tuple[str, ...]
+    active_store_ids: tuple[str, ...]
     refused_rows: tuple[RefusedRow, ...]
     encountered_non_executable_row: bool
     thesis_usability: bool
@@ -118,6 +129,22 @@ class PreparedSmokeInputs:
     topology_process_ids: tuple[str, ...]
     liquid_steel_process_ids: tuple[str, ...]
     internal_balance_carriers: tuple[str, ...]
+    inventory_mode: str
+    active_inventory_stores: tuple["ActiveInventoryStore", ...]
+
+
+@dataclass(frozen=True)
+class ActiveInventoryStore:
+    store_id: str
+    configuration_id: str
+    route_id: str
+    carrier_id: str
+    capacity_tonnes: float
+    initial_inventory_tonnes: float
+    terminal_inventory_ratio: float
+    endpoint_policy: str
+    value_basis: str
+    source_ids: str
 
 
 def _read_csv(path: Path) -> pd.DataFrame:
@@ -359,6 +386,161 @@ def _prepare_production_target(
     return float(value), str(row["row_id"]).strip(), resolved_target_variant
 
 
+def _validated_inventory_mode(inventory_mode: str) -> str:
+    resolved = str(inventory_mode).strip().lower()
+    if resolved not in ALLOWED_INVENTORY_MODES:
+        raise LiquidSteelSmokeBuilderError(
+            f"Unsupported inventory_mode={inventory_mode!r}. Allowed values: {sorted(ALLOWED_INVENTORY_MODES)}."
+        )
+    return resolved
+
+
+def _prepare_active_inventory_stores(
+    tables: dict[str, pd.DataFrame],
+    *,
+    configuration_id: str,
+    inventory_mode: str,
+    refused_rows: list[RefusedRow],
+) -> tuple[tuple[ActiveInventoryStore, ...], dict[str, tuple[str, ...]], bool]:
+    consumed_inventory_rows = {
+        "store_capacities.csv": [],
+        "initial_inventories.csv": [],
+        "terminal_inventory_rules.csv": [],
+        "inventory_endpoint_policies.csv": [],
+    }
+    encountered_non_executable = False
+
+    if inventory_mode == "inactive":
+        for filename in INVENTORY_TABLE_FILENAMES:
+            selected = tables[filename].loc[tables[filename]["configuration_id"].eq(configuration_id)]
+            for row in selected.to_dict(orient="records"):
+                refused_rows.append(RefusedRow(filename, row["row_id"], "inventory_mode_inactive"))
+                if _normalise_lower(row["executable_status"]) != "dev_executable_only":
+                    encountered_non_executable = True
+        consumed = {name: tuple(rows) for name, rows in consumed_inventory_rows.items()}
+        return tuple(), consumed, encountered_non_executable
+
+    allowed_store_ids = set(FIRST_BUFFER_ACTIVE_STORES_BY_CONFIGURATION[configuration_id])
+    store_capacity_rows = tables["store_capacities.csv"].loc[
+        tables["store_capacities.csv"]["configuration_id"].eq(configuration_id)
+    ].copy()
+    initial_rows = tables["initial_inventories.csv"].loc[
+        tables["initial_inventories.csv"]["configuration_id"].eq(configuration_id)
+    ].copy()
+    terminal_rows = tables["terminal_inventory_rules.csv"].loc[
+        tables["terminal_inventory_rules.csv"]["configuration_id"].eq(configuration_id)
+    ].copy()
+    endpoint_rows = tables["inventory_endpoint_policies.csv"].loc[
+        tables["inventory_endpoint_policies.csv"]["configuration_id"].eq(configuration_id)
+    ].copy()
+
+    for filename, frame in (
+        ("store_capacities.csv", store_capacity_rows),
+        ("initial_inventories.csv", initial_rows),
+        ("terminal_inventory_rules.csv", terminal_rows),
+        ("inventory_endpoint_policies.csv", endpoint_rows),
+    ):
+        for row in frame.loc[~frame["store_id"].isin(allowed_store_ids)].to_dict(orient="records"):
+            refused_rows.append(RefusedRow(filename, row["row_id"], "store_not_activation_ready"))
+            if _normalise_lower(row["executable_status"]) != "dev_executable_only":
+                encountered_non_executable = True
+
+    active_stores: list[ActiveInventoryStore] = []
+    seen_carriers: set[str] = set()
+    for store_id in sorted(allowed_store_ids):
+        matching_store_rows = store_capacity_rows.loc[store_capacity_rows["store_id"].eq(store_id)]
+        matching_initial_rows = initial_rows.loc[initial_rows["store_id"].eq(store_id)]
+        matching_terminal_rows = terminal_rows.loc[terminal_rows["store_id"].eq(store_id)]
+        matching_endpoint_rows = endpoint_rows.loc[endpoint_rows["store_id"].eq(store_id)]
+
+        if len(matching_store_rows) != 1 or len(matching_initial_rows) != 1 or len(matching_terminal_rows) != 1 or len(matching_endpoint_rows) != 1:
+            raise LiquidSteelSmokeBuilderError(
+                f"Inventory mode first_buffers requires exactly one store, initial, terminal, and endpoint row for store_id={store_id}."
+            )
+
+        store_row = matching_store_rows.iloc[0]
+        initial_row = matching_initial_rows.iloc[0]
+        terminal_row = matching_terminal_rows.iloc[0]
+        endpoint_row = matching_endpoint_rows.iloc[0]
+
+        for row, table_name in (
+            (store_row, "store_capacities.csv"),
+            (initial_row, "initial_inventories.csv"),
+            (terminal_row, "terminal_inventory_rules.csv"),
+            (endpoint_row, "inventory_endpoint_policies.csv"),
+        ):
+            _require_dev_only_row(row, table_name=table_name)
+            if _normalise_lower(row["executable_status"]) != "dev_executable_only":
+                raise LiquidSteelSmokeBuilderError(
+                    f"{table_name} row {row['row_id']} is required for inventory_mode=first_buffers but is not dev_executable_only."
+                )
+
+        capacity_value = pd.to_numeric(store_row["value"], errors="coerce")
+        initial_value = pd.to_numeric(initial_row["value"], errors="coerce")
+        terminal_ratio = pd.to_numeric(terminal_row["value"], errors="coerce")
+        if pd.isna(capacity_value) or float(capacity_value) <= 0.0:
+            raise LiquidSteelSmokeBuilderError(f"store_capacities.csv row {store_row['row_id']} must carry a positive numeric tonne value.")
+        if _normalise_lower(store_row["unit"]) != "t":
+            raise LiquidSteelSmokeBuilderError(f"store_capacities.csv row {store_row['row_id']} must use unit=t.")
+        if pd.isna(initial_value) or float(initial_value) < 0.0:
+            raise LiquidSteelSmokeBuilderError(f"initial_inventories.csv row {initial_row['row_id']} must carry a non-negative numeric tonne value.")
+        if _normalise_lower(initial_row["unit"]) != "t":
+            raise LiquidSteelSmokeBuilderError(f"initial_inventories.csv row {initial_row['row_id']} must use unit=t.")
+        if abs(float(initial_value) - 0.5 * float(capacity_value)) > 1e-6:
+            raise LiquidSteelSmokeBuilderError(
+                f"initial_inventories.csv row {initial_row['row_id']} must equal 50% of store capacity for {store_id}."
+            )
+        if pd.isna(terminal_ratio) or abs(float(terminal_ratio) - 1.0) > 1e-9:
+            raise LiquidSteelSmokeBuilderError(
+                f"terminal_inventory_rules.csv row {terminal_row['row_id']} must set terminal inventory equal to beginning inventory."
+            )
+        if _normalise_lower(terminal_row["unit"]) != "ratio_to_beginning_inventory":
+            raise LiquidSteelSmokeBuilderError(
+                f"terminal_inventory_rules.csv row {terminal_row['row_id']} must use unit=ratio_to_beginning_inventory."
+            )
+        if str(endpoint_row["value"]).strip() != "CYC50":
+            raise LiquidSteelSmokeBuilderError(
+                f"inventory_endpoint_policies.csv row {endpoint_row['row_id']} must keep CYC50 as endpoint policy."
+            )
+        if store_row["carrier_id"] != initial_row["carrier_id"] or store_row["carrier_id"] != terminal_row["carrier_id"] or store_row["carrier_id"] != endpoint_row["carrier_id"]:
+            raise LiquidSteelSmokeBuilderError(f"Inventory tables must keep a consistent carrier_id for store_id={store_id}.")
+        if store_row["store_id"] != initial_row["store_id"] or store_row["store_id"] != terminal_row["store_id"] or store_row["store_id"] != endpoint_row["store_id"]:
+            raise LiquidSteelSmokeBuilderError(f"Inventory tables must keep a consistent store_id for store_id={store_id}.")
+        if store_row["route_id"] != initial_row["route_id"] or store_row["route_id"] != terminal_row["route_id"] or store_row["route_id"] != endpoint_row["route_id"]:
+            raise LiquidSteelSmokeBuilderError(f"Inventory tables must keep a consistent route_id for store_id={store_id}.")
+        if store_row["carrier_id"] in seen_carriers:
+            raise LiquidSteelSmokeBuilderError(
+                f"inventory_mode=first_buffers supports at most one active store per carrier in {configuration_id}; duplicate carrier={store_row['carrier_id']}."
+            )
+        seen_carriers.add(store_row["carrier_id"])
+
+        consumed_inventory_rows["store_capacities.csv"].append(str(store_row["row_id"]).strip())
+        consumed_inventory_rows["initial_inventories.csv"].append(str(initial_row["row_id"]).strip())
+        consumed_inventory_rows["terminal_inventory_rules.csv"].append(str(terminal_row["row_id"]).strip())
+        consumed_inventory_rows["inventory_endpoint_policies.csv"].append(str(endpoint_row["row_id"]).strip())
+
+        active_stores.append(
+            ActiveInventoryStore(
+                store_id=str(store_row["store_id"]).strip(),
+                configuration_id=configuration_id,
+                route_id=str(store_row["route_id"]).strip(),
+                carrier_id=str(store_row["carrier_id"]).strip(),
+                capacity_tonnes=float(capacity_value),
+                initial_inventory_tonnes=float(initial_value),
+                terminal_inventory_ratio=float(terminal_ratio),
+                endpoint_policy=str(endpoint_row["value"]).strip(),
+                value_basis=str(store_row["value_basis"]).strip(),
+                source_ids=str(store_row["source_ids"]).strip(),
+            )
+        )
+
+    if set(store.carrier_id for store in active_stores) - {"hot_metal", "DRI_or_HDRI"}:
+        raise LiquidSteelSmokeBuilderError("inventory_mode=first_buffers may activate only hot_metal and DRI_or_HDRI stores.")
+
+    consumed = {name: tuple(rows) for name, rows in consumed_inventory_rows.items()}
+    return tuple(active_stores), consumed, encountered_non_executable
+
+
 def validate_liquid_steel_smoke_inputs(
     *,
     configuration_id: str,
@@ -366,14 +548,13 @@ def validate_liquid_steel_smoke_inputs(
     target_variant: str | None = "feasible_smoke",
     provisional_dev_input_root: str | Path = DEFAULT_PROVISIONAL_DEV_INPUT_ROOT,
     review_root: str | Path = DEFAULT_REVIEW_ROOT,
-    enable_inventory_rows: bool = False,
+    inventory_mode: str = "inactive",
 ) -> PreparedSmokeInputs:
     if configuration_id not in ALLOWED_CONFIGURATION_IDS:
         raise LiquidSteelSmokeBuilderError(
             f"S2.9a only supports {sorted(ALLOWED_CONFIGURATION_IDS)}. Got {configuration_id!r}."
         )
-    if enable_inventory_rows:
-        raise LiquidSteelSmokeBuilderError("S2.9a must refuse store-capacity and inventory activation.")
+    resolved_inventory_mode = _validated_inventory_mode(inventory_mode)
 
     dev_root = _ensure_allowed_root(provisional_dev_input_root)
     topology, topology_views = _load_topology(review_root)
@@ -398,14 +579,12 @@ def validate_liquid_steel_smoke_inputs(
         refused_rows=refused_rows,
     )
 
-    encountered_non_executable = False
-    for filename in INVENTORY_TABLE_FILENAMES:
-        frame = dev_tables[filename]
-        selected = frame.loc[frame["configuration_id"].eq(configuration_id)]
-        for row in selected.to_dict(orient="records"):
-            refused_rows.append(RefusedRow(filename, row["row_id"], "inventory_scope_deferred"))
-            if _normalise_lower(row["executable_status"]) != "dev_executable_only":
-                encountered_non_executable = True
+    active_inventory_stores, consumed_inventory_rows, encountered_non_executable = _prepare_active_inventory_stores(
+        dev_tables,
+        configuration_id=configuration_id,
+        inventory_mode=resolved_inventory_mode,
+        refused_rows=refused_rows,
+    )
 
     topology_process_ids = tuple(
         sorted({row["topology_process_unit_id"] for row in conversion_rows.to_dict(orient="records")})
@@ -437,6 +616,7 @@ def validate_liquid_steel_smoke_inputs(
         configuration_id=configuration_id,
         horizon_hours=horizon_hours,
         selected_target_variant=resolved_target_variant,
+        inventory_mode=resolved_inventory_mode,
         available_configurations=tuple(sorted(ALLOWED_CONFIGURATION_IDS)),
         selected_configurations=(configuration_id,),
         consumed_process_bound_rows=tuple(
@@ -453,12 +633,18 @@ def validate_liquid_steel_smoke_inputs(
         consumed_production_target_rows=tuple(
             [production_target_row_id]
         ),
+        consumed_store_capacity_rows=consumed_inventory_rows["store_capacities.csv"],
+        consumed_initial_inventory_rows=consumed_inventory_rows["initial_inventories.csv"],
+        consumed_terminal_inventory_rows=consumed_inventory_rows["terminal_inventory_rules.csv"],
+        consumed_inventory_policy_rows=consumed_inventory_rows["inventory_endpoint_policies.csv"],
+        active_store_ids=tuple(store.store_id for store in active_inventory_stores),
         refused_rows=tuple(refused_rows),
         encountered_non_executable_row=encountered_non_executable,
         thesis_usability=False,
         notes=(
             "Consumes only dev_executable_only provisional rows.",
-            "Inventory and downstream scopes remain refused in S2.9a.",
+            "Downstream scope remains refused in the restricted smoke builder.",
+            f"inventory_mode={resolved_inventory_mode}",
         ),
     )
     return PreparedSmokeInputs(
@@ -471,6 +657,8 @@ def validate_liquid_steel_smoke_inputs(
         topology_process_ids=topology_process_ids,
         liquid_steel_process_ids=liquid_steel_process_ids,
         internal_balance_carriers=internal_balance_carriers,
+        inventory_mode=resolved_inventory_mode,
+        active_inventory_stores=active_inventory_stores,
     )
 
 
@@ -481,7 +669,7 @@ def build_liquid_steel_smoke_model(
     target_variant: str | None = "feasible_smoke",
     provisional_dev_input_root: str | Path = DEFAULT_PROVISIONAL_DEV_INPUT_ROOT,
     review_root: str | Path = DEFAULT_REVIEW_ROOT,
-    enable_inventory_rows: bool = False,
+    inventory_mode: str = "inactive",
     allow_target_shortfall: bool = False,
 ):
     if allow_target_shortfall:
@@ -493,7 +681,7 @@ def build_liquid_steel_smoke_model(
         target_variant=target_variant,
         provisional_dev_input_root=provisional_dev_input_root,
         review_root=review_root,
-        enable_inventory_rows=enable_inventory_rows,
+        inventory_mode=inventory_mode,
     )
 
     output_carrier_by_process = {
@@ -515,8 +703,11 @@ def build_liquid_steel_smoke_model(
     model.TIME = Set(initialize=list(range(horizon_hours)), ordered=True)
     model.PROCESSES = Set(initialize=list(prepared.topology_process_ids), ordered=True)
     model.INTERNAL_CARRIERS = Set(initialize=list(prepared.internal_balance_carriers), ordered=True)
+    model.ACTIVE_STORES = Set(initialize=[store.store_id for store in prepared.active_inventory_stores], ordered=True)
 
     model.process_activity = Var(model.PROCESSES, model.TIME, domain=NonNegativeReals)
+    if len(model.ACTIVE_STORES):
+        model.store_inventory = Var(model.ACTIVE_STORES, model.TIME, domain=NonNegativeReals)
 
     min_bounds = {
         process_unit_id: bound
@@ -528,6 +719,11 @@ def build_liquid_steel_smoke_model(
         for (process_unit_id, parameter_name), bound in prepared.process_bounds.items()
         if parameter_name in {"max_continuous_rate", "maximum_continuous_rate", "maximum_batch_equivalent_rate"}
     }
+    active_store_by_carrier = {store.carrier_id: store for store in prepared.active_inventory_stores}
+    active_store_id_by_carrier = {store.carrier_id: store.store_id for store in prepared.active_inventory_stores}
+    carrier_by_store_id = {store.store_id: store.carrier_id for store in prepared.active_inventory_stores}
+    initial_inventory_by_store = {store.store_id: store.initial_inventory_tonnes for store in prepared.active_inventory_stores}
+    capacity_by_store = {store.store_id: store.capacity_tonnes for store in prepared.active_inventory_stores}
 
     def _process_min_rule(m, process_unit_id: str, time_index: int):
         return m.process_activity[process_unit_id, time_index] >= min_bounds.get(process_unit_id, 0.0)
@@ -540,9 +736,8 @@ def build_liquid_steel_smoke_model(
     model.process_min_bound = Constraint(model.PROCESSES, model.TIME, rule=_process_min_rule)
     model.process_max_bound = Constraint(model.PROCESSES, model.TIME, rule=_process_max_rule)
 
-    def _carrier_balance_rule(m, carrier_id: str, time_index: int):
+    def _carrier_production_expression(m, carrier_id: str, time_index: int):
         production_terms = []
-        consumption_terms = []
         for process_unit_id in m.PROCESSES:
             default_output_carrier = output_carrier_by_process[process_unit_id]
             output_reference = output_reference_coefficients.get((process_unit_id, carrier_id))
@@ -550,12 +745,53 @@ def build_liquid_steel_smoke_model(
                 production_terms.append(output_reference * m.process_activity[process_unit_id, time_index])
             elif default_output_carrier == carrier_id:
                 production_terms.append(m.process_activity[process_unit_id, time_index])
+        return sum(production_terms)
+
+    def _carrier_consumption_expression(m, carrier_id: str, time_index: int):
+        consumption_terms = []
+        for process_unit_id in m.PROCESSES:
             input_value = input_coefficients.get((process_unit_id, carrier_id))
             if input_value is not None:
                 consumption_terms.append(input_value * m.process_activity[process_unit_id, time_index])
-        if not production_terms and not consumption_terms:
-            raise LiquidSteelSmokeBuilderError(f"No balance terms were found for internal carrier {carrier_id}.")
-        return sum(production_terms) == sum(consumption_terms)
+        return sum(consumption_terms)
+
+    model.internal_carrier_production = Expression(model.INTERNAL_CARRIERS, model.TIME, rule=_carrier_production_expression)
+    model.internal_carrier_consumption = Expression(model.INTERNAL_CARRIERS, model.TIME, rule=_carrier_consumption_expression)
+
+    if len(model.ACTIVE_STORES):
+        def _store_inflow_rule(m, store_id: str, time_index: int):
+            carrier_id = carrier_by_store_id[store_id]
+            return m.internal_carrier_production[carrier_id, time_index]
+
+        def _store_outflow_rule(m, store_id: str, time_index: int):
+            carrier_id = carrier_by_store_id[store_id]
+            return m.internal_carrier_consumption[carrier_id, time_index]
+
+        model.store_inflow = Expression(model.ACTIVE_STORES, model.TIME, rule=_store_inflow_rule)
+        model.store_outflow = Expression(model.ACTIVE_STORES, model.TIME, rule=_store_outflow_rule)
+
+        def _inventory_balance_rule(m, store_id: str, time_index: int):
+            prior_inventory = initial_inventory_by_store[store_id] if time_index == 0 else m.store_inventory[store_id, time_index - 1]
+            return m.store_inventory[store_id, time_index] == prior_inventory + m.store_inflow[store_id, time_index] - m.store_outflow[store_id, time_index]
+
+        def _inventory_capacity_rule(m, store_id: str, time_index: int):
+            return m.store_inventory[store_id, time_index] <= capacity_by_store[store_id]
+
+        def _terminal_inventory_rule(m, store_id: str):
+            return m.store_inventory[store_id, horizon_hours - 1] == initial_inventory_by_store[store_id]
+
+        model.inventory_balance = Constraint(model.ACTIVE_STORES, model.TIME, rule=_inventory_balance_rule)
+        model.inventory_capacity_bound = Constraint(model.ACTIVE_STORES, model.TIME, rule=_inventory_capacity_rule)
+        model.terminal_inventory = Constraint(model.ACTIVE_STORES, rule=_terminal_inventory_rule)
+
+    def _carrier_balance_rule(m, carrier_id: str, time_index: int):
+        production = m.internal_carrier_production[carrier_id, time_index]
+        consumption = m.internal_carrier_consumption[carrier_id, time_index]
+        if carrier_id in active_store_id_by_carrier:
+            store_id = active_store_id_by_carrier[carrier_id]
+            prior_inventory = initial_inventory_by_store[store_id] if time_index == 0 else m.store_inventory[store_id, time_index - 1]
+            return production + prior_inventory == consumption + m.store_inventory[store_id, time_index]
+        return production == consumption
 
     model.internal_material_balance = Constraint(model.INTERNAL_CARRIERS, model.TIME, rule=_carrier_balance_rule)
 
@@ -579,15 +815,18 @@ def build_liquid_steel_smoke_model(
         "configuration_id": configuration_id,
         "horizon_hours": horizon_hours,
         "target_variant": validation_report.selected_target_variant,
+        "inventory_mode": prepared.inventory_mode,
         "thesis_usability": False,
         "input_surface": "s2_provisional_dev_input",
         "production_target_carrier": TARGET_CARRIER,
         "route_neutral_target": True,
         "objective_type": "minimise_overproduction_dev_only",
         "shortfall_slack_active": False,
-        "inventory_scope_active": False,
+        "inventory_scope_active": prepared.inventory_mode == "first_buffers",
         "downstream_scope_active": False,
         "allow_target_shortfall": False,
+        "active_store_ids": [store.store_id for store in prepared.active_inventory_stores],
+        "active_store_count": len(prepared.active_inventory_stores),
     }
     model.s2_model_stats = collect_model_stats(model)
     return model

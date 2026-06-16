@@ -148,6 +148,9 @@ def test_dry_run_validator_reports_alignment_and_empty_approved_input_surface():
     assert payload["liquid_steel_smoke_baseline_rows_checked"] == 4
     assert payload["liquid_steel_smoke_infeasibility_attribution_rows_checked"] == 2
     assert payload["liquid_steel_next_scope_gate_rows_checked"] == 9
+    assert payload["liquid_steel_first_buffer_inventory_activation_memo_present"] is True
+    assert payload["buffer_inventory_smoke_summary_rows_checked"] == 4
+    assert payload["buffer_inventory_active_store_rows_checked"] == 6
     assert payload["approved_rows"] == 0
     assert payload["thesis_grade_numerical_rows"] == 0
     assert payload["candidate_review_executable_rows"] == 0

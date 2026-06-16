@@ -78,3 +78,5 @@ and only under explicit guards that prevent multi-day carry, fake market-arbitra
 - liquid steel, ladle, and tundish strategic activation
 - coke, sinter, pellet, and finished-goods inventory activation
 - any claim that these store rows are thesis-grade or approved
+
+The resulting guarded activation boundary and first inventory-balance interpretation are recorded in `STEEL_S2_FIRST_BUFFER_INVENTORY_ACTIVATION.md`.

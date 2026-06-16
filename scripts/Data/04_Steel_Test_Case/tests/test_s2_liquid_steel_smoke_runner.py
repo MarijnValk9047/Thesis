@@ -60,6 +60,7 @@ def test_s29b_c0_build_only_run_produces_guarded_diagnostics(tmp_path: Path):
 
     assert resolved["thesis_usability"] is False
     assert resolved["target_variant"] == "feasible_smoke"
+    assert resolved["inventory_mode"] == "inactive"
     assert resolved["input_surface"] == "s2_provisional_dev_input"
     assert resolved["approved_input_used"] is False
     assert resolved["inventory_active"] is False
@@ -68,8 +69,10 @@ def test_s29b_c0_build_only_run_produces_guarded_diagnostics(tmp_path: Path):
     assert resolved["market_logic_active"] is False
     assert manifest["input_surface"] == "s2_provisional_dev_input"
     assert manifest["selected_target_variant"] == "feasible_smoke"
+    assert manifest["inventory_mode"] == "inactive"
     assert model_stats["binary_count"] == 0
     assert model_stats["target_variant"] == "feasible_smoke"
+    assert model_stats["inventory_mode"] == "inactive"
     assert model_stats["objective_type"] == "minimise_overproduction_dev_only"
     assert model_stats["shortfall_slack_active"] is False
     assert model_stats["inventory_active"] is False
@@ -105,7 +108,7 @@ def test_s29b_c1_build_only_run_produces_guarded_diagnostics(tmp_path: Path):
     assert validation["selected_target_variant"] == "feasible_smoke"
     assert validation["capacity_diagnostic"]["likely_infeasible_due_capacity_gap"] is False
     refused_reasons = {row["reason"] for row in validation["refused_rows"]["rows"]}
-    assert "inventory_scope_deferred" in refused_reasons
+    assert "inventory_mode_inactive" in refused_reasons
     assert "downstream_or_casting_out_of_scope" in refused_reasons
 
 
@@ -126,6 +129,7 @@ def test_s29c_runner_can_select_stress_infeasible_original_variant(tmp_path: Pat
 
     assert payload["target_variant"] == "stress_infeasible_original"
     assert resolved["target_variant"] == "stress_infeasible_original"
+    assert resolved["inventory_mode"] == "inactive"
     assert resolved["objective_type"] == "minimise_overproduction_dev_only"
     assert resolved["shortfall_slack_active"] is False
     assert validation["selected_target_variant"] == "stress_infeasible_original"

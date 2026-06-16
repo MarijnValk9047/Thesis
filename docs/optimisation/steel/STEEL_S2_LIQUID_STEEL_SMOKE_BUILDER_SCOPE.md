@@ -93,6 +93,8 @@ See `STEEL_S2_LIQUID_STEEL_SMOKE_BASELINE_FREEZE.md` for the frozen interpretati
 
 See `STEEL_S2_STORE_CAPACITY_TRANSLATION_REVIEW.md` for the first bounded store rows that a later `S2.10b` extension may consider, while this builder still refuses all inventory activation.
 
+The guarded `inventory_mode=first_buffers` activation boundary is documented separately in `STEEL_S2_FIRST_BUFFER_INVENTORY_ACTIVATION.md`.
+
 ## What Must Be Added Before S3
 
 Before any later-stage `S3` or thesis-usable model work:

@@ -149,3 +149,5 @@ S2.9 outputs are not thesis results.
 - continued separation between dev-only scaffolds and approved thesis inputs
 
 The corresponding `S2.10a` translation review is recorded in `STEEL_S2_STORE_CAPACITY_TRANSLATION_REVIEW.md`.
+
+The subsequent guarded activation boundary for those first buffer rows is recorded in `STEEL_S2_FIRST_BUFFER_INVENTORY_ACTIVATION.md`.

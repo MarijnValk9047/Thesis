@@ -113,8 +113,9 @@ def test_s210a_candidate_review_and_zero_row_surfaces_remain_intact():
         assert len(csv_path.read_text(encoding="utf-8").strip().splitlines()) == 1
 
 
-def test_s210a_does_not_introduce_inventory_builder_logic():
+def test_s210a_store_translation_does_not_introduce_later_stage_logic():
     source = inspect.getsource(smoke_builder_module).lower()
-    assert "inventory_balance" not in source
-    assert "cyc50_constraint" not in source
-    assert "store_capacity_activation" not in source
+    assert "submitted_bids" not in source
+    assert "scenario_probability" not in source
+    assert "reserve_capacity" not in source
+    assert "cvar" not in source
