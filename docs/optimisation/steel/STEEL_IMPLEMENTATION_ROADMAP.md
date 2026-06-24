@@ -364,3 +364,5 @@ A future Codex session may start steel code scaffolding only after:
 - implementation freeze `V1` and the `S2` or `S3` scope docs are accepted;
 - initial steel input-table schemas are accepted;
 - the first steel asset boundary and target policy are frozen for `S2`.
+
+The current end-of-`S2` freeze and the guarded `S3.0` entry boundary are now defined in `STEEL_S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT.md`.

@@ -1,0 +1,16 @@
+parameter_family,materiality_reason,sensitivity_required_default,central_value_allowed,lower_upper_required,allowed_without_range,applicable_evidence_tiers,notes
+C1 route share,Strongly changes route activity WAG generation DRP/EAF exposure and emissions,true,true,true,false,D;E,User-selected central scenario may be used if low and high or explicit sensitivity plan exists.
+DRP natural-gas consumption,Material driver of gas cost direct emissions and C1 route economics,true,true,true,false,A;B;C;E,No single public secondary or generic value may be described as exact Tata operation.
+DRP electricity consumption,Material driver of electricity import and price exposure,true,true,true,false,A;B;C;E,Sensitivity required for final thesis use unless explicitly deferred with reason.
+EAF electricity consumption,Material driver of electricity import and price exposure,true,true,true,false,A;B;C;E,Sensitivity required for final thesis use unless explicitly deferred with reason.
+DRI pellets yield conversion,Material mass-balance and energy-basis conversion driver,true,true,true,false,A;B;C;E,Includes DRI yield pellets-to-DRI DRI-to-steel and basis conversion.
+scrap share,Material route recipe and EAF balance driver,true,true,true,false,A;B;C;D;E,Scenario or source-backed assumption must not be treated as validation target unless Tier A boundary matches.
+WAG generation yields,Material internal-energy and emissions accounting driver,true,true,true,false,A;B;C;E,Includes BFG BOFG and COG generation coefficients.
+WAG LHV values,Material conversion from gas volume or mass to useful energy,true,true,true,false,A;B;C;E,Use carrier-specific ranges where available.
+coking/coke coefficients,Material COG BFG and retained BF/BOF boundary driver,true,true,true,false,A;B;C;E,Sensitivity required where retained coking proxy affects WAG generation.
+WAG allocation/conversion efficiency,Material determinant of fuel displacement power-interface offset and spill,true,true,true,false,A;B;C;D;E,Direct electricity-price valuation remains blocked without explicit conversion logic.
+site/component electricity boundary,Material determinant of plant energy scale and C1 diagnostic readiness,true,true,true,false,A;B;C;E,Boundary mismatch must be documented before final thesis use.
+natural-gas CO2 factor,Material direct emissions and gross carbon-cost driver,true,true,true,false,A;B;C;E,Use public regulatory or technical factor with unit and oxidation basis.
+WAG CO2 factors,Material no-double-counting and combustion/flare emissions driver,true,true,true,false,A;B;C;E,Must state point of oxidation and no-double-counting boundary.
+energy price assumptions,Material cost and later dispatch incentive driver,true,true,true,false,A;B;C;D;E,When later introduced must preserve market timing and source metadata.
+ETS cost assumptions when later introduced,Material cost and emissions interpretation driver,true,true,true,false,A;B;C;D;E,Policy only; this file does not implement ETS-cost logic.

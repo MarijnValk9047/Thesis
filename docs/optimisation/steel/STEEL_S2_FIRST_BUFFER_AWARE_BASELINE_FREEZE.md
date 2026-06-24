@@ -172,3 +172,5 @@ The blocked follow-up checks are recorded in `s2_buffer_aware_next_check_registe
 The first guarded initial-inventory and buffer-size sensitivity evidence built on top of this baseline is recorded in `STEEL_S2_BUFFER_SENSITIVITY_DIAGNOSTICS.md`.
 
 The later zero-hit attribution gate and conditional weekly decision are recorded in `STEEL_S2_ZERO_HIT_ATTRIBUTION_AND_WEEK_GATE.md`.
+
+The consolidated `S2.11` freeze and `S3` entry contract built on top of this buffer-aware baseline are recorded in `STEEL_S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT.md`.

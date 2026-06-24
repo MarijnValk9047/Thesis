@@ -1,0 +1,15 @@
+gate_id,gate_name,pass_fail_or_blocked,evidence,status,limitations,next_action
+S31_GATE_001,S2.13 physical smokes remain valid,pass,preflight tests and runner smoke suite pass,ready_development_only,Development-only S2.13 assumptions.,Keep regression tests active.
+S31_GATE_002,S3.1 attaches to S2.13 variables,pass,site_energy_economic_builder wrapper,ready_development_only,Does not mutate frozen S2/S2.13 equations.,Keep wrapper architecture.
+S31_GATE_003,downstream asset energy hooks exist,pass,selected S3.1 energy inputs and model expressions,ready_development_only,Tier-D coefficients require sensitivity.,Replace with source-backed values where possible.
+S31_GATE_004,reheating follows cold slab scheduling,pass,reheating_heat_gj depends on reheat_cold_slab_input,ready_development_only,WAG may supply reheat before NG.,Review fuel policy later.
+S31_GATE_005,WAG carrier balances close,pass,wag_carrier_balance constraints,ready_development_only,Power interface is potential-only.,Review interface capacity before economic credit.
+S31_GATE_006,grid and NG imports explicit,pass,grid_import_mwh and natural_gas_import_gj variables/expressions,ready_development_only,No DA settlement or tariff logic.,Use for gross-load sensitivity preparation before static-price baseline.
+S31_GATE_007,direct emissions non-double counted,pass,DRP direct proxy counted and DRP NG combustion blocked,partial_ready,Complete direct emissions false.,Select residual direct factors later.
+S31_GATE_008,scope 2 remains excluded,pass,scope2_electricity_counted=false,blocked_policy,No grid emissions factor selected.,Add explicit scope-2 policy only later.
+S31_GATE_009,monetary values blocked without prices,pass,static price selected-input file blank,blocked_prices_missing,Physical/emissions diagnostic only.,Select governed static prices before static cost result.
+S31_GATE_010,C0 and C1 base smokes solve,pass,S31 smoke result register after S3.1-b WAG driver reconciliation,ready_development_only,No plant validation claim.,Use as static-price baseline diagnostic basis.
+S31_GATE_011,outage and cold-heavy diagnostics behave physically,pass,reheating energy positive in diagnostic cases,ready_development_only,WAG sink shift can leave total WAG CO2 unchanged.,Report emissions by source/sink.
+S31_GATE_012,stress infeasibility retained,pass,hard target stress integrated case infeasible,ready_development_only,No IIS exported.,Keep no-shortfall tests.
+S31_GATE_013,forbidden market logic absent,pass,no DA settlement revenue stochastic CVaR mFRR columns,ready_development_only,Static deterministic only.,Introduce DA only in labelled S4 task.
+S31_GATE_014,S4 deterministic entry,pass,physical and accounting balances close after S3.1-b; prices clearly blocked,conditional_ready,Actual WAG economic-value claims remain conditional on interface-capacity review and static-price baseline.,Do static-price input selection and true S3 cost baseline before S4 DA price-taking.

@@ -1244,6 +1244,65 @@ REVIEW_FILE_SPECS: dict[str, list[str]] = {
         "interpretation",
         "next_action",
     ],
+    "s2_artifact_inventory_and_directory_audit.csv": [
+        "artifact_id",
+        "path",
+        "artifact_type",
+        "s2_stage",
+        "expected_directory",
+        "current_directory_status",
+        "source_or_generated",
+        "should_be_committed",
+        "thesis_usability",
+        "governance_role",
+        "action_required",
+        "notes",
+    ],
+    "s2_configuration_asset_assumption_matrix.csv": [
+        "row_id",
+        "configuration_id",
+        "asset_id",
+        "asset_name",
+        "asset_type",
+        "route_or_scope",
+        "active_in_s2_lp",
+        "active_in_first_buffer_model",
+        "carrier_or_material",
+        "main_assumption",
+        "numerical_input_source",
+        "numerical_status",
+        "flexibility_role",
+        "capacity_or_bound_status",
+        "conversion_status",
+        "inventory_status",
+        "validation_role",
+        "thesis_usability",
+        "remaining_risk",
+        "next_required_review",
+    ],
+    "s2_to_s3_input_contract_register.csv": [
+        "contract_id",
+        "input_or_artifact",
+        "may_s3_consume",
+        "allowed_use_in_s3",
+        "forbidden_use_in_s3",
+        "thesis_usability_status",
+        "required_guard",
+        "current_status",
+        "action_before_s3",
+        "notes",
+    ],
+    "s3_entry_gate_checklist.csv": [
+        "gate_id",
+        "gate_name",
+        "required_for_s3",
+        "current_status",
+        "pass_fail_or_blocked",
+        "evidence_artifact",
+        "risk_if_ignored",
+        "required_action",
+        "notes",
+    ],
     "s2_liquid_steel_infeasibility_attribution.csv": [
         "attribution_id",
         "configuration_id",
@@ -2269,6 +2328,16 @@ WEEKLY_SMOKE_TARGET_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "input
 ONE_WEEK_BUFFER_SMOKE_SUMMARY_COLUMNS = REVIEW_FILE_SPECS["s2_one_week_buffer_smoke_summary.csv"]
 ONE_WEEK_BUFFER_SMOKE_SUMMARY_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_one_week_buffer_smoke_summary.csv"
 ZERO_HIT_WEEK_GATE_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_ZERO_HIT_ATTRIBUTION_AND_WEEK_GATE.md"
+S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT.md"
+S2_CONFIGURATION_ASSET_AND_ASSUMPTION_SUMMARY_MEMO = REPO_ROOT / "docs" / "optimisation" / "steel" / "STEEL_S2_CONFIGURATION_ASSET_AND_ASSUMPTION_SUMMARY.md"
+S2_ARTIFACT_INVENTORY_AND_DIRECTORY_AUDIT_COLUMNS = REVIEW_FILE_SPECS["s2_artifact_inventory_and_directory_audit.csv"]
+S2_ARTIFACT_INVENTORY_AND_DIRECTORY_AUDIT_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_artifact_inventory_and_directory_audit.csv"
+S2_CONFIGURATION_ASSET_ASSUMPTION_MATRIX_COLUMNS = REVIEW_FILE_SPECS["s2_configuration_asset_assumption_matrix.csv"]
+S2_CONFIGURATION_ASSET_ASSUMPTION_MATRIX_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_configuration_asset_assumption_matrix.csv"
+S2_TO_S3_INPUT_CONTRACT_REGISTER_COLUMNS = REVIEW_FILE_SPECS["s2_to_s3_input_contract_register.csv"]
+S2_TO_S3_INPUT_CONTRACT_REGISTER_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s2_to_s3_input_contract_register.csv"
+S3_ENTRY_GATE_CHECKLIST_COLUMNS = REVIEW_FILE_SPECS["s3_entry_gate_checklist.csv"]
+S3_ENTRY_GATE_CHECKLIST_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "s2_candidate_review" / "s3_entry_gate_checklist.csv"
 ZERO_HIT_WEEK_GATE_REQUIRED_PHRASES = (
     "why zero-hit attribution was needed",
     "diagnostic objective used",
@@ -2278,6 +2347,32 @@ ZERO_HIT_WEEK_GATE_REQUIRED_PHRASES = (
     "if one-week was opened",
     "why outputs remain non-thesis",
     "why s3 is still not entered in this task",
+)
+S2_MATERIAL_FLOW_FREEZE_REQUIRED_PHRASES = (
+    "s2 purpose and scope",
+    "c0 and c1 configuration definitions",
+    "what s2 has implemented",
+    "what s2 has explicitly not implemented",
+    "s2 smoke/buffer/one-week results summary",
+    "why s2 results remain non-thesis",
+    "what s3 may consume",
+    "what s3 must not reinterpret",
+    "remaining s2 limitations",
+    "s3 entry conditions",
+    "red flags that must block s3 if violated",
+)
+S2_CONFIGURATION_ASSET_SUMMARY_REQUIRED_PHRASES = (
+    "assets/process units in c0",
+    "assets/process units in c1",
+    "what changes between c0 and c1",
+    "which assets are active in the lp",
+    "which are structural only",
+    "which are exogenous supply boundaries",
+    "which stores are active",
+    "which stores are blocked/deferred",
+    "what assumptions are used per asset",
+    "what assumptions remain provisional",
+    "what each asset contributes to flexibility or non-flexibility",
 )
 FIRST_BUFFER_ACTIVE_STORE_IDS = {
     "c0_hot_metal_buffer",
@@ -2294,6 +2389,121 @@ S2_NEXT_SCOPE_REQUIRED_GATES = {
     "one_week_s2_run",
     "validation_against_public_annual_anchors",
     "s3_energy_cost_emissions_entry",
+}
+S211_REQUIRED_ARTIFACT_IDS = {
+    "DOC_IMPL_FREEZE_V1",
+    "DOC_IMPL_ROADMAP",
+    "DOC_STAGE_GATE_PLAN",
+    "DOC_TRACTABILITY_CONTROL",
+    "DOC_SCOPE_FREEZE",
+    "DOC_S2_TOPOLOGY_REGISTRY",
+    "DOC_S2_DEV_INPUT_READINESS",
+    "DOC_S2_SMOKE_BASELINE",
+    "DOC_S2_FIRST_BUFFER_BASELINE",
+    "DOC_S2_ZERO_HIT_GATE",
+    "DOC_S211_FREEZE_CONTRACT",
+    "DOC_S211_ASSET_SUMMARY",
+    "TOPO_CONFIGS",
+    "TOPO_ROUTES",
+    "TOPO_PROCESS_UNITS",
+    "TOPO_CARRIERS",
+    "TOPO_STORES",
+    "TOPO_ARCS",
+    "TOPO_INVENTORY_POLICY",
+    "DEV_PROCESS_BOUNDS",
+    "DEV_CONVERSION_COEFFICIENTS",
+    "DEV_STORE_CAPACITIES",
+    "DEV_INITIAL_INVENTORIES",
+    "DEV_TERMINAL_RULES",
+    "DEV_INVENTORY_ENDPOINT_POLICIES",
+    "DEV_PRODUCTION_TARGETS",
+    "DEV_VALIDATION_TARGETS",
+    "DEV_SENSITIVITY_VARIANTS",
+    "DEV_COMPLETENESS_REPORT",
+    "APPROVED_README",
+    "APPROVED_PROCESS_BOUNDS",
+    "APPROVED_CONVERSION_COEFFICIENTS",
+    "APPROVED_STORE_CAPACITIES",
+    "APPROVED_INITIAL_INVENTORIES",
+    "APPROVED_TERMINAL_RULES",
+    "APPROVED_INVENTORY_ENDPOINT_POLICIES",
+    "APPROVED_PRODUCTION_TARGETS",
+    "APPROVED_VALIDATION_TARGETS",
+    "APPROVED_REPORTING_REQUIREMENTS",
+    "REVIEW_TARGET_RECONCILIATION",
+    "REVIEW_STORE_CAPACITY_TRANSLATION",
+    "REVIEW_BUFFER_ACTIVATION_READINESS",
+    "REVIEW_ZERO_HIT_ATTRIBUTION",
+    "REVIEW_ONE_WEEK_BUFFER_SMOKE",
+    "REVIEW_S211_ARTIFACT_AUDIT",
+    "REVIEW_S211_ASSET_MATRIX",
+    "REVIEW_S211_S3_CONTRACT",
+    "REVIEW_S211_S3_GATE_CHECKLIST",
+    "CODE_SMOKE_BUILDER",
+    "CODE_SMOKE_RUNNER",
+    "CODE_GOVERNANCE",
+    "CODE_VALIDATE_GOVERNANCE",
+    "TEST_S211_FREEZE",
+    "GENERATED_SMOKE_RUN_POLICY",
+}
+S211_REQUIRED_ASSET_MATRIX_IDS = {
+    "c0_external_iron_burden_supply_boundary",
+    "c0_external_scrap_flux_supply_boundary",
+    "c0_coke_supply_or_coke_oven_boundary",
+    "c0_burden_prep_boundary",
+    "c0_blast_furnace",
+    "c0_hot_metal_buffer",
+    "c0_bof_converter",
+    "c0_cast_slab_handling",
+    "c0_liquid_steel_target_sink",
+    "c0_slab_wip_buffer",
+    "c0_hot_slab_transfer_buffer",
+    "c0_excluded_bulk_stocks",
+    "c1_retained_bf_bof_supply_boundary",
+    "c1_ng_drp_eaf_supply_boundary",
+    "c1_retained_blast_furnace",
+    "c1_hot_metal_buffer",
+    "c1_retained_bof_converter",
+    "c1_ng_drp",
+    "c1_dri_hdri_buffer",
+    "c1_eaf",
+    "c1_new_secondary_met",
+    "c1_liquid_steel_target_sink",
+    "c1_slab_wip_buffer",
+    "c1_hot_slab_transfer_buffer",
+    "c1_casting_downstream_boundary",
+    "c1_excluded_bulk_stocks",
+}
+S211_REQUIRED_CONTRACT_INPUTS = {
+    "topology",
+    "process_activity_variables",
+    "carrier_balances",
+    "process_bounds",
+    "conversion_coefficients",
+    "production_targets",
+    "active_stores",
+    "blocked_stores",
+    "CYC50_policy",
+    "one_week_smoke_results",
+    "S2_run_folders",
+    "validation_targets",
+    "approved_input_shells",
+    "provisional_dev_inputs",
+}
+S211_REQUIRED_S3_GATES = {
+    "S2_topology_frozen",
+    "C0_C1_configurations_frozen",
+    "liquid_steel_LP_solves",
+    "first_buffer_inventory_solves",
+    "one_week_smoke_solved",
+    "no_hidden_shortfall_slack",
+    "no_fake_free_buffers",
+    "blocked_deferred_stores_remain_blocked",
+    "production_target_status_understood",
+    "public_annual_targets_not_used_as_executable_truth",
+    "approved_input_tables_zero_row",
+    "S3_scope_limited_to_energy_cost_emissions_first",
+    "no_DA_stochastic_mfrr_in_S3_0",
 }
 
 
@@ -3833,6 +4043,113 @@ def validate_s210e_week_gate_artifacts(review_bundle: GovernanceTableBundle) -> 
     }
 
 
+def validate_s211_material_flow_freeze_artifacts(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
+    if not S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT_MEMO.exists():
+        raise ValueError("STEEL_S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT.md must exist for S2.11.")
+    freeze_text = S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in S2_MATERIAL_FLOW_FREEZE_REQUIRED_PHRASES:
+        if phrase not in freeze_text:
+            raise ValueError(
+                f"STEEL_S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT.md is missing required phrase: {phrase}"
+            )
+
+    if not S2_CONFIGURATION_ASSET_AND_ASSUMPTION_SUMMARY_MEMO.exists():
+        raise ValueError("STEEL_S2_CONFIGURATION_ASSET_AND_ASSUMPTION_SUMMARY.md must exist for S2.11.")
+    asset_text = S2_CONFIGURATION_ASSET_AND_ASSUMPTION_SUMMARY_MEMO.read_text(encoding="utf-8").lower()
+    for phrase in S2_CONFIGURATION_ASSET_SUMMARY_REQUIRED_PHRASES:
+        if phrase not in asset_text:
+            raise ValueError(
+                f"STEEL_S2_CONFIGURATION_ASSET_AND_ASSUMPTION_SUMMARY.md is missing required phrase: {phrase}"
+            )
+
+    artifact_audit = review_bundle.tables["s2_artifact_inventory_and_directory_audit.csv"]
+    if list(artifact_audit.columns) != S2_ARTIFACT_INVENTORY_AND_DIRECTORY_AUDIT_COLUMNS:
+        raise ValueError("s2_artifact_inventory_and_directory_audit.csv must match the required column order.")
+    if artifact_audit["artifact_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_artifact_inventory_and_directory_audit.csv must not contain duplicate artifact_id values.")
+    artifact_ids = set(artifact_audit["artifact_id"].astype(str).str.strip())
+    if artifact_ids != S211_REQUIRED_ARTIFACT_IDS:
+        missing = sorted(S211_REQUIRED_ARTIFACT_IDS - artifact_ids)
+        extra = sorted(artifact_ids - S211_REQUIRED_ARTIFACT_IDS)
+        raise ValueError(f"s2_artifact_inventory_and_directory_audit.csv coverage mismatch. missing={missing} extra={extra}")
+    if (~artifact_audit["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_artifact_inventory_and_directory_audit.csv must keep thesis_usability=false for every row.")
+    run_policy_row = artifact_audit.loc[artifact_audit["artifact_id"].eq("GENERATED_SMOKE_RUN_POLICY")].iloc[0]
+    if str(run_policy_row["should_be_committed"]).strip().lower() != "false":
+        raise ValueError("Generated smoke-run directories must remain uncommitted in the S2.11 artifact audit.")
+    if "generated" not in str(run_policy_row["source_or_generated"]).strip().lower():
+        raise ValueError("Generated smoke-run directory row must be marked as generated output in the S2.11 artifact audit.")
+
+    asset_matrix = review_bundle.tables["s2_configuration_asset_assumption_matrix.csv"]
+    if list(asset_matrix.columns) != S2_CONFIGURATION_ASSET_ASSUMPTION_MATRIX_COLUMNS:
+        raise ValueError("s2_configuration_asset_assumption_matrix.csv must match the required column order.")
+    if asset_matrix["row_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_configuration_asset_assumption_matrix.csv must not contain duplicate row_id values.")
+    asset_ids = set(asset_matrix["asset_id"].astype(str).str.strip())
+    if asset_ids != S211_REQUIRED_ASSET_MATRIX_IDS:
+        missing = sorted(S211_REQUIRED_ASSET_MATRIX_IDS - asset_ids)
+        extra = sorted(asset_ids - S211_REQUIRED_ASSET_MATRIX_IDS)
+        raise ValueError(f"s2_configuration_asset_assumption_matrix.csv coverage mismatch. missing={missing} extra={extra}")
+    if (~asset_matrix["thesis_usability"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_configuration_asset_assumption_matrix.csv must keep thesis_usability=false for every row.")
+    active_first_buffer_rows = asset_matrix.loc[
+        asset_matrix["active_in_first_buffer_model"].astype(str).str.strip().str.lower().eq("true")
+    ]
+    active_first_buffer_ids = set(active_first_buffer_rows["asset_id"].astype(str).str.strip())
+    if active_first_buffer_ids != FIRST_BUFFER_ACTIVE_STORE_IDS:
+        raise ValueError("s2_configuration_asset_assumption_matrix.csv must limit first-buffer activation to the three approved store IDs.")
+    blocked_store_rows = asset_matrix.loc[
+        asset_matrix["asset_id"].astype(str).str.strip().isin(
+            {"c0_slab_wip_buffer", "c1_slab_wip_buffer", "c0_hot_slab_transfer_buffer", "c1_hot_slab_transfer_buffer"}
+        )
+    ]
+    if (~blocked_store_rows["active_in_first_buffer_model"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("Deferred slab and hot-slab buffers must remain inactive in the S2.11 asset matrix.")
+
+    s2_to_s3_contract = review_bundle.tables["s2_to_s3_input_contract_register.csv"]
+    if list(s2_to_s3_contract.columns) != S2_TO_S3_INPUT_CONTRACT_REGISTER_COLUMNS:
+        raise ValueError("s2_to_s3_input_contract_register.csv must match the required column order.")
+    if s2_to_s3_contract["contract_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s2_to_s3_input_contract_register.csv must not contain duplicate contract_id values.")
+    contract_inputs = set(s2_to_s3_contract["input_or_artifact"].astype(str).str.strip())
+    if contract_inputs != S211_REQUIRED_CONTRACT_INPUTS:
+        missing = sorted(S211_REQUIRED_CONTRACT_INPUTS - contract_inputs)
+        extra = sorted(contract_inputs - S211_REQUIRED_CONTRACT_INPUTS)
+        raise ValueError(f"s2_to_s3_input_contract_register.csv coverage mismatch. missing={missing} extra={extra}")
+    if (~s2_to_s3_contract["thesis_usability_status"].astype(str).str.strip().str.lower().eq("false")).any():
+        raise ValueError("s2_to_s3_input_contract_register.csv must keep thesis_usability_status=false for every row.")
+
+    s3_gate_checklist = review_bundle.tables["s3_entry_gate_checklist.csv"]
+    if list(s3_gate_checklist.columns) != S3_ENTRY_GATE_CHECKLIST_COLUMNS:
+        raise ValueError("s3_entry_gate_checklist.csv must match the required column order.")
+    if s3_gate_checklist["gate_id"].astype(str).str.strip().duplicated().any():
+        raise ValueError("s3_entry_gate_checklist.csv must not contain duplicate gate_id values.")
+    gate_names = set(s3_gate_checklist["gate_name"].astype(str).str.strip())
+    if gate_names != S211_REQUIRED_S3_GATES:
+        missing = sorted(S211_REQUIRED_S3_GATES - gate_names)
+        extra = sorted(gate_names - S211_REQUIRED_S3_GATES)
+        raise ValueError(f"s3_entry_gate_checklist.csv coverage mismatch. missing={missing} extra={extra}")
+    if not s3_gate_checklist.loc[
+        s3_gate_checklist["gate_name"].astype(str).str.strip().eq("S3_scope_limited_to_energy_cost_emissions_first"),
+        "pass_fail_or_blocked",
+    ].astype(str).str.strip().eq("pass_with_scope_limit").all():
+        raise ValueError("s3_entry_gate_checklist.csv must keep the S3 scope gate limited to energy/cost/emissions first.")
+    if not s3_gate_checklist.loc[
+        s3_gate_checklist["gate_name"].astype(str).str.strip().eq("no_DA_stochastic_mfrr_in_S3_0"),
+        "pass_fail_or_blocked",
+    ].astype(str).str.strip().eq("pass_with_scope_limit").all():
+        raise ValueError("s3_entry_gate_checklist.csv must preserve the no-DA/stochastic/mFRR block for S3.0.")
+
+    return {
+        "s2_material_flow_freeze_memo_present": True,
+        "s2_configuration_asset_summary_memo_present": True,
+        "s2_artifact_inventory_rows_checked": int(len(artifact_audit)),
+        "s2_configuration_asset_assumption_rows_checked": int(len(asset_matrix)),
+        "s2_to_s3_contract_rows_checked": int(len(s2_to_s3_contract)),
+        "s3_entry_gate_rows_checked": int(len(s3_gate_checklist)),
+    }
+
+
 def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[str, Any]:
     tables = review_bundle.tables
     summary = tables["s2_review_summary.csv"]
@@ -3865,6 +4182,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     first_buffer_aware_baseline_payload = validate_s2_first_buffer_aware_baseline_artifacts(review_bundle)
     buffer_sensitivity_payload = validate_s2_buffer_sensitivity_artifacts(review_bundle)
     zero_hit_week_gate_payload = validate_s210e_week_gate_artifacts(review_bundle)
+    s211_freeze_payload = validate_s211_material_flow_freeze_artifacts(review_bundle)
 
     if not PROMOTION_PROTOCOL_MEMO.exists():
         raise ValueError("STEEL_S2_APPROVED_INPUT_PROMOTION_PROTOCOL.md must exist.")
@@ -4522,6 +4840,7 @@ def validate_s2_candidate_review(review_bundle: GovernanceTableBundle) -> dict[s
     payload.update(first_buffer_aware_baseline_payload)
     payload.update(buffer_sensitivity_payload)
     payload.update(zero_hit_week_gate_payload)
+    payload.update(s211_freeze_payload)
     return payload
 
 

@@ -1,0 +1,7 @@
+completeness_id,boundary_component,current_status,complete_for_s3_2_model_boundary,plant_validation_claim_allowed,blocks_s4_if_unresolved,limitations,next_action
+S32_EMIT_READY_001,WAG oxidation by carrier and sink,selected,true,false,false,Carrier factors are development selections and not Tata exact,Retain point-of-oxidation accounting
+S32_EMIT_READY_002,DRP NG plus residual decomposition,selected,true,false,false,Uses existing DRP proxy as total target and selected NG factor,Replace with stronger DRP source decomposition if available
+S32_EMIT_READY_003,BF_BOF non-WAG process residual,selected_development_proxy,true,false,false,Development-only aggregate residual boundary proxy,Replace with compatible source-backed BF-BOF direct boundary before thesis validation
+S32_EMIT_READY_004,downstream reheating direct emissions,selected,true,false,false,Only external NG and WAG oxidation are counted; no detailed furnace carbon chemistry,Review if other downstream fuels are selected
+S32_EMIT_READY_005,Scope 2 operational grid emissions,selected_separate_report,true,false,false,Not charged under ETS and not full lifecycle,Keep separate from direct emissions
+S32_EMIT_READY_006,complete plant direct-emissions claim,blocked,false,false,true,S3.2 is complete for represented model boundary but not a complete confidential plant emissions ledger,Do not claim plant validation

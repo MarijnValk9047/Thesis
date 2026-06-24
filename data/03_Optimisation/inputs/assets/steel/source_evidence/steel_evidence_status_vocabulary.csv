@@ -1,0 +1,14 @@
+status_id,status_name,meaning,allowed_for_source_card,allowed_for_parameter_evidence,may_be_used_in_dev_smoke_review,may_be_used_in_thesis_input,requires_human_review,notes
+STEEL-EVID-STATUS-001,discovery_only,Source or evidence has been identified but not checked against a stable primary source,true,true,false,false,true,Discovery-only rows are not development inputs.
+STEEL-EVID-STATUS-002,extracted_from_primary_source,Information was extracted from the underlying primary source,true,true,true,false,true,Still requires governed review before approved input promotion.
+STEEL-EVID-STATUS-003,extracted_from_secondary_source,Information was extracted from a secondary or corroborating source,true,true,false,false,true,Use for corroboration or sensitivity unless reviewed otherwise.
+STEEL-EVID-STATUS-004,candidate_range,Reviewed candidate range evidence for later non-approved analysis,false,true,true,false,true,Does not create an executable coefficient.
+STEEL-EVID-STATUS-005,candidate_point_value,Reviewed candidate point-value evidence for later non-approved analysis,false,true,true,false,true,Point values still require separate approval before use as model inputs.
+STEEL-EVID-STATUS-006,validation_target_only,Evidence may support validation or plausibility checks only,true,true,false,false,true,Validation targets must not become operating constraints.
+STEEL-EVID-STATUS-007,assumption_only,Modelling convention or assumption requiring explicit review,false,true,false,false,true,Assumptions are not extracted physical truth.
+STEEL-EVID-STATUS-008,sensitivity_only,Evidence may support labelled sensitivity analysis only,true,true,false,false,true,Not eligible for base-case input without later promotion.
+STEEL-EVID-STATUS-009,blocked_confidential_or_redacted,Evidence is blocked because it is confidential redacted or not publicly reportable,true,true,false,false,true,May support category awareness only.
+STEEL-EVID-STATUS-010,locator_incomplete,Stable locator or page table section information is incomplete,true,true,false,false,true,Blocks development-input review until completed.
+STEEL-EVID-STATUS-011,pending_human_review,Evidence is waiting for human review,true,true,false,false,true,No executable use before review.
+STEEL-EVID-STATUS-012,approved_model_input,Vocabulary label only for values promoted into separate approved-input tables,false,false,false,true,false,Actual approved values live in governed approved-input tables not candidate-evidence rows.
+STEEL-EVID-STATUS-013,rejected,Evidence was reviewed and rejected for the intended use,true,true,false,false,false,Rejected evidence remains non-executable.

@@ -165,6 +165,12 @@ def test_dry_run_validator_reports_alignment_and_empty_approved_input_surface():
     assert payload["zero_hit_attribution_rows_checked"] == 6
     assert payload["weekly_smoke_target_audit_rows_checked"] == 2
     assert payload["one_week_buffer_smoke_rows_checked"] == 2
+    assert payload["s2_material_flow_freeze_memo_present"] is True
+    assert payload["s2_configuration_asset_summary_memo_present"] is True
+    assert payload["s2_artifact_inventory_rows_checked"] == 54
+    assert payload["s2_configuration_asset_assumption_rows_checked"] == 26
+    assert payload["s2_to_s3_contract_rows_checked"] == 14
+    assert payload["s3_entry_gate_rows_checked"] == 13
     assert payload["approved_rows"] == 0
     assert payload["thesis_grade_numerical_rows"] == 0
     assert payload["candidate_review_executable_rows"] == 0

@@ -1,0 +1,6 @@
+mechanism_id,mechanism,status,reason,would_affect_target,approved_input_status
+S33F_REJECT_001,inherited C0 residual NG carryover,rejected_not_run,"S3.3e classified residual_c0_ng_m3_per_t_final as a C0 calibration closure, not a C1 source-backed gas consumer.",natural_gas,blocked
+S33F_REJECT_002,Table 9 back-calculated C1 residual NG term,rejected_not_run,Would fit the target from the holdout value itself and violate the no residual gap-closure rule.,natural_gas,blocked
+S33F_REJECT_003,arbitrary C1 WAG availability correction,rejected_not_run,S3.3a diagnostic WAG factors lack source-carded lower/central/upper ranges.,wag_electricity,blocked
+S33F_REJECT_004,arbitrary WAG-to-power cap or Vattenfall dispatch correction,rejected_not_run,Only governed WAG-to-power efficiency and residual-utilisation ranges are eligible; no fitted cap is allowed.,wag_electricity,blocked
+S33F_REJECT_005,unsupported missing-value zero,rejected_by_design,Candidate construction only uses registered numeric ranges; missing bounds are excluded instead of silently filled.,all,blocked

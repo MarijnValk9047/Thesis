@@ -1,0 +1,2 @@
+overlay_id,annual_final_product_t,target_24h_t,target_168h_t,slab_yard_capacity_t,hot_metal_buffer_capacity_t,dsp_share,legacy_baseline_preserved,approved_input_shell_populated,notes
+site_scale_6_2Mt_calibration,6200000.0,16986.301369863013,118904.1095890411,25000.0,500.0,0.2,true,false,S3.3 provisional calibration overlay; does not overwrite S2.13/S3.2 development baseline.

@@ -1,0 +1,6 @@
+decision_id,item,value,status,notes
+S33G_BOUNDARY_001,best_case,S33G_CAND_006,bounded_alignment_only,Diagnostic decomposition improves only if source-supported/diagnostic sink assumptions are accepted.
+S33G_BOUNDARY_002,improvement_over_s3_3f,true,diagnostic_comparison,S3.3f reference weighted score=0.10115315803870355; S3.3g best weighted score=0.048399291842715214.
+S33G_BOUNDARY_003,remaining_gap_classification,numeric_source_and_boundary_related,not_strict_validation,Several gas paths are structurally source-backed but need approved numeric source cards before freeze use.
+S33G_BOUNDARY_004,s3_3_freeze_status,not_frozen,blocked,S3.3g is diagnostic and does not promote approved inputs.
+S33G_BOUNDARY_005,s4_readiness,not_ready,blocked,No S4 logic is introduced.

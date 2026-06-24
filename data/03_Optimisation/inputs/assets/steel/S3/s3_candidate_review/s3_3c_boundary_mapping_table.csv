@@ -1,0 +1,4 @@
+boundary_item,pre_s3_3c_status,s3_3c_mapping,strict_validation_status,double_counting_rule
+C1 Table 9 natural gas,broader_boundary_holdout_context,DRP NG + inherited C0 residual NG + explicit downstream/light-side utility heat NG,directional_validation_only_until_source_review,Utility NG is external natural gas; WAG fuel energy is not added again as primary energy.
+C1 Table 9 WAG electricity,C1 WAG-to-power high versus target,"WAG remaining after process, steam, reheating, utility heat and flare through power interface",directional_validation_only_until Vattenfall/interface evidence is approved,"WAG electricity is internal conversion output, not extra primary input."
+Figure 104 primary proxy,soft broader-boundary holdout,external coal proxy + external natural gas + gross electricity; WAG not added separately,soft_holdout,Coal-origin WAG is not double-counted.

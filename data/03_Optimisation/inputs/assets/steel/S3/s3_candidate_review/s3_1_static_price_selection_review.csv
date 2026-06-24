@@ -1,0 +1,7 @@
+review_id,price_name,selected_value,unit,current_status,evidence_tier,model_use_status,blocks_monetary_ledger,tata_exact_claim_allowed,thesis_validation_claim_eligible,limitations,next_action
+S31_PRICE_REVIEW_001,grid_electricity_price,,EUR/MWh,missing_no_governed_static_price,X,not_selected_missing,true,false,false,No DA price or web price may be used in S3.1.,Select governed static price or move to S4 DA price-taking.
+S31_PRICE_REVIEW_002,natural_gas_price,,EUR/GJ,missing_no_governed_static_price,X,not_selected_missing,true,false,false,Physical gas import is reported but monetary gas cost is blank.,Select governed static gas price.
+S31_PRICE_REVIEW_003,gross_co2_price,,EUR/t_CO2,missing_no_governed_static_price,X,not_selected_missing,true,false,false,Gross CO2 cost and ETS remain blocked.,Select governed static CO2 price and ETS scope.
+S31_PRICE_REVIEW_004,flare_spill_penalty,,EUR/GJ,missing_no_governed_static_price,X,not_selected_missing,true,false,false,Flare/spill is physical residual only.,Select governed penalty if needed.
+S31_PRICE_REVIEW_005,startup_cost_proxy,,EUR/start,missing_no_governed_static_price,X,not_selected_missing,true,false,false,Startup count is diagnostic only.,Select governed startup proxy if needed.
+S31_PRICE_REVIEW_006,network_tariff_proxy,,EUR/MWh,missing_no_governed_static_price,X,not_selected_missing,true,false,false,Tariff/network logic remains out of scope.,Select governed tariff policy later.

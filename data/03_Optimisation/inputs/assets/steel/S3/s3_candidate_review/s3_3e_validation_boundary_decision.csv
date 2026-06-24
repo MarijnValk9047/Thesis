@@ -1,0 +1,4 @@
+boundary_id,target_group,previous_role,new_role,strict_freeze_use,contextual_reporting_use,reason
+S33E_BOUNDARY_001,Athanasiadis Table 9 carrier totals,strict C1 principal holdout gate,broader-boundary contextual holdout,false,true,Inherited C0 residual cannot be decomposed into source-backed C1 gas consumers without hidden residual fitting.
+S33E_BOUNDARY_002,current public MILP process-network checks,implicit feasibility checks,strict S3.3e freeze checks,true,false,"Production, terminal neutrality, material/energy/carbon accounting, and no-double-counting match the represented boundary."
+S33E_BOUNDARY_003,C1 carrier-direction checks,principal pass/fail target,directional site-level holdout,false,true,Reported to preserve transparency but not used as a freeze gate.

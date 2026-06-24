@@ -1,0 +1,6 @@
+decision_id,item,value,status,notes
+S33H_BOUNDARY_001,interpretation,gap_sizing_only,not_strict_validation,Extended boiler/steam values above 2 PJ/y remain diagnostic gap-sizing only.
+S33H_BOUNDARY_002,c0_preservation,required_for_block_b_acceptance,enforced,Block B candidates are not accepted if C0 calibration tolerances fail.
+S33H_BOUNDARY_003,target_counts,within_5=0;within_10=39;within_15=78,diagnostic_result,Counts include Block A and Block B C1 rows.
+S33H_BOUNDARY_004,s3_3_freeze_status,not_frozen,blocked,S3.3h is diagnostic and does not promote approved inputs.
+S33H_BOUNDARY_005,s4_readiness,not_ready,blocked,No S4 logic is introduced.

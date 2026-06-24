@@ -112,3 +112,5 @@ The resulting first buffer-aware baseline interpretation freeze is recorded in `
 The guarded `S2.10d` sensitivity interpretation for those first active buffers is recorded in `STEEL_S2_BUFFER_SENSITIVITY_DIAGNOSTICS.md`.
 
 The later `S2.10e/S2.10f` zero-hit attribution gate and conditional weekly smoke evidence are recorded in `STEEL_S2_ZERO_HIT_ATTRIBUTION_AND_WEEK_GATE.md`.
+
+The formal `S2.11` material-flow freeze and the guarded `S3` entry contract are now recorded in `STEEL_S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT.md`, with the asset-by-asset interpretation frozen in `STEEL_S2_CONFIGURATION_ASSET_AND_ASSUMPTION_SUMMARY.md`.

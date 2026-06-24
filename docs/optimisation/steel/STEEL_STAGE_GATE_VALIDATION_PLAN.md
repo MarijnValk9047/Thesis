@@ -413,3 +413,7 @@ Usable only if the risk-return tradeoff is reported without contaminating earlie
 
 - CVaR used to cover weak scenarios or unstable base physics;
 - risk settings tuned on final test outcomes.
+
+## Current Steel Gate Note
+
+The current steel workstream is frozen at `S2.11`. The authoritative end-of-`S2` contract and the allowed `S3.0` scope boundary are recorded in `STEEL_S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT.md`.

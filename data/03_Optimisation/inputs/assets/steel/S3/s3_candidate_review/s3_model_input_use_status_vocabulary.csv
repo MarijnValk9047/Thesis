@@ -1,0 +1,7 @@
+model_use_status,description,executable_in_development,executable_in_final_thesis_model,usable_for_validation_claim,requires_limitations,requires_sensitivity_review,notes
+blocked,No model or claim use is allowed,false,false,false,true,false,Used for unsourced AI-generated hidden-placeholder confidential/redacted exact-claim generated-output or incompatible-basis cases.
+development_only,May be used only in development diagnostics or scaffolds,true,false,false,true,true,Does not populate approved input tables and cannot support thesis claims.
+thesis_model_assumption,May be used as a declared final thesis model assumption when tier requirements are satisfied,true,true,false,true,true,Not an empirical validation target and not Tata-exact unless Tier A explicitly permits.
+thesis_model_sensitivity,May be used in a final thesis sensitivity or scenario case when tier requirements are satisfied,true,true,false,true,true,Includes Tier D scenario assumptions and low/high variants.
+validation_target_only,May be used for validation or plausibility context only,false,false,true,true,false,Not executable as hourly input unless translated through a separate assumption.
+derived_assumption,May be used as a derived final model assumption when formula inputs and weakest-tier rules are satisfied,true,true,false,true,true,Requires formula input IDs conversion note and no hidden assumptions.

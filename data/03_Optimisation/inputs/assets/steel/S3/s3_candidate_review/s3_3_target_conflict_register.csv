@@ -1,0 +1,3 @@
+conflict_id,target_ids,source_values,decision,source_inconsistency_flag,calibration_score_impact,notes
+S33_CONFLICT_001,C0_FIG96_ELECTRICITY_SHARE_DISPUTED;C0_TABLE8_GROSS_ELECTRICITY,Figure96 electricity share 9.3 pct implies about 2.651 TWh/year; Table8 reports 3.17 TWh/year,Use c0_table8_primary for calibration; keep c0_figure96_reported as soft audit.,true,Figure 96 electricity share excluded from score.,Reported Figure 96 carrier shares are not overwritten.
+S33_CONFLICT_002,C1_FIG104_TOTAL_PRIMARY_PROXY,User previously referred to Figure 107; confirmed values correspond to Figure 104.,Record Figure 104 as holdout-validation source.,false,No C1 values enter C0 calibration score.,

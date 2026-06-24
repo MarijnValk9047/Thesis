@@ -1,0 +1,5 @@
+change_id,mechanism_id,change_type,implemented,approved_input_status,notes
+S33C_CHANGE_001,S33C_MECH_001,utility_heat_node_added,true,candidate_boundary_extension_not_approved_input,Adds explicit downstream/light-side utility heat demand and WAG/NG service arcs.
+S33C_CHANGE_002,S33C_MECH_002,downstream_light_side_ng_candidate,true,candidate_input_not_gap_closure,Uses 7.5-8.0 PJ/y sensitivity as boundary evidence; not fitted to Table 9.
+S33C_CHANGE_003,S33C_MECH_005,wag_to_power_efficiency_sensitivity,true,candidate_sensitivity_only,Adds optional 0.321 public lower efficiency case without changing C0 calibrated parameter sets.
+S33C_CHANGE_004,S33C_MECH_006,blocked_arbitrary_gap_values,true,blocked,No S3.3a WAG availability factor or residual NG gap scalar is promoted.

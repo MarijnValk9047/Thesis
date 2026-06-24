@@ -1,0 +1,6 @@
+change_id,mechanism_id,change_type,implemented,source_or_basis,approved_input_status,notes
+S33B_CHANGE_001,S33B_MECH_008,route_share_case_added,true,DRP capacity 500 t pellets/h * 0.74 * 0.95 at 6.2 Mt/y,diagnostic_not_approved_input,Adds BF-BOF share near 0.503; keeps 0.55/0.61/0.68 cases.
+S33B_CHANGE_002,S33B_MECH_004,metric_boundary_reporting,true,"DRP NG 195 m3/t pellets, converted to route coefficient",existing_provisional_dev_input,Directional validation reports explicit DRP NG separately from inherited residual NG.
+S33B_CHANGE_003,S33B_MECH_010,metric_boundary_reporting,true,Existing WAG hierarchy constraints,existing_model_logic,"Reports WAG process, steam/boiler, reheating, and power uses."
+S33B_CHANGE_004,S33B_MECH_011,numeric_ng_topup,false,Qualitative top-up evidence lacks governed numeric value,source_needed,No S3.3a NG gap-closure value promoted.
+S33B_CHANGE_005,S33B_MECH_012,numeric_wag_interface_reduction,false,No source-carded C1 WAG-to-power availability factor,source_needed,No S3.3a WAG availability cap promoted.

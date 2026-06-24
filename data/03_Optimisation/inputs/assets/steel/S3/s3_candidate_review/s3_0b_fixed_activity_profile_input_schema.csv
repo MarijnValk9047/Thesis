@@ -1,0 +1,21 @@
+field_name,required,allowed_values_or_format,description,validation_rule,notes
+profile_package_id,true,string; stable governed package ID,Identifier for the canonical fixed activity profile package,must be non-empty,Schema only; no profile rows are created in S3.0b-a
+profile_row_id,true,string; unique within package,Row identifier for one activity/timestep record,must be unique within profile_package_id,Schema only
+configuration_id,true,C0_current_BF_BOF_reference|C1_phase1_hybrid_BF_BOF_NG_DRP_EAF,Governed S2 configuration label,must match governed C0/C1 labels unless future review adds more,No future configuration may be inferred by Codex
+scenario_label,true,fixed_s2_profile|reviewed_diagnostic_label,Label for fixed profile case,must not encode stochastic scenario sampling,S3.0b-a blocks stochastic inputs
+time_index,true,integer >= 0,Ordinal timestep index,must be contiguous within package and activity,No implicit horizon length
+timestamp_utc,true,ISO-8601 UTC timestamp,UTC timestamp for the activity row,must include UTC basis,Local time may be reporting-only later
+timestep_hours,true,positive decimal,Explicit timestep duration in hours,must be positive and explicit,Required to avoid hidden hourly assumptions
+s2_activity_id,true,string from governed S2 activity IDs,Activity or process ID from frozen S2 profile,must map to frozen S2/S2.12 object,Must not create new S2 activity variables
+s2_activity_type,true,process_activity|store_inflow|store_outflow|store_inventory|liquid_steel_diagnostic_output,Type of fixed activity value,must be one of allowed schema values,No downstream flexibility activity type in S3.0b-a
+activity_value,true,decimal,Fixed activity value copied into governed profile package,must be numeric in future data package but no values are created now,Schema only
+activity_unit,true,t_per_hour|tonnes|timestep_total_tonnes|other_reviewed_unit,Unit of activity value,must be explicit,No unit inference from file name
+activity_direction,true,production|consumption|inventory|diagnostic_output,Direction for accounting interpretation,must be one of allowed values,Used later to prevent sign ambiguity
+source_stage,true,S2.11|S2.12|reviewed_future_stage,Source stage for the fixed profile,must be frozen or reviewed source stage,Generated run folders are not source stages
+source_artifact_id,true,string,Governed artifact identifier for provenance,must be non-empty,May reference generated evidence only through provenance policy
+source_artifact_path,true,repo-relative governed input path,Path to canonical governed package or reviewed provenance record,must not be generated run folder as canonical source,Generated run folder may be evidence only
+source_artifact_hash,true,hash string or reviewed_not_available,Hash of canonical package/provenance artifact,must be present before execution,Hash requirement may be reviewed if artifact is schema-only
+profile_extraction_method,true,documented_fixed_profile_extraction|manual_reviewed_package,Method used to canonicalise profile,must be documented and reviewed before execution,No direct arbitrary run-folder scraping
+review_status,true,candidate_governance_only|provisional_review_required|reviewed_for_diagnostic,Review state for profile package,must not be approved executable in S3.0b-a,Human review required before calculation
+thesis_usability,true,false,Thesis usability flag,must equal false in S3.0b-a,All schema rows are non-thesis
+notes,false,free text,Additional governance notes,no executable values,Schema only

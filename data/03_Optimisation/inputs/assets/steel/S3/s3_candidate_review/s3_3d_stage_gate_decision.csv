@@ -1,0 +1,7 @@
+gate_id,gate_name,status,notes
+S33D_GATE_001,all_s3_3c_assumptions_classified,pass,"S3.3d assumption review, promotion, rejection, and residual audit artifacts were written."
+S33D_GATE_002,c0_retained_ensemble_regression,pass,C0 uses no utility-boundary activation; S3.3c defaults remain inactive.
+S33D_GATE_003,c1_provisional_utility_pass_cases,pass,Principal C1 tolerance pass rows under provisional utility cases: 1.
+S33D_GATE_004,inherited_residual_ng_resolved,blocked,Inherited C0 residual NG remains non-promotable and blocks freeze.
+S33D_GATE_005,s4_readiness,blocked,S4 remains blocked unless freeze-ready C1 validation is achieved without blocked residual terms.
+S33D_DECISION,stage_gate_decision,provisionally_acceptable_pending_source_card_review_but_s3_3_blocked,Athanasiadis Table 9 remains broader-boundary/contextual unless utility values and residual decomposition are promoted.

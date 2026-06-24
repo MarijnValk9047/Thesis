@@ -1,0 +1,39 @@
+field_name,required,allowed_values_or_format,description,validation_rule,notes
+diagnostic_run_id,true,string,Identifier for later diagnostic run,must be non-empty when implemented,Schema only in S3.0b-a
+profile_package_id,true,string,Input fixed profile package ID,must match governed profile package,No arbitrary run-folder source
+configuration_id,true,C0_current_BF_BOF_reference|C1_phase1_hybrid_BF_BOF_NG_DRP_EAF,Governed S2 configuration label,must match input package configuration,No future config without review
+timestamp_utc,true,ISO-8601 UTC timestamp,UTC timestamp for diagnostic row,must be UTC,No local-only timestamp
+timestep_hours,true,positive decimal,Explicit timestep duration,must be positive,No implicit hourly assumption
+wag_carrier,true,BFG|BOFG_LD_gas|COG|mixed_wag_if_reviewed,WAG carrier label,must be governed carrier,No unreviewed carrier
+wag_generated_energy,true,decimal,Diagnostic generated WAG energy,must be non-negative when implemented,No values in S3.0b-a
+wag_generated_unit,true,MWh_LHV|GJ_LHV|reviewed_energy_unit,Unit for generated WAG energy,must be explicit,Common basis required
+wag_used_process_fuel_energy,true,decimal,Diagnostic WAG used as process fuel,must be non-negative when implemented,Useful-energy substitution only
+wag_used_steam_boiler_energy,true,decimal,Diagnostic WAG used in steam or boiler use,must be non-negative when implemented,Useful-energy substitution only
+wag_to_power_interface_energy,true,decimal,Diagnostic WAG sent through power interface,must be non-negative when implemented,Not market dispatch
+wag_flared_or_spilled_energy,true,decimal,Diagnostic WAG flared or spilled,must be non-negative when implemented,Residual sink mandatory
+wag_unused_energy,true,decimal,Diagnostic unused WAG,must be non-negative when implemented,Residual visibility mandatory
+diagnostic_net_import_offset_mwh,true,decimal,Diagnostic electricity net-import offset,must not be settlement or revenue,No DA price field allowed
+diagnostic_natural_gas_substitution,true,decimal,Diagnostic natural-gas substitution,must not be revenue,Useful-energy substitution only
+emissions_direct,true,decimal,Diagnostic direct emissions by boundary rule,must use reviewed emissions rule,No thesis claim in S3.0b
+emissions_wag_combustion_or_flare,true,decimal,Diagnostic WAG combustion or flare emissions,must use no-double-counting rule,Separate from generation accounting
+emissions_natural_gas,true,decimal,Diagnostic natural-gas emissions,must use reviewed displacement/emissions factors,Separate from WAG emissions
+emissions_double_counting_flag,true,true|false|review_required,Flag for emissions double-counting risk,must be false or reviewed before thesis use,Diagnostic validation only
+balance_residual,true,decimal,Mass or energy balance residual,must be reported,No hidden residual disposal
+validation_status,true,pass|fail|review_required,Diagnostic validation status,must be explicit,Development-only
+production_scale_metadata,true,structured_object,Annualised model production and reference-scale metadata,must not treat capacity as realised production,Development-only scale validation
+electricity_proxy_basis,true,structured_object,Annual-average electricity proxy source and basis,must label not observed hourly truth,No plant-load claim
+scale_consistency,true,structured_object,Scale consistency flags and classifications,must block plant-level interpretation when mismatched,No automatic rescaling
+normalised_metrics,true,structured_object,Per-tonne WAG generation electricity and emissions metrics,must remain available under scale mismatch,Mechanics validation only
+interpretation_readiness_flags,true,structured_object,Separate mechanics plant interpretation cost and thesis readiness flags,must not collapse to plant_runtime_ready,Current C0 plant flags false
+warnings,true,list,Required interpretation caveats,must include zero NG zero flare proxy scale and partial ledger caveats,No favourable operational claim
+interpretation_class,true,mechanics_validation|minimum_known_heat_sink|potential_import_offset_upper_bound|plant_accounting_ready,Diagnostic interpretation class,current C0 must not be plant_accounting_ready,Multiple labels may apply
+diagnostic_level,true,minimum_known_heat_sink_c0|component_energy_boundary_diagnostic|full_plant_diagnostic_if_later_ready,Explicit diagnostic level,must not label component diagnostic as full plant,S3.0d-a interpretation gate
+component_boundary_only,true,true|false,Whether output is limited to represented component loads,must be true for current C1 component diagnostics,Blocks plant-level import reading
+component_zero_import_warning,true,true|false,Warning flag when represented component residual import is zero,must be true for current C1 scenarios,Zero component import is not plant import
+plant_level_import_interpretation_ready,true,true|false,Whether plant-level grid import interpretation is allowed,must be false until electricity boundary closes,Cost and DA blocked when false
+plant_level_power_offset_interpretation_ready,true,true|false,Whether power offset can be interpreted at plant level,must be false for component-only diagnostics,Potential offset only
+cost_integration_ready,true,true|false,Whether cost integration is ready,must be false for current C0/C1 diagnostics,No cost layer in S3.0d-a
+da_market_integration_ready,true,true|false,Whether DA market integration is ready,must be false for current C0/C1 diagnostics,No DA price bidding settlement or revenue
+wag_offset_interpretation_status,true,string,Text status for WAG offset interpretation,must state capped by represented component electricity for current C1,No actual dispatch or revenue claim
+thesis_usability,true,false,Thesis usability flag,must equal false in S3.0b,All outputs non-thesis until reviewed
+notes,false,free text,Additional diagnostic notes,must not contain settlement revenue or DA price fields,Schema only

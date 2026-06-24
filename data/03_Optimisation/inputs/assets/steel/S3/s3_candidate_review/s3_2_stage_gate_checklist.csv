@@ -1,0 +1,9 @@
+gate_id,gate_name,pass_fail_or_blocked,evidence,status,limitations,next_action
+S32_GATE_001,S2.13a slab-yard capacity amendment documented,pass,s3_2_slab_yard_capacity_amendment_register.csv,ready_development_only,Central 25000 t is public-thesis-derived and not Tata exact,Review with stronger site evidence if found
+S32_GATE_002,static material prices selected,pass,s3_2_selected_material_inputs.csv,ready_development_only,Tier-D material prices remain sensitivity assumptions,Replace with public benchmark packet before thesis validation
+S32_GATE_003,static energy and EUA prices selected,pass,s3_2_selected_static_prices.csv,ready_development_only,Static only and no DA price variation,Use for baseline before S4 DA price-taking
+S32_GATE_004,direct and Scope 2 emissions separated,pass,s3_2_carbon_boundary_and_decomposition_register.csv,ready_development_only,Plant validation still false,Keep Scope 2 outside ETS cost
+S32_GATE_005,bounded WAG interface selected,pass,s3_2_wag_power_interface_policy_register.csv,ready_development_only,Not a physical Vattenfall dispatch claim,Run low central high sensitivity
+S32_GATE_006,endogenous route cost-completeness gate,pass,s3_2_route_cost_coverage_register.csv,ready_development_only,Costs are development assumptions but complete for model boundary,Endogenous route is diagnostic not validation
+S32_GATE_007,24h mandatory smokes,pass,s3_2_smoke_and_168h_result_register.csv,ready_development_only,All mandatory 24h smokes passed with stress infeasibility preserved,Keep regression tests active
+S32_GATE_008,168h mandatory runs,pass,s3_2_smoke_and_168h_result_register.csv,ready_development_only,C0 fixed C1 and endogenous C1 168h runs passed under central assumptions,Keep 168h baseline in S4 entry checks

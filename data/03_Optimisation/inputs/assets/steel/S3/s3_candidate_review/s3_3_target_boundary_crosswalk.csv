@@ -1,0 +1,7 @@
+crosswalk_id,target_id,model_metric,boundary_match,gross_net_interpretation,double_counting_rule,score_role,notes
+S33_CROSSWALK_001,C0_TABLE8_GROSS_ELECTRICITY,gross_electricity_twh_per_year,direct,gross site electricity consumption,distinct from WAG electricity and net grid import,calibration_score,
+S33_CROSSWALK_002,C0_TABLE8_WAG_ELECTRICITY,wag_electricity_twh_per_year,direct,internal WAG-to-power electricity output,reported separately; not added as primary energy input,calibration_score,
+S33_CROSSWALK_003,C0_TABLE8_NATURAL_GAS_FLOW,natural_gas_m3_per_h,adapter_with_residual_site_ng_component,gross external NG flow,NG energy counted once through external gas import,calibration_score,Residual C0 site NG demand is explicit in parameter register.
+S33_CROSSWALK_004,C0_TABLE8_DIRECT_CO2,direct_site_co2_t_per_year,provisional,direct site emissions proxy,Scope 2 reported separately,calibration_score,Athanasiadis CO2 boundary remains uncertain.
+S33_CROSSWALK_005,C0_FIG96_TOTAL_PRIMARY_PROXY,athanasiadis_primary_proxy_pj_per_year,soft_proxy,coal-origin energy plus NG plus gross electricity,WAG fuel energy is internal conversion and not added again,soft_calibration_score,Figure 96 electricity share remains disputed.
+S33_CROSSWALK_006,C0_FIG96_ELECTRICITY_SHARE_DISPUTED,electricity_share_athanasiadis_proxy,conflicting_source,reported Figure 96 share,excluded from hard score because Table 8 reports gross 3.17 TWh,audit_only,Do not force Table 8 and Figure 96 electricity values simultaneously.

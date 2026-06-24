@@ -1,0 +1,5 @@
+decision_id,item,decision,freeze_role,reason
+S33E_DECISION_001,explicit DRP NG,accept,strict internal process-network component,Source-carded C1 DRP NG intensity and activity basis are explicit and already represented.
+S33E_DECISION_002,downstream/light-side utility NG,retain_provisional,broader-boundary sensitivity/context,Boundary evidence is useful but remains provisional and must not be used as fitted gap closure.
+S33E_DECISION_003,inherited C0 residual NG,reject_for_c1,not freeze-relevant,Equals C0 calibration closure and lacks source-backed C1 decomposition.
+S33E_DECISION_004,Table 9 carrier totals,downgrade_to_contextual_holdout,directional broader-boundary reference,Carrier totals include broader utility/site boundary not fully represented by the public MILP.

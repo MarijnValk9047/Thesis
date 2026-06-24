@@ -1,0 +1,24 @@
+field_name,required,allowed_values_or_format,description,applies_to_parameter_family,validation_rule,notes
+row_id,true,unique_string,Stable row identifier,all,non_empty_unique,No data rows are approved in S3.0a
+configuration_id,true,C0_current_BF_BOF_reference|C1_phase1_hybrid_BF_BOF_NG_DRP_EAF|shared,Configuration scope,all,must_match_allowed_configuration,No new configurations
+s2_or_s2_12_object_id,true,string_or_semicolon_list,Source object from frozen S2 or S2.12 boundary,all,must_match_mapping_register_before_execution,Must not create new source objects in S3.0a
+s2_or_s2_12_object_type,true,controlled_string,Source object type,all,non_empty,Examples include process_activity downstream_node wag_boundary
+accounting_layer,true,controlled_string,Accounting layer classification,all,non_empty,Must align with parameter universe
+carrier,true,controlled_string_or_not_applicable,Carrier or material relevant to the parameter,all,non_empty,Examples electricity natural_gas BFG BOFG_or_LD_gas COG CO2 not_applicable
+parameter_family,true,controlled_string,Parameter family,all,must_match_parameter_universe,Blocked families remain blocked
+parameter_name,true,string,Human-readable parameter name,all,non_empty,No hardcoded Python parameter names as approval
+value,false,blank_or_numeric_or_range,Future value field,coefficient_or_cost_or_validation_families,blank_allowed_in_schema_only,Approved values are not allowed in S3.0a
+unit,true,string_or_to_be_reviewed,Unit with basis,all,non_empty,Must be explicit before future execution
+time_basis,true,hourly|profile_sum|period_total|intensity|not_applicable,Time basis,all,must_match_allowed_values,Public annual anchors cannot become hourly truth without translation
+direction,true,input|output|generation|consumption|residual|reporting_only|not_applicable,Accounting direction,all,must_match_allowed_values,Used to prevent double counting
+source_id,true,string_or_to_be_reviewed,Source identifier,all,non_empty,Required before future execution
+source_status,true,candidate_governance_only|candidate_value_unreviewed|provisional_dev_only|validation_target_only|sensitivity_only|approved_model_input|blocked|deferred_future_stage,Source status,all,must_match_status_policy,Approved_model_input not allowed for S3.0a data rows
+evidence_class,true,public_formal|public_generic|proxy|validation_anchor|research_discovery_only|not_applicable,Evidence class,all,must_match_allowed_values,Athanasiadis-style values cannot become exact Tata truth
+review_status,true,not_approved|review_required|blocked|deferred|protocol_only,Review status,all,must_not_be_approved_in_s3_0a,Human review required before promotion
+approval_status,true,not_approved|blocked|deferred|protocol_only,Approval status,all,must_not_be_approved_in_s3_0a,No approved rows in S3.0a
+thesis_usability,true,false,Thesis usability flag,all,must_equal_false,All S3.0a rows remain non-thesis
+codex_may_decide,true,false,Codex decision authority,all,must_equal_false,Codex may prepare schema only
+reviewer_decision_required,true,true|false,Human review requirement,all,must_be_true_unless_blocked_or_protocol,Required before executable use
+allowed_stage,true,S3_0a|S3_0b|S3_0c|S3_1|S4_or_later|S6_or_later|S7_or_later|S9_or_later|methodology_reopened_only|validation_only,Allowed future stage,all,non_empty,S3.0a rows are schema only
+blocked_reason,true,string_or_none,Reason blocked or deferred,all,non_empty_for_blocked_families,Must document blocked market and flexibility scopes
+notes,false,string,Additional caveats,all,free_text,Keep concise and source-aware

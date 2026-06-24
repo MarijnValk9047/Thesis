@@ -1,0 +1,10 @@
+gate_id,gate_name,pass_fail_or_blocked,notes
+S33_GATE_001,separate_6_2Mt_overlay_exists,pass,Calibration overlay is written under S3 provisional input.
+S33_GATE_002,legacy_2_98Mt_baseline_preserved,pass,No S2.13/S3.2 baseline overwrite.
+S33_GATE_003,fixed_storage_capacities_recorded,pass,Slab yard 25000 t and hot-metal 500 t recorded.
+S33_GATE_004,figure96_table8_conflict_governed,pass,Conflict register excludes disputed electricity share from score.
+S33_GATE_005,c0_168h_minimum_three_sets,pass,Retained sets: 5.
+S33_GATE_006,c1_holdout_without_retuning,blocked,C1 holdout pass cases: 0.
+S33_GATE_007,behavioral_holdouts_recorded,pass,Behavioural rows: 21.
+S33_GATE_008,no_da_stochastic_cvar_mfrr_logic,pass,S3.3 runner adds no market or risk logic.
+S33_GATE_009,freeze_status,blocked,S4 entry only if all prior gates pass.

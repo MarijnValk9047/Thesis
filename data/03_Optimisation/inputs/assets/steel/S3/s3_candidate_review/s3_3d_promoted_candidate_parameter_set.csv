@@ -1,0 +1,4 @@
+parameter_set_id,promotion_scope,downstream_light_side_ng_pj_per_year,wag_to_power_efficiency_fraction,classification,approved_input_status,source_basis,notes
+s3_3d_provisional_utility_low,promoted_to_s3_3d_provisional_validation_only,7.5,0.321,provisional input,not_approved_input,low end of downstream/light-side boundary range plus public lower WAG-to-power sensitivity,Retained for ensemble validation; not a freeze-ready approved input set.
+s3_3d_provisional_utility_central,promoted_to_s3_3d_provisional_validation_only,7.75,0.3715,provisional input,not_approved_input,midpoint central values from governed candidate ranges,Central S3.3d review case; not an approved input shell.
+s3_3d_provisional_utility_high,promoted_to_s3_3d_provisional_validation_only,8.0,0.422,sensitivity only,not_approved_input,high end of downstream/light-side boundary range plus public upper WAG-to-power sensitivity,Upper sensitivity; not a Vattenfall/Tata dispatch claim.

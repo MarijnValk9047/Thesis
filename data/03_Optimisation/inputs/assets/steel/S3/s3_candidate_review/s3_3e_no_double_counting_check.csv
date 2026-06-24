@@ -1,0 +1,4 @@
+check_id,check_name,rows_checked,rows_passing,status,notes
+S33E_DOUBLE_COUNT_001,inherited_residual_removed_from_c1,48,48,pass,C1 residual_ng_m3_per_h is zero after rejecting inherited C0 residual.
+S33E_DOUBLE_COUNT_002,wag_not_added_as_primary_energy,48,48,pass,Athanasiadis proxy remains external coal + natural gas + gross electricity.
+S33E_DOUBLE_COUNT_003,explicit_components_separate,48,48,pass,"Validation rows separately report explicit DRP NG, utility NG, represented steam/reheating NG, and rejected residual NG."

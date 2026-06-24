@@ -1,0 +1,2 @@
+gap_id,best_candidate_id,natural_gas_shortfall_m3_per_h,wag_electricity_excess_twh_per_year,hardest_target,remaining_gap_type,residual_gap_closure_used,notes
+S33G_GAP_001,S33G_CAND_006,13519.029275204695,0.011425731776347314,natural_gas,numeric_source_and_boundary_related,false,Remaining gap is reported without back-calculated Table 9 residuals or inherited C0 residual NG.

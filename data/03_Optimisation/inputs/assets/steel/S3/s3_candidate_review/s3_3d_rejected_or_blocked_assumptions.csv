@@ -1,0 +1,4 @@
+assumption_id,assumption_name,blocked_value,unit,source_or_basis,rejection_reason,final_status
+S33D_BLOCK_001,c1_wag_availability_factor_0_75,0.75,fraction,S3.3a diagnostic symptom,not source-carded and would act as arbitrary C1 WAG cap,rejected
+S33D_BLOCK_002,residual_ng_89_478_m3_per_t_final,89.478,m3_per_t_final_product,S3.3a Table 9 gap-closure back-calculation,"fitted residual gap closure, not explicit source-backed utility consumer",rejected
+S33D_BLOCK_003,inherited_c0_residual_ng_in_c1,candidate-set-specific,m3_per_t_final_product,S3.3 C0 calibration residual_c0_ng_m3_per_t_final,ambiguous C0 calibration closure carried into C1; not decomposed into retained process gas or utility consumer,blocked_for_freeze

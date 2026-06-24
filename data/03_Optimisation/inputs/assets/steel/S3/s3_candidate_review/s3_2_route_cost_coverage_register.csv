@@ -1,0 +1,11 @@
+coverage_id,route_scope,cost_component,driver,price_or_factor_id,coverage_status,blocks_endogenous_route_if_missing,explicit_zero_status,double_counting_guard,limitations,notes
+S32_COVER_001,BF_BOF,coking_coal,cog_dry_coal_driver_t,S32_MAT_001,covered,true,not_zero,internal coke is not purchased separately,Development-only price,Required for endogenous route
+S32_COVER_002,BF_BOF,purchased_coke_residual,bof_liquid_steel_output,S32_MAT_010;S32_MAT_011,covered_explicit_zero,true,explicit_zero_valid,central boundary has no purchased coke residual,Zero coefficient not a missing price,Required for endogenous route
+S32_COVER_003,BF_BOF,ore_sinter_feed_and_BF_pellets,bof_liquid_steel_output,S32_MAT_002;S32_MAT_003;S32_MAT_004;S32_MAT_005,covered,true,not_zero,ore and pellet streams are separate rows,Development-only values,Required for endogenous route
+S32_COVER_004,BF_BOF,BOF_scrap_and_flux,bof_liquid_steel_output,S32_MAT_006;S32_MAT_007;S32_MAT_008;S32_MAT_009,covered,true,not_zero,no hidden zero,Development-only values,Required for endogenous route
+S32_COVER_005,DRP_EAF,DR_pellets,eaf_liquid_steel_output,S32_MAT_012;existing_C1_pellets_required_per_t_steel,covered,true,not_zero,internal DRI is not purchased,Development-only price,Required for endogenous route
+S32_COVER_006,DRP_EAF,EAF_scrap_flux_electrodes,eaf_liquid_steel_output,S32_MAT_007;S32_MAT_013;S32_MAT_014;S32_MAT_015;S32_MAT_016,covered,true,not_zero,no hidden zero,Development-only values,Required for endogenous route
+S32_COVER_007,both_routes,grid_electricity,grid_import_mwh,S32_PRICE_001,covered,true,not_zero,no WAG revenue and no export,Static price only,Required for endogenous route
+S32_COVER_008,both_routes,natural_gas,natural_gas_import_gj,S32_PRICE_003,covered,true,not_zero,DRP NG and residual reheating or steam NG are costed once,Static price only,Required for endogenous route
+S32_COVER_009,both_routes,gross_direct_carbon,total_direct_co2,S32_PRICE_004,covered,true,not_zero,Scope 2 excluded from ETS cost,Static price only,Required for endogenous route
+S32_COVER_010,both_routes,WAG_internal_use,wag_generation_and_allocation,S32_PRICE_001;S32_PRICE_003;S32_PRICE_007,covered,true,not_zero,WAG value only reduces external fuel or grid demand and is never revenue,Bounded residual power interface,Required for endogenous route

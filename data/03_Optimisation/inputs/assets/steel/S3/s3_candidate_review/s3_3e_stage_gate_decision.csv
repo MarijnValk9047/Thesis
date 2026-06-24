@@ -1,0 +1,8 @@
+gate_id,gate_name,status,notes
+S33E_GATE_001,option_a_decomposition_attempted,blocked,No source-backed retained C1 NG component decomposes the inherited residual without weak assumptions.
+S33E_GATE_002,option_b_boundary_downgrade_applied,pass,"Table 9 carrier totals are contextual broader-boundary holdout references, not strict freeze gates."
+S33E_GATE_003,c0_retained_ensemble_regression,pass,C0 accepted rows: 3/3.
+S33E_GATE_004,c1_current_boundary_strict_checks,pass,C1 strict current-boundary pass rows: 48/48.
+S33E_GATE_005,inherited_residual_ng_removed,pass,Rejected inherited C0 residual is not included in C1 natural-gas totals.
+S33E_GATE_006,s4_readiness,blocked,Do not start S4 in this task; human acceptance of the Table 9 contextual downgrade is still required.
+S33E_DECISION,stage_gate_decision,provisionally_acceptable_current_public_boundary_table9_contextual_s4_blocked,"S3.3e resolves the residual by boundary downgrade, not source-backed decomposition."

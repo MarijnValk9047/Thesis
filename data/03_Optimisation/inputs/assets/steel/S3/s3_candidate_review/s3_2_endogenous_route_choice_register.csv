@@ -1,0 +1,2 @@
+diagnostic_id,mode_name,enabled,cost_completeness_gate,bf_bof_share_lower,bf_bof_share_upper,route_share_fixed,final_output_fixed,wag_share_direct_decision,export_allowed,limitations,notes
+S32_ROUTE_001,c1_endogenous_route_static_economics,true,complete,0.5471962,0.67988981,false,true,false,false,Bounded to already demonstrated feasible route-share envelope; development-only costs,Route share emerges from static material energy and direct-carbon costs rather than a WAG target

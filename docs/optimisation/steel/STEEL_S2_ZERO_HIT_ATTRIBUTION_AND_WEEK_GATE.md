@@ -115,3 +115,5 @@ It does not reopen:
 - reserve logic
 
 The next step must still check whether the one-week path remains physically interpretable before any broader scope claim is made.
+
+The resulting consolidated freeze and the restricted `S3` entry conditions are now recorded in `STEEL_S2_MATERIAL_FLOW_FREEZE_AND_S3_ENTRY_CONTRACT.md`.

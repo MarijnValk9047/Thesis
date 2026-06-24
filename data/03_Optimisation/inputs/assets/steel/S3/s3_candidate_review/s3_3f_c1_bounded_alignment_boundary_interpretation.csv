@@ -1,0 +1,6 @@
+interpretation_id,item,value,status,notes
+S33F_BOUNDARY_001,best_case_summary,S33F_CAND_008,bounded_alignment_only,Best row is diagnostic only and does not create an S3.3 freeze.
+S33F_BOUNDARY_002,irreducible_gap_without_residuals,natural_gas_gap_m3_per_h=29018.467502216474;wag_electricity_gap_twh_per_year=-0.13702202596077617,reported_not_closed,"No residual gap-closure term, inherited residual, or arbitrary WAG factor was used."
+S33F_BOUNDARY_003,hardest_target,natural_gas,diagnostic_result,Hardest target is selected by maximum absolute core target percentage error.
+S33F_BOUNDARY_004,s3_3_freeze_status,not_frozen,blocked,"S3.3f is a bounded alignment diagnostic, not a freeze or S4 entry record."
+S33F_BOUNDARY_005,s4_readiness,not_ready,blocked,No DA price-taking or later market logic is introduced here.

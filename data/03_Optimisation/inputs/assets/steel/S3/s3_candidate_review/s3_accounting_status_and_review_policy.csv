@@ -1,0 +1,9 @@
+status_id,status_name,meaning,may_be_used_in_loader,may_be_used_in_objective,may_be_used_in_thesis_run,requires_human_review,notes
+S3_STATUS_001,candidate_governance_only,Governance or schema classification only,false,false,false,true,Allowed in S3.0a registers
+S3_STATUS_002,candidate_value_unreviewed,Candidate value exists but has not passed review,false,false,false,true,Not executable or thesis-usable
+S3_STATUS_003,provisional_dev_only,Development-only value for future diagnostics after review,false,false,false,true,Not active in S3.0a
+S3_STATUS_004,validation_target_only,External plausibility target for checking outputs,false,false,false,true,Must not drive constraints or objective
+S3_STATUS_005,sensitivity_only,Parameter may support later labelled sensitivity,false,false,false,true,Not base-case truth
+S3_STATUS_006,approved_model_input,Human-approved future model input status,false,false,false,true,Status exists for future promotion but no S3.0a data row may use it
+S3_STATUS_007,blocked,Forbidden under current stage,false,false,false,false,Used for DA stochastic CVaR mFRR product revenue downstream flexibility and new stores
+S3_STATUS_008,deferred_future_stage,Deferred until a named later stage,false,false,false,true,Requires explicit stage gate before use
