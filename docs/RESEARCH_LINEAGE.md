@@ -212,6 +212,10 @@ The compact handoff record is:
 
 - `docs/optimisation/mfrr_dam_integration_handoff_v1.md`
 
+The compact forecasting/proxy evidence registry for the Dutch incident-reserve capacity layer is:
+
+- `docs/forecasting/mfrr_capacity_metric_registry_v1.md`
+
 This freeze preserves:
 
 - the accepted/rejected capacity-result interface;
