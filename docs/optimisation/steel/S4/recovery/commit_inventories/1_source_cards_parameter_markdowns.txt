@@ -1,0 +1,11 @@
+data/03_Optimisation/inputs/assets/steel/source_cards/Blast_Furnace_Parameters.md
+data/03_Optimisation/inputs/assets/steel/source_cards/BOF_OSF_Parameters.md
+data/03_Optimisation/inputs/assets/steel/source_cards/Coking_Plants_Parameters.md
+data/03_Optimisation/inputs/assets/steel/source_cards/DRP_Parameters.md
+data/03_Optimisation/inputs/assets/steel/source_cards/DSP_Parameters.md
+data/03_Optimisation/inputs/assets/steel/source_cards/EAF_Parameters.md
+data/03_Optimisation/inputs/assets/steel/source_cards/HSM_Parameters.md
+data/03_Optimisation/inputs/assets/steel/source_cards/HSM_Slab_Buffer_Parameters.md
+data/03_Optimisation/inputs/assets/steel/source_cards/LINDE_OXYGEN_Parameters.md
+data/03_Optimisation/inputs/assets/steel/source_cards/PELLETIZING_Parameters.md
+data/03_Optimisation/inputs/assets/steel/source_cards/SINTER_Parameters.md
