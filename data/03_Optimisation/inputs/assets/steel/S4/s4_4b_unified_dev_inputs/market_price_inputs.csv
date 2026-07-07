@@ -1,0 +1,2 @@
+market,price_file,timestamp_column,price_column,timezone,unit,window_start,window_end,source_card_ids,candidate_id,evidence_strength,input_status,thesis_usability,codex_may_decide,human_review_required,caveat
+NL_DAM,data/01_cleaned/Day_ahead_prices/DA_prices/hourly/da_prices_NL_hourly.csv,timestamp_utc,price_eur_per_mwh,UTC,EUR/MWh,2022-01-02T00:00:00Z,2022-01-03T00:00:00Z,NA,NA,source-supported,development_only,false,false,true,Real cleaned NL DAM file from existing S4.1 config and no internet/API dependency.

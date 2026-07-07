@@ -1,0 +1,6 @@
+process_id,input_material,output_material,coefficient,coefficient_unit,basis,source_card_ids,candidate_id,evidence_strength,input_status,thesis_usability,codex_may_decide,human_review_required,caveat
+C0_BF_BOF_STATIC_BLOCK,mixed_current_route_inputs,final_product,NA,t_per_t_final_product,route_proxy,STEEL-SC-0016;STEEL-SC-0017,NA,missing,missing_blocker,false,false,true,B002 C0 material coefficients and yields missing.
+C1_RETAINED_BF_BOF_BLOCK,mixed_retained_route_inputs,final_product,NA,t_per_t_final_product,route_proxy,STEEL-SC-0016;STEEL-SC-0017,NA,missing,missing_blocker,false,false,true,B008 retained BF-BOF coefficients missing.
+C1_DRP,pellets,DRI,0.74,t_DRI_per_t_pellets,pellet_input,STEEL-SC-0021,CAND_DRP_PELLETS_TO_DRI_0_74,source-supported,selected_development_input_candidate,false,false,true,Development-only DRP yield.
+C1_EAF,DRI,liquid_steel,0.95,t_liquid_steel_per_t_DRI,DRI_input,STEEL-SC-0021,CAND_EAF_DRI_TO_STEEL_0_95,source-supported,selected_development_input_candidate,false,false,true,Liquid steel is internal diagnostic not primary KPI.
+C1_EAF,scrap,liquid_steel,0.2,t_scrap_per_t_DRI,DRI_input,STEEL-SC-0021,CAND_EAF_SCRAP_0_2_T_PER_TDRI,candidate range only,development_only,false,false,true,Diagnostic input ratio only until material costing is active.

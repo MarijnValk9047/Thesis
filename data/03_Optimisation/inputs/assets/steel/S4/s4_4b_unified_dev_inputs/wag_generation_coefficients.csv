@@ -1,0 +1,5 @@
+process_id,wag_carrier,coefficient,coefficient_unit,basis,configuration_id,source_card_ids,candidate_id,evidence_strength,input_status,thesis_usability,codex_may_decide,human_review_required,caveat
+C0_COKING_PLANT,COG,NA,Nm3_per_t_input,route_proxy,C0_current_BF_BOF_reference,STEEL-SC-0016;STEEL-SC-0017,NA,missing,missing_blocker,false,false,true,B004 C0 WAG generation coefficients missing.
+C0_BLAST_FURNACE,BFG,NA,Nm3_per_t_hot_metal,route_proxy,C0_current_BF_BOF_reference,STEEL-SC-0016;STEEL-SC-0017,NA,missing,missing_blocker,false,false,true,B004 C0 BF WAG generation coefficients missing.
+C0_BOF,BOFG,NA,Nm3_per_t_liquid_steel,route_proxy,C0_current_BF_BOF_reference,STEEL-SC-0016;STEEL-SC-0017,NA,missing,missing_blocker,false,false,true,B004 C0 BOF WAG generation coefficients missing.
+C1_RETAINED_BF_BOF_BLOCK,WAG_aggregate,NA,Nm3_or_MWh_per_t,route_proxy,C1_phase1_BF_BOF_plus_DRP_EAF,STEEL-SC-0016;STEEL-SC-0017,S4_ECON_WAG_DIRECT_DA_VALUATION_REJECTION,structural/topology evidence only,missing_blocker,false,false,true,B009 WAG reduction from retained route missing.

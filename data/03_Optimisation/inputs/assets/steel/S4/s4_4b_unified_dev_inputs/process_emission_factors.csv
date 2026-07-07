@@ -1,0 +1,4 @@
+process_id,emission_scope,factor,factor_unit,basis,source_card_ids,candidate_id,evidence_strength,input_status,thesis_usability,codex_may_decide,human_review_required,caveat
+C0_BF_BOF_STATIC_BLOCK,direct_CO2,NA,tCO2_per_t_final_product,route_proxy,STEEL-SC-0016;STEEL-SC-0017,NA,validation_target,validation_target,false,false,true,S3.3j annual CO2 anchor exists but process emission factor is not executable.
+C1_RETAINED_BF_BOF_BLOCK,direct_CO2,NA,tCO2_per_t_final_product,route_proxy,STEEL-SC-0016;STEEL-SC-0017,NA,validation_target,validation_target,false,false,true,C1 annual CO2 anchor exists but route-specific factor is not executable.
+C1_DRP,direct_CO2,NA,tCO2_per_Nm3_NG,natural_gas_input,NA,S4_ECON_EUA_ETS_PRICE_SERIES_CONVENTION,missing,deferred,false,false,true,CO2 reporting needs explicit emissions factor and price pair.

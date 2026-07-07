@@ -1,0 +1,7 @@
+process_id,carrier,direction,intensity,intensity_unit,basis,source_card_ids,candidate_id,evidence_strength,input_status,thesis_usability,codex_may_decide,human_review_required,caveat
+C0_BF_BOF_STATIC_BLOCK,electricity,input,NA,MWh_per_t_final_product,route_proxy,STEEL-SC-0016;STEEL-SC-0017,S4_ECON_ELEC_REF_TOTAL_11_PJY_VALIDATION,source-supported,validation_target,false,false,true,B007 annual electricity anchor is not executable hourly linkage.
+C1_DRP,electricity,input,0.1,MWh_per_t_pellets,pellet_input,STEEL-SC-0021,CAND_DRP_ELEC_0_1_MWH_TPELLET,source-supported,selected_development_input_candidate,false,false,true,Diagnostic electricity intensity from S3.4.
+C1_DRP,natural_gas,input,195,Nm3_NG_per_t_pellets,pellet_input,STEEL-SC-0021,CAND_DRP_NG_195_NM3_TPELLET,source-supported,selected_development_input_candidate,false,false,true,NG cost eligible only for explicit modelled DRP NG.
+C1_DRP,oxygen,input,0.1,t_O2_per_t_pellets,pellet_input,STEEL-SC-0021,CAND_DRP_O2_0_1_T_TPELLET,candidate range only,development_only,false,false,true,Diagnostic utility only.
+C1_EAF,electricity,input,0.5,MWh_per_t_DRI,DRI_input,STEEL-SC-0021,CAND_EAF_ELEC_0_5_MWH_TDRI,source-supported,selected_development_input_candidate,false,false,true,Do not mix with generic scrap-EAF steel-output intensity.
+C1_EAF,oxygen,input,0.05,t_O2_per_t_DRI,DRI_input,STEEL-SC-0021,CAND_EAF_O2_0_05_T_PER_TDRI,candidate range only,development_only,false,false,true,Diagnostic utility only.

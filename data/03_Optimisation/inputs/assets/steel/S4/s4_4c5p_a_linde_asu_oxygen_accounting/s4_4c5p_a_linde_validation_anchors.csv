@@ -1,0 +1,4 @@
+anchor_id,value,unit,anchor_status,source_card,caveat
+LINDE_O2_DEMAND_PRECEDENT,150.0,t O2/h,validation_precedent_not_capacity_constraint,data/03_Optimisation/inputs/assets/steel/source_cards/LINDE_OXYGEN_Parameters.md,High-level modelling precedent; do not hard-constrain model to 150 t/h.
+LINDE_ASU_POWER_AT_150_T_H,60.0,MW,derived_sanity_check_not_capacity_constraint,data/03_Optimisation/inputs/assets/steel/source_cards/LINDE_OXYGEN_Parameters.md,150 t/h * 0.400 MWh/t.
+LINDE_O2_BUFFER_GEOMETRIC_VOLUME,1670.0,m3 vessel geometry,structural_anchor_not_model_ready_Nm3_capacity,data/03_Optimisation/inputs/assets/steel/source_cards/LINDE_OXYGEN_Parameters.md,Operating pressure and usable swing are not public/source-backed.

@@ -1,0 +1,4 @@
+configuration,anchor_id,raw_anchor_value,unit,anchor_status,source_card,caveat
+C1_phase1_BF_BOF_plus_DRP_EAF,DRP_C1_raw_MER_DRI_output,2.8,Mt DRI/y,validation_anchor_scaled_to_active_target_not_hourly_constraint,data/03_Optimisation/inputs/assets/steel/source_cards/DRP_Parameters.md,Raw MER anchor is scaled by active C5 target convention.
+C1_phase1_BF_BOF_plus_DRP_EAF,DRP_C1_CO2_capture_stream,0.8,Mt CO2/y,validation_anchor_capture_stream_not_direct_emissions,data/03_Optimisation/inputs/assets/steel/source_cards/DRP_Parameters.md,Capture stream is not additive with fuel-explicit NG CO2.
+C1_phase1_BF_BOF_plus_DRP_EAF,DRP_C1_EAF_liquid_steel_context,3.3,Mt LS/y,context_only_EAF_not_implemented_in_C5o_a,data/03_Optimisation/inputs/assets/steel/source_cards/DRP_Parameters.md,EAF physics must be implemented in a later C5o_b stage.

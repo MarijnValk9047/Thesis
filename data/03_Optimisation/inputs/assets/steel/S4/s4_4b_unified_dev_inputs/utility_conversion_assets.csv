@@ -1,0 +1,4 @@
+asset_id,input_carrier,output_carrier,efficiency,capacity,unit,dispatchable,source_card_ids,candidate_id,evidence_strength,input_status,thesis_usability,codex_may_decide,human_review_required,caveat
+boilers_steam_utility,natural_gas,steam,NA,NA,MWh_steam_per_MWh_fuel,unknown,STEEL-SC-0016;STEEL-SC-0017,S4_ECON_BOILER_NG_EXTERNAL_COST_CONVENTION,assumption-only,deferred,false,false,true,B005 boiler NG conversion not explicit in current model.
+boilers_steam_utility,WAG_aggregate,steam,NA,NA,MWh_steam_per_MWh_WAG,unknown,STEEL-SC-0016;STEEL-SC-0017,S4_ECON_WAG_DIRECT_DA_VALUATION_REJECTION,structural/topology evidence only,missing_blocker,false,false,true,WAG-to-steam physical conversion missing.
+Vattenfall_interface,WAG_aggregate,electricity,NA,NA,MWh_electricity_per_MWh_WAG,unknown,STEEL-SC-0016;STEEL-SC-0017,NA,structural/topology evidence only,deferred,false,false,true,Boundary interface not dispatch or profit model.

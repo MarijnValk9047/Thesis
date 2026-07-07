@@ -1,0 +1,3 @@
+run_profile_id,horizon_hours,time_step_hours,solver,objective_mode,output_policy,notes,source_card_ids,candidate_id,evidence_strength,input_status,thesis_usability,codex_may_decide,human_review_required,caveat
+S4_4B_24H_STATIC_REGRESSION,24,1,appsi_highs,static_or_zero_price_regression,minimal,First unified physical modelbuilder smoke profile for S4.4c,NA,NA,assumption-only,development_only,false,false,true,No modelbuilder implemented in S4.4b.
+S4_4B_24H_DETERMINISTIC_DA,24,1,appsi_highs,deterministic_da_price_taking,minimal,Future unified DA smoke profile after static regression passes,NA,NA,assumption-only,development_only,false,false,true,Blocked until unified physical modelbuilder exists.

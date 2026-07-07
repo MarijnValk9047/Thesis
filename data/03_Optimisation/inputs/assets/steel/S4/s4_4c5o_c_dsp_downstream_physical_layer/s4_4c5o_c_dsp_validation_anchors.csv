@@ -1,0 +1,7 @@
+anchor_id,value,unit,anchor_status,source_card,caveat
+DSP_C0_RAW_OUTPUT,1.5,Mt/y,raw_validation_anchor_not_hourly_constraint,data/03_Optimisation/inputs/assets/steel/source_cards/DSP_Parameters.md,Compared against active C5l_d DSP output placeholder replacement.
+DSP_C1_RAW_OUTPUT,1.5,Mt/y,raw_validation_anchor_not_hourly_constraint,data/03_Optimisation/inputs/assets/steel/source_cards/DSP_Parameters.md,Compared against active C5l_d DSP output placeholder replacement.
+DSP_C0_OSF_TO_DSP_SHARE,0.2,fraction,route_share_validation_anchor_not_constraint,data/03_Optimisation/inputs/assets/steel/source_cards/DSP_Parameters.md,C5l_a legacy route uses 20% DSP output share; C5o_c reports gross DSP input separately.
+DSP_C1_EAF_ROUTE_SHARE,0.9,fraction,route_share_validation_anchor_not_constraint,data/03_Optimisation/inputs/assets/steel/source_cards/DSP_Parameters.md,Current pooled downstream interface cannot prove exact BOF/EAF origin split.
+C0_FINAL_PRODUCT_RAW_CONTEXT,6.9,Mt/y,raw_final_product_validation_context,data/03_Optimisation/inputs/assets/steel/source_cards/DSP_Parameters.md,5.4 Mt HSM rolled coils plus 1.5 Mt DSP rolls; not active target constraint.
+C1_FINAL_PRODUCT_RAW_CONTEXT,7.0,Mt/y,raw_final_product_validation_context,data/03_Optimisation/inputs/assets/steel/source_cards/DSP_Parameters.md,5.5 Mt HSM rolled coils plus 1.5 Mt DSP rolls; not active target constraint.

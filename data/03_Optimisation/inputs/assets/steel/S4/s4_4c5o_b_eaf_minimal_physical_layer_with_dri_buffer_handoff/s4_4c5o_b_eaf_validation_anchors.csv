@@ -1,0 +1,6 @@
+anchor_id,value,unit,anchor_status,source_card,caveat
+EAF_C1_RAW_LS_OUTPUT,3.3,Mt LS/y,raw_validation_anchor_not_hourly_constraint,data/03_Optimisation/inputs/assets/steel/source_cards/EAF_Parameters.md,Compared against active C5k EAF route target only.
+EAF_RAW_HDRI_TO_EAF,2.8,Mt DRI/y,raw_validation_anchor_not_hidden_HBI_supply,data/03_Optimisation/inputs/assets/steel/source_cards/EAF_Parameters.md,Active C5o_b preserves C5k EAF target and reconciles DRI coefficient to C5o_a DRP output.
+EAF_RAW_SCRAP_INPUT,1.0,Mt scrap/y,raw_validation_anchor_only,data/03_Optimisation/inputs/assets/steel/source_cards/EAF_Parameters.md,No hidden scrap import slack; scrap is an accounting input.
+EAF_HEAT_SIZE,325,t LS/heat,heat_state_development_candidate,data/03_Optimisation/inputs/assets/steel/source_cards/EAF_Parameters.md,"Used for heat-equivalent accounting, not integer heat scheduling."
+EAF_AVERAGE_POWER,200,MWe plus auxiliaries,validation_check_only,data/03_Optimisation/inputs/assets/steel/source_cards/EAF_Parameters.md,Compared against average annual arc load; no DA dispatch.
