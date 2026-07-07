@@ -1,0 +1,9 @@
+contract_item,decision,status,caveat
+configuration_set,Use C0_current_BF_BOF_reference and C1_phase1_BF_BOF_plus_DRP_EAF,required,Same architecture but topology-specific assets and constraints.
+economic_policy,Use common S4.2c-derived external-cost policy,required,Same policy does not imply same flexibility.
+price_naive_policy,Define price-insensitive physical schedule settled ex post,required,Must not respond to hourly DA variation in objective.
+deterministic_da_policy,Define price-taking cost minimisation with real hourly DAM prices,required,Not bidding clearing settlement or oracle.
+final_product_kpi,Use production_cost_eur_per_t_final_product,required,Liquid steel remains internal diagnostic only.
+wag_policy,No direct WAG DA or gas-price valuation,required,WAG must be physical allocation or reporting until hardened.
+forbidden_terms,No product revenue export revenue grid tariffs or CO2 objective,required,May be reopened only by explicit later stage.
+implementation_scope,No unified modelbuilder implemented in S4.4a,complete,This artifact is a contract and readiness audit only.

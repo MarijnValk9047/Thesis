@@ -1,0 +1,18 @@
+blocker_id,description,affected_configuration,affected_asset_carrier_cost,severity,can_implement_now_with_dev_assumption,source_evidence_status,recommended_next_step,need_deepsearch,need_human_decision
+B001,C0 hourly physical dispatch variables and constraints,C0_current_BF_BOF_reference,C0 process operations,blocking,no,missing,Define C0 process unit table and constraint set before DA optimisation,no,yes
+B002,C0 material flow coefficients and yields,C0_current_BF_BOF_reference,BF BOF sinter coke pellet ore flows,blocking,no,partial_static_context,Create candidate evidence audit and input table rows,yes,yes
+B003,C0 buffers and terminal rules,C0_current_BF_BOF_reference,hot metal slabs WIP buffers,blocking,no,structural_only,Define which buffers are active and terminal rules,no,yes
+B004,C0 WAG generation and allocation coefficients,C0_current_BF_BOF_reference,BFG COG BOFG WAG,blocking,no,placeholder_only,Deepsearch public WAG coefficients and allocation rules,yes,yes
+B005,C0 boiler and steam utility treatment,C0_current_BF_BOF_reference,steam boiler NG WAG sinks,blocking,no,6_PJ_sink_placeholder,Separate physical fuel use from internal steam price,yes,yes
+B006,C0 coal coke ore pellet scrap cost values,C0_current_BF_BOF_reference,raw material costs,warning,no,candidate_or_missing,Add source-backed cost rows only where flows exist,yes,yes
+B007,C0 electricity-operation linkage,C0_current_BF_BOF_reference,electricity demand,blocking,no,annual_anchor_only,Link electricity to operation or approved hourly profile,no,yes
+B008,C1 retained BF-BOF route economics,C1_phase1_BF_BOF_plus_DRP_EAF,retained BF BOF costs,blocking,no,partial_context,Add retained-route physical and cost scope to C1,no,yes
+B009,C1 WAG reduction from BF/coking closure,C1_phase1_BF_BOF_plus_DRP_EAF,WAG generation availability,blocking,no,public_phase_context_only,Translate closure assumption into source-backed WAG availability,yes,yes
+B010,C1 downstream final-product coupling,C1_phase1_BF_BOF_plus_DRP_EAF,downstream final product,blocking,yes,proxy_exists,Formalize route-neutral final-product proxy and residual checks,no,yes
+B011,Full-site electricity import balance,C0_and_C1,electricity grid import,blocking,no,S4.2b_blocked,Define gross load onsite generation import and export convention,yes,yes
+B012,Grid import/export convention,C0_and_C1,grid import export,blocking,no,blocked,Keep export disabled until physical export variable and settlement rules exist,no,yes
+B013,CO2 ETS objective and reporting convention,C0_and_C1,CO2 ETS,warning,yes,policy_reporting_only,Keep reporting-only unless explicitly reopened,no,yes
+B014,Vattenfall interface treatment,C0_and_C1,Vattenfall boundary,warning,no,boundary_context,Keep interface abstraction separate from dispatch/profit model,yes,yes
+B015,Residual background load treatment,C0_and_C1,fixed electricity load,blocking,no,missing_hourly_basis,Decide whether to model residual load as static profile or validation-only anchor,yes,yes
+B016,Price-naive policy definition,C0_and_C1,benchmark policy,warning,yes,methodological,Implement schema and tests in S4.4b,no,yes
+B017,Deterministic DA policy definition,C0_and_C1,DA policy,warning,yes,methodological,Implement shared policy mode after unified physical model passes,no,yes

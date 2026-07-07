@@ -1,0 +1,9 @@
+material,active_c0,active_c1,balanced_now,buffered_now,terminal_rule_now,costed_now,unified_requirement,source_status,caveat
+coal_coke,yes,reduced,partial,no,no,deferred,Add source-linked flow coefficients and cost eligibility,S3.3j_static_context,Do not cost missing C0 physical flows as zero.
+iron_ore_sinter_pellets,yes,yes,partial,no,no,deferred,Separate BF inputs and DRP pellet input with units,S3.3j_and_S3.4_dev,Imported pellet cost needs reviewed external price.
+hot_metal,yes,yes,partial,partial,no,no,Add buffer and route-coupling logic,structural_evidence_only,Needed for C0 and retained C1 BF-BOF comparability.
+scrap,yes,yes,partial,no,no,deferred,Represent BOF and EAF scrap separately where used,S3.4_candidate_for_EAF,Costs only if route/material decisions are active.
+DRI_HDRI,no,yes,yes,yes,yes,no,Retain inventory balance and terminal equality,S3.4_dev_inputs,Currently C1 prototype only.
+liquid_steel,yes,yes,partial,no,no,no,Keep as internal technical diagnostic,S4.2c_policy,Not primary economic denominator.
+slabs_WIP_final_product,yes,yes,partial,no,no,no,Define common final-product target and fulfilment residual,S4.2c_proxy,Downstream pass-through is current proxy not detailed scheduling.
+BFG_COG_BOFG_WAG,yes,changed,partial,possible,no,forbidden_direct_market_value,Add generation allocation flaring and utility sinks,S3.3j_placeholder,Physical accounting before valuation.

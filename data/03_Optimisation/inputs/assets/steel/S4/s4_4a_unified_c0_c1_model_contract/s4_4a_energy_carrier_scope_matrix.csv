@@ -1,0 +1,13 @@
+carrier,active_c0,active_c1,modelled_physics_now,costed_objective_now,reported_only_now,validation_target_only_now,unified_requirement,forbidden_objective_term_now,caveat
+electricity,yes,yes,partial,C1_DRP_EAF_only,yes,yes,Add full site gross or supported scoped electricity linkage,no,S4.2b blocked full-site balance.
+natural_gas,yes,yes,partial,C1_DRP_only,yes,yes,Link all explicit NG use to fixed-price convention,no,C0 NG remains anchor/reporting until hourly variables exist.
+BFG,yes,reduced,partial,no,yes,yes,Add WAG generation and sink eligibility,no,No direct external market valuation.
+COG,yes,reduced,partial,no,yes,yes,Add WAG generation and sink eligibility,no,Coking reduction must change availability only if source-supported.
+BOFG,yes,yes,partial,no,yes,yes,Add BOF-linked generation and sink eligibility,no,Needs coefficients before hourly use.
+WAG_aggregate,yes,changed,partial,no,yes,yes,Explicit allocation flaring and utility sink closure,yes,No DA or gas-price valuation.
+steam_boiler_fuel,yes,yes,partial,deferred,yes,yes,Cost external fuel only where boiler NG is explicit,yes_for_internal_steam_price,No artificial steam market price.
+oxygen,yes,yes,C1_diagnostic,no,yes,no,Track utility demand if represented,no,Currently diagnostic in DRP/EAF wrapper.
+Vattenfall_internal_generation,yes,changed,contextual,no,yes,yes,Boundary reporting only unless dispatch module added,yes_for_dispatch_profit,Do not model Vattenfall profit dispatch.
+grid_import,yes,yes,blocked,no,yes,yes,Require gross load onsite generation and import convention,no,S4.2b blocked net import.
+grid_export,possible,possible,disabled,no,yes,no,Keep zero or unavailable until physical export exists,yes_for_export_revenue,No unsupported export revenue.
+CO2_ETS,yes,yes,reported_only,no,yes,yes,Reporting or sensitivity only,yes_for_base_objective,Do not steer dispatch in current S4 policy.

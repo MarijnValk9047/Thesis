@@ -1,0 +1,93 @@
+{
+  "contract_id": "S4_4A_UNIFIED_C0_C1_MODEL_CONTRACT_DEV",
+  "stage": "S4.4a",
+  "lineage_role": "development_contract_only",
+  "purpose": "Define the unified public Tata-inspired C0/C1 site-scope physical-economic model scaffold before any unified modelbuilder implementation.",
+  "model_behaviour_changed": false,
+  "configuration_set": [
+    {
+      "configuration_id": "C0_current_BF_BOF_reference",
+      "configuration_role": "current BF-BOF reference",
+      "current_status": "static S3.3j validation foundation plus S4.3b static-settled electricity baseline",
+      "future_unified_role": "site-scope current-route physical-economic configuration"
+    },
+    {
+      "configuration_id": "C1_phase1_BF_BOF_plus_DRP_EAF",
+      "configuration_role": "hybrid BF-BOF plus DRP-EAF transition case",
+      "current_status": "S3.3j boundary-aligned plus S3.4/S4.2e DRP/EAF-scoped DA prototype",
+      "future_unified_role": "site-scope hybrid physical-economic configuration"
+    }
+  ],
+  "common_policy_requirements": {
+    "production_target": "hard final-product target",
+    "economic_kpi": "production_cost_eur_per_t_final_product",
+    "price_source": "data/01_cleaned/Day_ahead_prices/DA_prices/hourly/da_prices_NL_hourly.csv",
+    "product_revenue": "forbidden_in_base_policy",
+    "export_revenue": "forbidden_unless_physical_export_settlement_module_is_added",
+    "grid_tariffs": "deferred",
+    "wag_market_valuation": "no_direct_DA_or_gas_price_valuation",
+    "co2_ets": "reporting_or_sensitivity_only_not_objective",
+    "full_site_electricity": "required_for_future_site_scope_claims"
+  },
+  "policy_modes": [
+    {
+      "policy_mode": "price_naive_static_or_cost_smoothed",
+      "objective_price_treatment": "no response to hourly DA variation",
+      "settlement_reporting_price_treatment": "may settle fixed or smoothed schedule against realised DAM for comparison",
+      "production_target_treatment": "same hard final-product target as DA policy",
+      "terminal_inventory_treatment": "same terminal rules as DA policy",
+      "allowed_flexible_decisions": "only physically represented decisions not driven by hourly DA prices",
+      "forbidden_terms": [
+        "product_revenue",
+        "export_revenue",
+        "grid_tariffs",
+        "direct_wag_market_valuation",
+        "co2_objective"
+      ],
+      "benchmark_interpretation": "price-insensitive physical reference settled ex post",
+      "expected_outputs": "solver stats if solved; physical schedule; ex-post cost; final-product fulfilment; caveats"
+    },
+    {
+      "policy_mode": "deterministic_da_price_taking",
+      "objective_price_treatment": "real hourly DAM prices may enter objective for supported electricity demand",
+      "settlement_reporting_price_treatment": "same DAM window and units as objective",
+      "production_target_treatment": "same hard final-product target as price-naive policy",
+      "terminal_inventory_treatment": "same terminal rules as price-naive policy",
+      "allowed_flexible_decisions": "only decisions present in the configuration topology and bounded by constraints",
+      "forbidden_terms": [
+        "product_revenue",
+        "export_revenue",
+        "grid_tariffs",
+        "direct_wag_market_valuation",
+        "co2_objective"
+      ],
+      "benchmark_interpretation": "deterministic price-taking comparison not bidding and not oracle",
+      "expected_outputs": "solver stats; physical schedule; DA cost; external costs; EUR/t final product; caveats"
+    }
+  ],
+  "common_governance_fields": [
+    "source_card_ids",
+    "candidate_id",
+    "evidence_strength",
+    "input_status",
+    "thesis_usability",
+    "codex_may_decide",
+    "human_review_required",
+    "caveat"
+  ],
+  "prototype_status": {
+    "s3_3j": "frozen static calibrated and boundary-aligned process-network foundation",
+    "s3_4_s4_0a": "C1 DRP/EAF guardrail wrapper with development-only inputs",
+    "s4_1_to_s4_2e": "C1 DRP/EAF-scoped deterministic DA prototype and benchmark on modelled external costs",
+    "s4_3b_c0": "static-settled C0 gross-electricity baseline not true DA optimisation",
+    "s4_4a": "consolidation contract before unified modelbuilder"
+  },
+  "stage_gate": {
+    "decision": "pass_to_s4_4b_with_limitations",
+    "proceed_to_s4_4b": true,
+    "full_unified_model_ready": false,
+    "oracle_ready": false,
+    "s5_market_layers_ready": false,
+    "thesis_usability": "development_contract_only"
+  }
+}

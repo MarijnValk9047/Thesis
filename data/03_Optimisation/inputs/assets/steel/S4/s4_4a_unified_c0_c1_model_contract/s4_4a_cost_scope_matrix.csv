@@ -1,0 +1,12 @@
+cost_term,c0_status,c1_status,objective_eligible_unified,reporting_eligible,source_status,caveat
+DA_electricity,static_settled_only,C1_DRP_EAF_active,yes_where_electricity_is_supported,yes,real_DAM_file_and_S4_policy,Full-site use requires electricity linkage.
+natural_gas,C0_reporting_anchor,C1_DRP_NG_active,yes_where_explicit_NG_use_exists,yes,Badarinath_aligned_dev_price_and_anchors,No missing NG flows as zero.
+boiler_steam_NG,deferred,deferred,yes_only_if_boiler_NG_explicit,yes,S3.3j_utility_sink_context,No internal steam price.
+coal_coke_raw_materials,deferred,deferred,yes_only_if_physical_flows_and_prices_reviewed,yes,Deepsearch_9_candidate_context,Needed for C0 cost comparability but not yet active.
+ore_pellet_scrap_raw_materials,deferred,deferred,yes_only_if_route_material_choices_active,yes,candidate_evidence_context,Do not add as fixed constant without physical role.
+CO2_ETS,reporting_only,reporting_only,no,yes,Deepsearch_9_convention,Objective steering deferred.
+grid_tariffs,deferred,deferred,no,yes,policy_deferred,May be sensitivity later.
+export_revenue,forbidden,forbidden,no,no,policy_forbidden,Requires physical export and settlement module.
+product_revenue,forbidden,forbidden,no,no,policy_forbidden,Use hard final-product target and EUR/t cost.
+WAG_direct_valuation,forbidden,forbidden,no,yes,policy_forbidden,WAG is physical utility carrier not direct market product.
+Vattenfall_dispatch_profit,forbidden,forbidden,no,yes,boundary_context,Boundary reporting only.

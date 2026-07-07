@@ -1,0 +1,18 @@
+asset,active_c0,active_c1,controllable_now,physically_modelled_now,should_be_controllable_unified,should_be_static_or_residual,has_buffer,has_ramp_min_max_constraints,has_energy_carriers,has_cost_terms,source_evidence_status,implementation_status,caveat
+coking_plant,yes,reduced_or_closed,no,partial,no,yes,no,needed,yes,deferred,S3.3j_static_anchor_and_public_phase_context,blocker_for_unified_hourly,C1 closure or reduction must not create unsupported WAG economics.
+sinter_plant,yes,reduced_or_static,no,partial,no,yes,no,needed,yes,deferred,S3.3j_static_anchor,blocker_for_unified_hourly,Hourly operation and electricity link are not hardened.
+pelletizing_imported_pellets,yes,yes,no,partial,no,yes,no,needed,yes,deferred,S3.3j_and_candidate_evidence,partial,Imported pellet accounting must distinguish physical input from cost input.
+blast_furnace,yes,reduced,no,partial,limited,yes,possible,needed,yes,deferred,S3.3j_static_anchor,blocker_for_unified_hourly,BF continuity and WAG generation require explicit coefficients.
+hot_metal_buffer,yes,yes,no,partial,yes,no,yes,needed,no,no,structural_evidence_only,missing_terminal_rules,Needed for route-neutral final-product coupling.
+BOF,yes,yes,no,partial,limited,yes,no,needed,yes,deferred,S3.3j_static_anchor,blocker_for_unified_hourly,BOF route must share downstream target with EAF route.
+DRP,no,yes,yes,C1_only_wrapper,yes,no,no,yes,yes,NG_cost_active,S3.4_dev_inputs,prototype_reusable_with_refactor,Currently scoped to C1 guardrail wrapper.
+DRI_buffer,no,yes,yes,C1_only_wrapper,yes,no,yes,yes,no,no,S3.4_dev_inputs,prototype_reusable_with_refactor,Terminal equality exists only in C1 prototype.
+EAF,no,yes,yes,C1_only_wrapper,yes,no,no,yes,yes,electricity_cost_active,S3.4_dev_inputs,prototype_reusable_with_refactor,Binary semi-continuous hourly abstraction is development-only.
+secondary_metallurgy_caster,partial,partial,no,partial,limited,yes,possible,needed,yes,deferred,structural_or_contextual,missing_detail,Quality and sequence constraints deferred.
+downstream_final_product_pass_through,yes,yes,no,partial,no,yes,no,needed,yes,no,S4.2c_final_product_proxy,needs_unified_target_contract,Final product proxy is current thesis-facing denominator.
+HSM_DSP,partial,partial,no,partial,limited,yes,possible,needed,yes,deferred,S3.3j_caveated_values,missing_guardrails,HSM and downstream gas/electricity values must not be overclaimed.
+boilers_steam_utility,yes,yes,no,partial,limited,yes,no,needed,yes,deferred,S3.3j_utility_sink_placeholder,blocker_for_costing,6 PJ/y sink is provisional source-supported not hourly dispatch.
+WAG_allocation_flaring,yes,changed,no,partial,yes,no,possible,needed,yes,forbidden_direct_market_value,S3.3j_placeholder_and_evidence_audit,blocker_for_unified_hourly,Allocation and flaring must be explicit before economic claims.
+Vattenfall_interface,yes,changed,no,contextual,no,yes,no,no,yes,reporting_only,boundary_context,blocked_for_dispatch,Interface abstraction is not literal Vattenfall dispatch truth.
+grid_import_export,yes,yes,no,partial,yes,no,no,needed,yes,deferred,S4.2b_blocked_full_site_balance,blocker_for_unified_hourly,Export disabled unless physical export and settlement module exist.
+natural_gas_import,yes,yes,no,partial,yes,no,no,needed,yes,NG_cost_partial,S3.3j_anchors_and_S4.2c_DRP_NG,partial,C0 NG is anchor/reporting until physical hourly link exists.
