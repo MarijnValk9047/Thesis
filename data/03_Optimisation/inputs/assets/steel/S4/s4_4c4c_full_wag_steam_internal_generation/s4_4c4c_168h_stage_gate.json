@@ -1,0 +1,19 @@
+{
+  "Tata_validated": false,
+  "c0_solved": true,
+  "c1_solved": true,
+  "caveat": "Static physical development run with C4C-specific fixed C0 and C1 schedules.",
+  "co2_ets_objective_active": false,
+  "daily_production_guardrail_active": true,
+  "decision": "pass_168h_static_physical_with_full_wag_caveats",
+  "direct_wag_market_valuation_active": false,
+  "export_revenue_active": false,
+  "internal_generation_mode_b_active": true,
+  "max_abs_wag_balance_residual_mwh": 0.0,
+  "product_revenue_active": false,
+  "retained_c1_bf_bof_route_active": true,
+  "stage": "S4.4c4c_168h",
+  "steam_storage_active": false,
+  "thesis_usable": false,
+  "wag_storage_active": false
+}
