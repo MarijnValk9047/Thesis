@@ -2,7 +2,7 @@
 
 ## Purpose And Scope
 
-This is a diagnostic-only review of the current C5 plant-layer artifacts after KGF/BF/BOF/HSM/WBW/Sinter/PEFA/pellet burden/DRP/EAF/DSP. It does not change model equations, parameters, targets, route shares, coefficients, utility layers, or economics.
+This is a diagnostic-only review of the current C5 plant-layer artifacts after KGF/BF/BOF/HSM/WBW/Sinter/PEFA/pellet burden/DRP/EAF/DSP, Linde/ASU oxygen, boiler/steam-circuit accounting and IJ01/VN25 generator-interface accounting. It does not change production targets, route shares, process coefficients or economics.
 
 The model remains a public Tata Steel IJmuiden-inspired development model. It is not a confidential digital twin and not thesis-approved.
 
@@ -10,8 +10,8 @@ The model remains a public Tata Steel IJmuiden-inspired development model. It is
 
 - Active C0/C1 liquid-steel target remains 6.75 Mt/y.
 - C5l_d `base_0_50` remains the default HSM/WBW heat case.
-- PEFA, pellet burden, DRP, EAF, DSP and Linde/ASU oxygen are represented as development-only accounting/physical layers with compact healthchecks.
-- Linde/ASU oxygen now adds current-C5 process electricity accounting, but WAG, CO2 and steam remain diagnostic or partial utility layers, not economic objective layers.
+- PEFA, pellet burden, DRP, EAF, DSP, Linde/ASU oxygen, boiler/steam and IJ01/VN25 generators are represented as development-only accounting/physical layers with compact healthchecks.
+- Linde/ASU oxygen adds current-C5 process electricity accounting; C5p_b adds mass-flow steam buses, WAG/NG-to-steam allocation and STEG11/TG2 accounting-only electricity; C5p_c adds carrier-specific C1 IJ01/VN25 accounting plus a C0 residual-WAG-derived generator-interface offset with 2.0 TWh/y as validation anchor only. These are not economic objective layers.
 
 ## Anchor Reconciliation Summary
 
@@ -32,7 +32,7 @@ The largest gaps are mostly expected consequences of the active 6.75 Mt/y target
 - `C5_DECISION_EAF_DRI_COEFF`: Preserve C5 EAF LS target and derive active DRI coefficient from available DRP DRI. Recommended action: Freeze as C5 reconciliation or implement explicit HBI/import sensitivity before DA claims.
 - `C5_DECISION_DSP_PLACEHOLDER`: Preserve C5l_d 1.35 Mt/y DSP placeholder and wrap explicit DSP process around it. Recommended action: Decide whether to keep 1.35 Mt/y active DSP or align to 1.5 Mt/y with downstream rerouting.
 - `C5_DECISION_COKE_RECONCILIATION`: C5m_f bounded coke reconciliation is the active development baseline; external/unmodelled coke is fallback-only. Recommended action: Keep C5m_f bounded reconciliation as active development baseline; do not reopen unless a later test finds inconsistency.
-- `C5_DECISION_FINAL_DENOMINATOR`: Report liquid steel target and downstream final-product proxy separately. Recommended action: Do not choose yet; keep unresolved until C5p_a Linde/ASU is reviewed and boiler/steam plus generator/interface layers are implemented.
+- `C5_DECISION_FINAL_DENOMINATOR`: Report liquid steel target and downstream final-product proxy separately. Recommended action: Do not choose yet; keep unresolved until generator/interface and residual electricity/NG layers are implemented and product-revenue policy is scoped.
 - `C5_DECISION_INTERNAL_SCRAP`: HSM/DSP internal losses are reported; EAF scrap input remains explicit accounting input. Recommended action: Add scrap-pool accounting before raw-material economics.
 
 ## Final-Product Denominator Discussion
@@ -41,7 +41,7 @@ The largest gaps are mostly expected consequences of the active 6.75 Mt/y target
 - C1 final-product proxy is 6800534.76175 t/y versus raw final-product context 7000000 t/y.
 - Liquid steel is an internal technical target; HSM plus DSP is the current downstream final-product proxy.
 - A future economics denominator must be frozen before EUR/t claims. Options are liquid-steel equivalent, current final-product proxy, or an explicitly revised downstream product target.
-- The denominator remains unresolved after C5p_a because boiler/steam and generator/interface layers are still incomplete. Product revenue remains blocked.
+- The denominator remains unresolved after C5p_c because residual electricity/NG, consolidated grid-boundary and product-revenue layers are still incomplete.
 
 ## DSP Route-Origin Status
 
@@ -65,23 +65,23 @@ The largest gaps are mostly expected consequences of the active 6.75 Mt/y target
 ## Utility Readiness
 
 - `Linde_ASU_oxygen`: implemented_accounting_only_after_C5p_a. Recommended stage: review_DRP_oxygen_basis_then_C5p_b_boiler_steam. Risk: Oxygen accounting exists, but DRP O2 basis and buffer/flexibility claims remain caveated.
-- `boilers_steam`: partial_proxy_only. Recommended stage: C5p_b_boiler_steam_proxy_hardening. Risk: WAG residuals and steam demands cannot be valued or balanced physically.
-- `Vattenfall_IJ01_VN25_generators`: interface_placeholder_only. Recommended stage: C5p_c_generator_interface_boundary. Risk: Full-site electricity and WAG opportunity-cost claims remain unsupported.
-- `residual_electricity`: process_scope_only. Recommended stage: after_Linde_boilers_generators_boundary. Risk: DA economics would price only modelled process loads and may be mistaken for full-site cost.
+- `boilers_steam`: implemented_accounting_only_after_C5p_b. Recommended stage: C5p_c_generator_interface_boundary_and_residual_load_scope. Risk: STEG11/TG2 electricity and remaining WAG cannot be connected to full-site electricity claims.
+- `Vattenfall_IJ01_VN25_generators`: implemented_accounting_only_after_C5p_c. Recommended stage: annual_C0_C1_physical_accounting_anchor_reconciliation_then_residual_electricity_NG_boundary. Risk: Full-site electricity, import/export and WAG opportunity-cost claims remain unsupported.
+- `residual_electricity`: process_scope_plus_internal_offsets_reporting_only. Recommended stage: annual_C0_C1_physical_accounting_anchor_reconciliation_then_residual_electricity_boundary. Risk: DA economics would price only modelled process loads and may be mistaken for full-site cost.
 - `residual_NG`: partial_process_NG_only. Recommended stage: with_boiler_and_residual_utility_boundary. Risk: NG cost comparison excludes non-modelled utility and residual loads.
 - `consolidated_CO2`: diagnostic_only. Recommended stage: after_utility_boundary_before_ETS_sensitivity. Risk: CO2 values may be double-counted or overinterpreted as ETS/full-site emissions.
 
 ## Key Red Flags
 
 - No immediate model-health failure is introduced by C5o_c artifacts.
-- The red flags before economics are denominator ambiguity, C1 DSP route-origin opacity, missing governed scrap loop, DRP oxygen-basis review, boiler/steam proxy status, generator/interface absence, residual electricity/NG boundary absence, and diagnostic-only CO2.
+- The red flags before economics are denominator ambiguity, C1 DSP route-origin opacity, missing governed scrap loop, DRP oxygen-basis review, residual electricity/NG boundary absence, and diagnostic-only CO2.
 
 ## Recommended Next Decisions
 
 1. Freeze denominator policy for future EUR/t reporting: liquid-steel equivalent versus current final-product proxy versus revised downstream target.
 2. Decide whether C1 DSP route-origin tagging is required before thesis route-share claims.
-3. Keep C5p_a Linde/ASU as oxygen accounting only until DRP oxygen basis is reviewed and remaining utility boundaries are scoped.
-4. Defer economics until boiler/steam, generator/interface and residual electricity/NG boundaries are explicitly scoped.
+3. Keep C5p_a Linde/ASU, C5p_b boiler/steam and C5p_c generator-interface outputs as accounting-only layers until DRP oxygen basis and remaining utility boundaries are reviewed.
+4. Defer economics until residual electricity/NG and product-revenue boundaries are explicitly scoped.
 
 ## Generated Tables
 

@@ -61,6 +61,20 @@ def _key(rows: dict[tuple[str, int], dict[str, str]], config: str) -> dict[str, 
     return rows[(config, HORIZON)]
 
 
+def _unit_row(rows: list[dict[str, str]], config: str, unit_id: str) -> dict[str, str]:
+    for row in rows:
+        if row["configuration"] == config and int(row["horizon_hours"]) == HORIZON and row.get("unit_id") == unit_id:
+            return row
+    raise KeyError((config, HORIZON, unit_id))
+
+
+def _pressure_row(rows: list[dict[str, str]], config: str, pressure_level: str) -> dict[str, str]:
+    for row in rows:
+        if row["configuration"] == config and int(row["horizon_hours"]) == HORIZON and row.get("pressure_level") == pressure_level:
+            return row
+    raise KeyError((config, HORIZON, pressure_level))
+
+
 def _coke_case(
     payload: dict[str, Any],
     config: str,
@@ -73,11 +87,14 @@ def _coke_case(
 
 
 def _gap(model: Any, active: Any = "", raw: Any = "") -> tuple[str, str]:
-    model_value = _num(model)
     denominator = active if active not in ("", None) else raw
     if denominator in ("", None):
         return "", ""
-    denom = _num(denominator)
+    try:
+        model_value = _num(model)
+        denom = _num(denominator)
+    except ValueError:
+        return "", ""
     abs_gap = model_value - denom
     rel_gap = abs_gap / denom if abs(denom) > 1e-12 else 0.0
     return _fmt(abs_gap), _fmt(rel_gap)
@@ -150,6 +167,20 @@ def _load_payload() -> dict[str, Any]:
         "linde_oxygen": _by_key(_read_csv(S4_ROOT / "s4_4c5p_a_linde_asu_oxygen_accounting" / "s4_4c5p_a_oxygen_demand_ledger.csv")),
         "linde_asu": _by_key(_read_csv(S4_ROOT / "s4_4c5p_a_linde_asu_oxygen_accounting" / "s4_4c5p_a_asu_electricity_ledger.csv")),
         "linde_totals": _by_key(_read_csv(S4_ROOT / "s4_4c5p_a_linde_asu_oxygen_accounting" / "s4_4c5p_a_modelled_totals_delta.csv")),
+        "steam_health": _by_key(_read_csv(S4_ROOT / "s4_4c5p_b_boiler_steam_circuit_accounting" / "s4_4c5p_b_compact_healthcheck.csv")),
+        "steam_supply": _read_csv(S4_ROOT / "s4_4c5p_b_boiler_steam_circuit_accounting" / "s4_4c5p_b_boiler_steam_supply_by_unit.csv"),
+        "steam_steg11": _by_key(_read_csv(S4_ROOT / "s4_4c5p_b_boiler_steam_circuit_accounting" / "s4_4c5p_b_steg11_chp_ledger.csv")),
+        "steam_tg2": _by_key(_read_csv(S4_ROOT / "s4_4c5p_b_boiler_steam_circuit_accounting" / "s4_4c5p_b_tg2_steam_turbine_ledger.csv")),
+        "steam_bus_balance": _read_csv(S4_ROOT / "s4_4c5p_b_boiler_steam_circuit_accounting" / "s4_4c5p_b_steam_bus_balance.csv"),
+        "steam_fuel": _read_csv(S4_ROOT / "s4_4c5p_b_boiler_steam_circuit_accounting" / "s4_4c5p_b_boiler_fuel_allocation.csv"),
+        "steam_wag_residual": _by_key(_read_csv(S4_ROOT / "s4_4c5p_b_boiler_steam_circuit_accounting" / "s4_4c5p_b_wag_residual_after_steam.csv")),
+        "steam_internal_electricity": _by_key(_read_csv(S4_ROOT / "s4_4c5p_b_boiler_steam_circuit_accounting" / "s4_4c5p_b_internal_electricity_ledger.csv")),
+        "steam_totals": _by_key(_read_csv(S4_ROOT / "s4_4c5p_b_boiler_steam_circuit_accounting" / "s4_4c5p_b_modelled_totals_delta.csv")),
+        "generator_health": _by_key(_read_csv(S4_ROOT / "s4_4c5p_c_ij01_vn25_generator_interface_accounting" / "s4_4c5p_c_compact_healthcheck.csv")),
+        "generator_fuel": _read_csv(S4_ROOT / "s4_4c5p_c_ij01_vn25_generator_interface_accounting" / "s4_4c5p_c_generator_fuel_allocation.csv"),
+        "generator_electricity": _by_key(_read_csv(S4_ROOT / "s4_4c5p_c_ij01_vn25_generator_interface_accounting" / "s4_4c5p_c_generator_electricity_ledger.csv")),
+        "generator_residual": _by_key(_read_csv(S4_ROOT / "s4_4c5p_c_ij01_vn25_generator_interface_accounting" / "s4_4c5p_c_wag_residual_after_generators.csv")),
+        "generator_totals": _by_key(_read_csv(S4_ROOT / "s4_4c5p_c_ij01_vn25_generator_interface_accounting" / "s4_4c5p_c_modelled_totals_delta.csv")),
     }
 
 
@@ -189,6 +220,22 @@ def build_anchor_matrix(payload: dict[str, Any]) -> list[dict[str, Any]]:
         totals = _key(payload["linde_totals"], config)
         linde_o2 = _key(payload["linde_oxygen"], config)
         linde_asu = _key(payload["linde_asu"], config)
+        steam_health = _key(payload["steam_health"], config)
+        steam_wag = _key(payload["steam_wag_residual"], config)
+        steam_elec = _key(payload["steam_internal_electricity"], config)
+        steam_totals = _key(payload["steam_totals"], config)
+        steg11 = _key(payload["steam_steg11"], config)
+        tg2 = _key(payload["steam_tg2"], config)
+        generator_health = _key(payload["generator_health"], config)
+        generator_elec = _key(payload["generator_electricity"], config)
+        generator_residual = _key(payload["generator_residual"], config)
+        generator_totals = _key(payload["generator_totals"], config)
+        steam_72 = _pressure_row(payload["steam_bus_balance"], config, "steam_72bar")
+        steam_45 = _pressure_row(payload["steam_bus_balance"], config, "steam_45bar")
+        steam_15 = _pressure_row(payload["steam_bus_balance"], config, "steam_15bar")
+        k15 = _unit_row(payload["steam_supply"], config, "BOILER_C1_K15K16")
+        k23 = _unit_row(payload["steam_supply"], config, "BOILER_C2_K23K24")
+        k41 = _unit_row(payload["steam_supply"], config, "BOILER_C2_K41")
         active_target = _num(c5k["active_total_liquid_steel_target_site_t_y"])
 
         definitions = [
@@ -231,8 +278,55 @@ def build_anchor_matrix(payload: dict[str, Any]) -> list[dict[str, Any]]:
             ("linde_average_oxygen_demand", "Linde/ASU", "average core oxygen demand", "t/h", 150.0, "", linde_o2["average_core_oxygen_demand_t_per_h"], "validation_anchor", "comparison_to_150_t_h_precedent", "LINDE source card / C5p_a", "C5p_a", "150 t/h is a precedent/sanity check, not a capacity constraint."),
             ("linde_asu_electricity", "Linde/ASU", "ASU electricity", "MWh/y", raw_asu_precedent_mwh, "", linde_asu["ASU_electricity_MWh_y"], "development_input", "0p400_MWh_per_t_O2_accounting", "LINDE source card / C5p_a", "C5p_a", "Added to current C5 process scope; not full-site electricity."),
             ("linde_residual_unmodelled_oxygen", "Linde/ASU", "residual/unmodelled O2 to 150 t/h precedent", "t/y", "", "", linde_o2["residual_or_unmodelled_uses_t_y_to_150_precedent"], "reporting_only", "not_added_to_ASU_production", "LINDE source card / C5p_a", "C5p_a", "Reported gap only; not hidden plant demand."),
-            ("process_electricity_total", "site", "modelled process electricity after Linde/ASU", "MWh/y", "", "", totals["process_electricity_after_Linde_ASU_MWh_e_y"], "reporting_only", "current_C5_scope_not_full_site", "C5p_a", "C5p_a", "Not full-site electricity boundary."),
-            ("diagnostic_co2_total", "site", "diagnostic CO2 after Linde/ASU", "t/y", "", "", totals["diagnostic_CO2_after_Linde_ASU_t_y"], "reporting_only", "current_C5_diagnostic_scope_not_ETS", "C5p_a", "C5p_a", "Not ETS/full-site emissions; ASU direct CO2 not added."),
+            ("steam_total_demand", "steam circuit", "existing modelled steam demand", "t steam/y", "", "", steam_health["total_steam_demand_t_y"], "development_input", "existing_C5_steam_demands_mapped_to_pressure_buses", "BOILER_STEAM source card / C5p_b", "C5p_b", "Residual/unmodelled steam demand is reported missing/deferred, not hidden."),
+            ("steam_supply_total", "steam circuit", "boiler plus STEG11 steam generation", "t steam/y", "", "", steam_health["total_steam_supply_t_y"], "development_input", "demand_led_mass_flow_steam_generation", "BOILER_STEAM source card / C5p_b", "C5p_b", "Mass-flow steam accounting, not enthalpy model."),
+            ("steam_72bar_supply", "steam_72bar", "72 bar supply", "t steam/y", "", "", steam_72["supply_t_y"], "development_input", "K15K16_plus_STEG11_to_72bar_bus", "C5p_b", "C5p_b", "Pressure bus balance, not storage."),
+            ("steam_45bar_supply", "steam_45bar", "45 bar supply", "t steam/y", "", "", steam_45["supply_t_y"], "development_input", "K23K24_plus_K41_to_45bar_bus", "C5p_b", "C5p_b", "Pressure bus balance, not storage."),
+            ("steam_15bar_process_load", "steam_15bar", "15 bar process load", "t steam/y", "", "", steam_15["process_load_t_y"], "development_input", "unknown_pressure_existing_loads_assumed_15bar", "C5p_b", "C5p_b", "Pressure level assumption must be reviewed before thesis claims."),
+            ("steam_spill_total", "steam circuit", "explicit steam spill diagnostic", "t steam/y", "", "", steam_health["total_steam_spill_t_y"], "reporting_only", "explicit_spill_not_hidden_slack", "C5p_b", "C5p_b", "Nonzero spill would indicate missing sinks or overproduction."),
+            ("steam_unserved_total", "steam circuit", "unserved steam", "t steam/y", "", "", steam_health["total_unserved_steam_t_y"], "failure_guard", "unserved_steam_must_be_zero_for_thesis_usable_runs", "C5p_b", "C5p_b", "Unserved steam is not hidden slack."),
+            ("boiler_k15k16_steam_capacity", "BOILER_C1_K15K16", "steam capacity", "t/h", 220.0, 220.0, k15["steam_capacity_t_h"], "validation_anchor", "source_card_capacity_anchor", "BOILER_STEAM source card / C5p_b", "C5p_b", "Capacity anchor, not hidden hourly constraint in annual ledger."),
+            ("boiler_k23k24_steam_capacity", "BOILER_C2_K23K24", "steam capacity", "t/h", 220.0, 220.0, k23["steam_capacity_t_h"], "validation_anchor", "source_card_capacity_anchor", "BOILER_STEAM source card / C5p_b", "C5p_b", "Capacity anchor, not hidden hourly constraint in annual ledger."),
+            ("boiler_k41_steam_capacity", "BOILER_C2_K41", "steam capacity", "t/h", 80.0, 80.0, k41["steam_capacity_t_h"], "validation_anchor", "source_card_capacity_anchor", "BOILER_STEAM source card / C5p_b", "C5p_b", "K41 kept separate because COG is blocked."),
+            ("steg11_steam_capacity", "STEG11_CHP", "steam capacity", "t/h", 80.0, 80.0, steg11["steam_output_max_t_h"], "validation_anchor", "source_card_capacity_anchor", "BOILER_STEAM source card / C5p_b", "C5p_b", "STEG11 electricity is accounting-only."),
+            ("steg11_electricity_capacity", "STEG11_CHP", "electricity capacity", "MWe", 13.1, 13.1, steg11["electricity_max_MWe"], "validation_anchor", "source_card_capacity_anchor", "BOILER_STEAM source card / C5p_b", "C5p_b", "Not market revenue."),
+            ("tg2_steam_capacity", "TG2_STEAM_TURBINE", "steam throughput capacity", "t/h", 105.0, 105.0, tg2["steam_flow_max_t_h"], "validation_anchor", "source_card_capacity_anchor", "BOILER_STEAM source card / C5p_b", "C5p_b", "TG2 is steam-only."),
+            ("tg2_electricity_capacity", "TG2_STEAM_TURBINE", "electricity capacity", "MWe", 14.5, 14.5, tg2["electricity_max_MWe"], "validation_anchor", "source_card_capacity_anchor", "BOILER_STEAM source card / C5p_b", "C5p_b", "Not market revenue."),
+            ("wag_to_steam", "WAG ledger", "BFG/COG to steam layer", "MWh_LHV/y", "", "", steam_wag["WAG_to_steam_MWh_LHV_y"], "development_input", "useful_WAG_to_steam_no_direct_market_value", "C5p_b", "C5p_b", "BOFG remains blocked/deferred for this layer."),
+            ("ng_backup_for_steam", "NG", "NG backup for steam", "MWh_LHV/y", "", "", steam_wag["NG_backup_for_steam_MWh_LHV_y"], "reporting_only", "backup_external_fuel_only", "C5p_b", "C5p_b", "NG eligibility is caveated; no gas-market economics added."),
+            ("remaining_wag_after_steam", "WAG ledger", "remaining WAG after steam layer", "MWh_LHV/y", "", "", steam_wag["residual_WAG_after_steam_MWh_LHV_y"], "reporting_only", "deferred_generator_interface_or_spill_status", "C5p_b", "C5p_b", "Vattenfall generator/interface layer remains deferred."),
+            ("steg11_electricity", "STEG11_CHP", "accounting-only electricity", "MWh/y", "", "", steg11["electricity_output_MWh_e_y"], "reporting_only", "internal_accounting_only_not_market_revenue", "C5p_b", "C5p_b", "Do not present as full-site net generation."),
+            ("tg2_electricity", "TG2_STEAM_TURBINE", "accounting-only electricity", "MWh/y", "", "", tg2["electricity_output_MWh_e_y"], "reporting_only", "internal_accounting_only_not_market_revenue", "C5p_b", "C5p_b", "Do not present as Vattenfall generation."),
+            ("steam_circuit_internal_electricity", "steam circuit", "total accounting-only electricity", "MWh/y", "", "", steam_elec["total_steam_circuit_electricity_output_MWh_e_y"], "reporting_only", "not_netted_against_process_electricity", "C5p_b", "C5p_b", "Current modelled process electricity is unchanged by C5p_b."),
+            ("process_electricity_total", "site", "modelled process electricity after boiler/steam", "MWh/y", "", "", steam_totals["process_electricity_after_boiler_steam_MWh_e_y"], "reporting_only", "current_C5_scope_not_full_site_no_STEG_TG2_netting", "C5p_b", "C5p_b", "Not full-site electricity boundary."),
+            ("diagnostic_co2_total", "site", "diagnostic CO2 after boiler/steam", "t/y", "", "", steam_totals["diagnostic_CO2_after_Linde_ASU_t_y"], "reporting_only", "fuel_explicit_steam_CO2_deferred", "C5p_b", "C5p_b", "Not ETS/full-site emissions; avoid WAG combustion double counting."),
+            ("generator_dispatch_mode", "IJ01/VN25 generator interface", "dispatch mode", "policy", "", "", generator_health["generator_dispatch_mode"], "development_policy", "fixed_or_validation_scaled_interface", "IJ01/VN25 source card / C5p_c", "C5p_c", "Fixed/interface accounting only; not DA price-responsive dispatch."),
+            ("generator_electricity_value_mode", "IJ01/VN25 generator interface", "electricity value mode", "policy", "", "", generator_health["generator_electricity_value_mode"], "development_policy", "offset_site_grid_import_reporting_only", "IJ01/VN25 source card / C5p_c", "C5p_c", "Internal offset/reporting only; no export revenue."),
+            ("c0_generator_option_b_status", "C0 generator interface", "Option B status", "status", "", "", generator_health["generator_layer_status"] if config == C0 else "", "development_input", "C0_residual_wag_generator_interface_active", "IJ01/VN25 source card / C5p_c", "C5p_c", "C0 is active residual-WAG-derived interface, not context-only no dispatch."),
+            ("c0_generator_interface_total_fuel", "C0 generator interface", "residual WAG generator fuel", "PJ/y", "", "", generator_health["C0_generator_total_fuel_PJ_y"], "development_input", "governed_residual_WAG_after_process_and_steam", "IJ01/VN25 source card / C5p_c", "C5p_c", "Aggregate C0 interface; no public VN25/IJ01 C0 split is claimed."),
+            ("c0_generator_electricity_validation_anchor", "C0 generator interface", "electricity validation anchor", "TWh/y", 2.0 if config == C0 else "", "", generator_health["C0_generator_electricity_validation_anchor_TWh_e_y"], "validation_anchor", "context_anchor_only_not_dispatch_target", "IJ01/VN25 source card / C5p_c", "C5p_c", "Reporting/internal offset comparison only; no DA/export revenue."),
+            ("c0_generator_electricity_offset_actual", "C0 generator interface", "electricity offset actual", "TWh/y", "", "", generator_health["C0_generator_electricity_actual_TWh_e_y"], "reporting_only", "residual_WAG_times_development_efficiency", "C5p_c", "C5p_c", "Actual is calculated from modelled residual WAG and development efficiency."),
+            ("c0_generator_electricity_gap_to_validation_anchor", "C0 generator interface", "electricity validation-anchor gap", "TWh/y", "", "", generator_health["C0_generator_electricity_gap_to_validation_anchor_TWh_e_y"], "reporting_only", "modelled_minus_2TWh_validation_anchor", "C5p_c", "C5p_c", "Gap is reported rather than forcing electricity to the context anchor."),
+            ("c0_generator_efficiency_development_only", "C0 generator interface", "development efficiency", "MWh_e/MWh_fuel", 0.34 if config == C0 else "", "", generator_health["C0_generator_electric_efficiency_dev"], "development_input", "single_value_from_0p34_0p35_source_card_range", "IJ01/VN25 source card / C5p_c", "C5p_c", "Not official Tata/Vattenfall unit efficiency."),
+            ("vn25_generator_role", "VN25", "enabled/status", "status", "", "", generator_health["VN25_enabled_base"], "development_input", "primary_C1_residual_gas_generator_interface", "IJ01/VN25 source card / C5p_c", "C5p_c", "Not a Vattenfall unit-commitment model."),
+            ("ij01_generator_role", "IJ01", "enabled/status", "status", "", "", generator_health["IJ01_enabled_base"], "development_input", "CHP_backup_generator_interface", "IJ01/VN25 source card / C5p_c", "C5p_c", "IJ01 steam/electricity split remains deferred."),
+            ("vn24_backup_status", "VN24", "enabled/status", "status", "", "", generator_health["VN24_status"], "development_input", "cold_backup_reserve_only", "IJ01/VN25 source card / C5p_c", "C5p_c", "VN24 inactive in base."),
+            ("vn25_generator_fuel", "VN25", "carrier-specific generator fuel", "PJ/y", 13.7 if config == C1 else "", 13.7 if config == C1 else "", generator_health["VN25_total_fuel_PJ_y"], "validation_anchor", "C1_preferred_anchor_interface_limited_by_governed_residual_WAG", "IJ01/VN25 source card / C5p_c", "C5p_c", "Explicit total anchor is 13.7 PJ/y; rounded carrier rows are reported separately."),
+            ("ij01_generator_fuel", "IJ01", "carrier-specific generator fuel", "PJ/y", 0.8 if config == C1 else "", 0.8 if config == C1 else "", generator_health["IJ01_total_fuel_PJ_y"], "validation_anchor", "C1_preferred_anchor_interface_limited_by_governed_residual_WAG", "IJ01/VN25 source card / C5p_c", "C5p_c", "IJ01 NG is blocked in base; CHP split deferred."),
+            ("generator_total_with_flare", "IJ01/VN25 generator interface", "fuel plus flare comparison", "PJ/y", 14.6 if config == C1 else "", 14.6 if config == C1 else "", generator_health["generator_total_with_flare_model_PJ_y"], "validation_anchor", "C1_preferred_total_with_visible_flaring", "IJ01/VN25 source card / C5p_c", "C5p_c", "Annual validation total, not hourly dispatch or market value."),
+            ("generator_fuel_gap", "IJ01/VN25 generator interface", "fuel gap or unserved anchor", "PJ/y", "", "", generator_health["generator_fuel_gap_unserved_PJ_y"], "reporting_only", "governed_residual_WAG_does_not_create_unlimited_fuel", "C5p_c", "C5p_c", "Gap is visible when annual preferred anchors exceed governed residual carrier availability."),
+            ("generator_flare_or_spill", "IJ01/VN25 generator interface", "flare/spill diagnostic", "PJ/y", 0.1 if config == C1 else "", 0.1 if config == C1 else "", generator_health["generator_flare_or_spill_PJ_y"], "validation_anchor", "explicit_flaring_anchor_reporting_only", "IJ01/VN25 source card / C5p_c", "C5p_c", "No direct WAG market value or export revenue."),
+            ("generator_electricity_offset", "IJ01/VN25 generator interface", "internal electricity offset", "MWh/y", "", "", generator_elec["total_generator_electricity_offset_MWh_e_y"], "reporting_only", "internal_offset_not_DA_revenue", "C5p_c", "C5p_c", "Not full-site net grid import or export revenue."),
+            ("vn25_electricity_offset", "VN25", "internal electricity offset", "MWh/y", "", "", generator_elec["VN25_electricity_offset_MWh_e_y"], "reporting_only", "VN25_development_efficiency_only", "C5p_c", "C5p_c", "VN25 efficiency is development-only."),
+            ("ij01_electricity_offset", "IJ01", "internal electricity offset", "MWh/y", "", "", generator_elec["IJ01_electricity_offset_MWh_e_y"], "reporting_only", "IJ01_conversion_deferred", "C5p_c", "C5p_c", "IJ01 electricity/steam split is deferred."),
+            ("remaining_wag_after_generators", "WAG ledger", "remaining WAG after generators and flare", "PJ/y", "", "", generator_health["residual_WAG_after_generators_and_flare_PJ_y"], "reporting_only", "residual_WAG_visible_not_market_value", "C5p_c", "C5p_c", "Residual WAG still needs annual C0/C1 boundary reconciliation."),
+            ("process_electricity_after_generator_offset_reporting_only", "site", "modelled process electricity after generator offset", "MWh/y", "", "", generator_totals["process_electricity_after_generator_offset_reporting_only_MWh_e_y"], "reporting_only", "not_full_site_net_import", "C5p_c", "C5p_c", "Offset is reporting-only and boundary incomplete."),
+            ("current_product_gas_reuse_context", "C0 context", "product gas reuse anchor", "PJ/y", 54.0 if config == C0 else "", "", generator_health["C0_product_gas_reuse_context_PJ_y"], "context_anchor", "C0_sanity_check_only", "IJ01/VN25 source card", "C5p_c", "Context only; not exact generator fuel without interpretation."),
+            ("current_vattenfall_residual_gas_electricity_context", "C0 context", "residual-gas electricity anchor", "TWh/y", 2.0 if config == C0 else "", "", generator_health["C0_generator_electricity_actual_TWh_e_y"], "validation_anchor", "C0_context_comparison_only_not_target", "IJ01/VN25 source card", "C5p_c", "Used as C0 validation anchor only, not enforced output, Vattenfall profit, or digital twin."),
+            ("current_tata_average_power_context", "C0 context", "average electric power anchor", "MW", 360.0 if config == C0 else "", "", generator_health["C0_tata_average_power_context_MW"], "context_anchor", "C0_sanity_check_only", "IJ01/VN25 source card", "C5p_c", "Context only; not a full-site net import claim."),
+            ("transferred_power_plants_total_capacity_context", "power plants", "transferred total capacity", "MW", 770.0, "", "", "context_anchor", "not_per_unit_capacity", "IJ01/VN25 source card", "C5p_c", "770 MW is total transferred capacity context, not VN25/IJ01 unit capacity."),
+            ("athanasiadis_vn25_capacity_precedent", "VN25", "development capacity precedent", "MW", 350.0, "", generator_elec["VN25_capacity_context_MW_dev"], "development_precedent", "not_public_Tata_capacity", "IJ01/VN25 source card", "C5p_c", "Athanasiadis 350 MW is development precedent only."),
+            ("generator_ij01_base_variant_total_fuel", "IJ01/VN25 generator interface", "IJ01-as-base sensitivity total fuel", "PJ/y", 10.0 if config == C1 else "", "", "", "sensitivity_anchor_deferred", "not_active_base", "IJ01/VN25 source card", "C5p_c", "Variant is recorded only; base remains VN25-preferred Mode A."),
         ]
         for item in definitions:
             rows.append(_anchor_row(item[0], config, *item[1:], "Review or freeze before DA/economics if this metric is used in claims."))
@@ -369,14 +463,14 @@ def build_decision_register() -> list[dict[str, Any]]:
             "topic": "Economics denominator",
             "current_choice": "Report liquid steel target and downstream final-product proxy separately",
             "alternatives": "Use liquid-steel equivalent; use HSM+DSP final product proxy; use raw MER final-product anchors",
-            "why_current_choice_exists": "C5 has downstream losses/imported slab and DSP/HSM outputs, but no final product sales/economics layer and remaining utility/interface layers are incomplete.",
+            "why_current_choice_exists": "C5 has downstream losses/imported slab and DSP/HSM outputs, but no final product sales/economics layer and generator/interface plus residual electricity/NG boundaries remain incomplete.",
             "model_impact": "EUR/t results can change materially depending on denominator.",
             "affects_physical_behaviour": "false",
             "affects_economics_later": "true",
             "sensitivity_required": "yes",
             "freeze_before_DA": "yes",
-            "recommended_action": "Do not choose yet; keep unresolved until C5p_a Linde/ASU is reviewed and boiler/steam plus generator/interface layers are implemented.",
-            "caveat": "Linde/ASU is now accounting-only; product revenue remains blocked.",
+            "recommended_action": "Do not choose yet; keep unresolved until generator/interface and residual electricity/NG layers are implemented and product-revenue policy is scoped.",
+            "caveat": "Linde/ASU and boiler/steam are now accounting-only; product revenue remains blocked.",
         },
         {
             "decision_id": "C5_DECISION_INTERNAL_SCRAP",
@@ -515,10 +609,48 @@ def build_utility_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     c1_eaf_o2 = _num(_key(payload["eaf"], C1)["EAF_oxygen_diagnostic_t_y"])
     c0_asu_mw = _fmt(_key(payload["linde_asu"], C0)["ASU_average_MW"])
     c1_asu_mw = _fmt(_key(payload["linde_asu"], C1)["ASU_average_MW"])
-    c0_steam = f"BF steam proxy and KGF steam proxy available in C5m_b; Sinter steam proxy {_fmt(_key(payload['sinter_utility'], C0)['steam_demand_site_t_y'])} t/y"
-    c1_steam = f"BF/KGF steam proxy available in C5m_b; Sinter steam proxy {_fmt(_key(payload['sinter_utility'], C1)['steam_demand_site_t_y'])} t/y; EAF steam recovery reporting-only"
-    c0_elec = _fmt(_key(payload["dsp_totals"], C0)["process_electricity_after_DSP_MWh_e_y"])
-    c1_elec = _fmt(_key(payload["dsp_totals"], C1)["process_electricity_after_DSP_MWh_e_y"])
+    c0_steam = (
+        f"C5p_b mapped demand {_fmt(_key(payload['steam_health'], C0)['total_steam_demand_t_y'])} t/y; "
+        f"spill {_fmt(_key(payload['steam_health'], C0)['total_steam_spill_t_y'])} t/y; "
+        f"unserved {_fmt(_key(payload['steam_health'], C0)['total_unserved_steam_t_y'])} t/y"
+    )
+    c1_steam = (
+        f"C5p_b mapped demand {_fmt(_key(payload['steam_health'], C1)['total_steam_demand_t_y'])} t/y; "
+        f"spill {_fmt(_key(payload['steam_health'], C1)['total_steam_spill_t_y'])} t/y; "
+        f"unserved {_fmt(_key(payload['steam_health'], C1)['total_unserved_steam_t_y'])} t/y; "
+        "EAF steam recovery reporting-only"
+    )
+    c0_steam_supply = (
+        f"K15/K16 {_fmt(_key(payload['steam_health'], C0)['K15K16_steam_output_t_y'])} t/y, "
+        f"K23/K24 {_fmt(_key(payload['steam_health'], C0)['K23K24_steam_output_t_y'])} t/y, "
+        f"K41 {_fmt(_key(payload['steam_health'], C0)['K41_steam_output_t_y'])} t/y, "
+        f"STEG11 {_fmt(_key(payload['steam_health'], C0)['STEG11_steam_output_t_y'])} t/y; "
+        f"STEG11+TG2 electricity {_fmt(_key(payload['steam_health'], C0)['total_steam_circuit_electricity_output_MWh_e_y'])} MWh/y accounting-only"
+    )
+    c1_steam_supply = (
+        f"K15/K16 {_fmt(_key(payload['steam_health'], C1)['K15K16_steam_output_t_y'])} t/y, "
+        f"K23/K24 {_fmt(_key(payload['steam_health'], C1)['K23K24_steam_output_t_y'])} t/y, "
+        f"K41 {_fmt(_key(payload['steam_health'], C1)['K41_steam_output_t_y'])} t/y, "
+        f"STEG11 {_fmt(_key(payload['steam_health'], C1)['STEG11_steam_output_t_y'])} t/y; "
+        f"STEG11+TG2 electricity {_fmt(_key(payload['steam_health'], C1)['total_steam_circuit_electricity_output_MWh_e_y'])} MWh/y accounting-only"
+    )
+    c0_elec = _fmt(_key(payload["steam_totals"], C0)["process_electricity_after_boiler_steam_MWh_e_y"])
+    c1_elec = _fmt(_key(payload["steam_totals"], C1)["process_electricity_after_boiler_steam_MWh_e_y"])
+    c0_gen = (
+        f"C5p_c C0 residual-WAG interface: generator fuel "
+        f"{_fmt(_key(payload['generator_health'], C0)['C0_generator_total_fuel_PJ_y'])} PJ/y; "
+        f"electricity offset {_fmt(_key(payload['generator_health'], C0)['C0_generator_electricity_actual_TWh_e_y'])} TWh/y; "
+        f"2.0 TWh validation gap {_fmt(_key(payload['generator_health'], C0)['C0_generator_electricity_gap_to_validation_anchor_TWh_e_y'])} TWh/y; "
+        f"remaining WAG {_fmt(_key(payload['generator_health'], C0)['residual_WAG_after_generators_and_flare_PJ_y'])} PJ/y"
+    )
+    c1_gen = (
+        f"C5p_c C1 Mode A: VN25 fuel {_fmt(_key(payload['generator_health'], C1)['VN25_total_fuel_PJ_y'])} PJ/y, "
+        f"IJ01 fuel {_fmt(_key(payload['generator_health'], C1)['IJ01_total_fuel_PJ_y'])} PJ/y, "
+        f"gap {_fmt(_key(payload['generator_health'], C1)['generator_fuel_gap_unserved_PJ_y'])} PJ/y, "
+        f"electricity offset {_fmt(_key(payload['generator_health'], C1)['total_generator_electricity_offset_MWh_e_y'])} MWh/y"
+    )
+    c0_elec_after_gen = _fmt(_key(payload["generator_totals"], C0)["process_electricity_after_generator_offset_reporting_only_MWh_e_y"])
+    c1_elec_after_gen = _fmt(_key(payload["generator_totals"], C1)["process_electricity_after_generator_offset_reporting_only_MWh_e_y"])
     c0_ng = "PEFA/EAF/DSP NG zero or backup only; DRP inactive"
     c1_ng = f"DRP {_fmt(_key(payload['drp'], C1)['DRP_NG_total_PJ_y'])} PJ/y plus EAF {_fmt(_key(payload['eaf'], C1)['EAF_NG_PJ_y'])} PJ/y; DSP NG zero"
     return [
@@ -537,38 +669,38 @@ def build_utility_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
         {
             "utility_area": "boilers_steam",
             "current_demands_available": f"C0: {c0_steam}; C1: {c1_steam}",
-            "current_supply_available": "Sinter proxy supply; WAG boiler/interface placeholders in WAG ledger",
-            "missing_assets": "physical boilers, steam bus, steam supply/demand balance, boiler NG backup, steam emissions",
-            "current_status": "partial_proxy_only",
-            "blocker_for_physical_model": "medium: steam proxies avoid silence but no utility closure",
-            "blocker_for_economics": "high: WAG/NG boiler economics cannot be claimed",
-            "recommended_stage": "C5p_b_boiler_steam_proxy_hardening",
-            "risk_if_postponed": "WAG residuals and steam demands cannot be valued or balanced physically.",
-            "caveat": "No artificial internal steam price.",
+            "current_supply_available": f"C0: {c0_steam_supply}; C1: {c1_steam_supply}",
+            "missing_assets": "source-backed residual steam demand, full thermodynamic steam model, fuel-explicit CO2 reconciliation, generator/interface boundary",
+            "current_status": "implemented_accounting_only_after_C5p_b",
+            "blocker_for_physical_model": "low for compact steam utility accounting; medium for pressure/enthalpy and residual-load claims",
+            "blocker_for_economics": "medium: WAG/NG to steam is visible, but no prices, generator interface, product revenue or residual load boundary",
+            "recommended_stage": "C5p_c_generator_interface_boundary_and_residual_load_scope",
+            "risk_if_postponed": "STEG11/TG2 electricity and remaining WAG cannot be connected to full-site electricity claims.",
+            "caveat": "Mass-flow steam accounting only; no artificial internal steam price or direct WAG market value.",
         },
         {
             "utility_area": "Vattenfall_IJ01_VN25_generators",
             "current_demands_available": "WAG carrier residual/interface rows exist by BFG/COG/BOFG",
-            "current_supply_available": "no generator dispatch, efficiency, electricity output or site import/export balance",
-            "missing_assets": "generator links, electricity output, fuel eligibility, heat/power split, import/export boundary",
-            "current_status": "interface_placeholder_only",
-            "blocker_for_physical_model": "medium",
+            "current_supply_available": f"C0: {c0_gen}; C1: {c1_gen}",
+            "missing_assets": "unit commitment, heat/power split, residual electricity loads, site import/export boundary, source-backed IJ01 conversion",
+            "current_status": "implemented_accounting_only_after_C5p_c",
+            "blocker_for_physical_model": "low for generator-interface accounting; high for full power-plant boundary",
             "blocker_for_economics": "high",
-            "recommended_stage": "C5p_c_generator_interface_boundary",
-            "risk_if_postponed": "Full-site electricity and WAG opportunity-cost claims remain unsupported.",
-            "caveat": "No WAG export revenue or direct WAG market valuation.",
+            "recommended_stage": "annual_C0_C1_physical_accounting_anchor_reconciliation_then_residual_electricity_NG_boundary",
+            "risk_if_postponed": "Full-site electricity, import/export and WAG opportunity-cost claims remain unsupported.",
+            "caveat": "No export revenue, price response, mFRR, direct WAG market valuation or Vattenfall digital-twin claim.",
         },
         {
             "utility_area": "residual_electricity",
-            "current_demands_available": f"Current modelled process electricity after DSP: C0 {c0_elec} MWh/y; C1 {c1_elec} MWh/y",
-            "current_supply_available": "none; not a full-site import/export convention",
-            "missing_assets": "fixed/background loads, site import/export boundary, onsite generation offsets, grid capacity",
-            "current_status": "process_scope_only",
+            "current_demands_available": f"Current modelled process electricity after C5p_b: C0 {c0_elec} MWh/y; C1 {c1_elec} MWh/y",
+            "current_supply_available": f"C5p_c reports generator offsets but not a full boundary: C0 after offset {c0_elec_after_gen} MWh/y; C1 after offset {c1_elec_after_gen} MWh/y",
+            "missing_assets": "fixed/background loads, site import/export boundary, grid capacity, residual auxiliaries and validation against annual site electricity anchors",
+            "current_status": "process_scope_plus_internal_offsets_reporting_only",
             "blocker_for_physical_model": "low for plant-ledger C5; high for full site",
             "blocker_for_economics": "high",
-            "recommended_stage": "after_Linde_boilers_generators_boundary",
+            "recommended_stage": "annual_C0_C1_physical_accounting_anchor_reconciliation_then_residual_electricity_boundary",
             "risk_if_postponed": "DA economics would price only modelled process loads and may be mistaken for full-site cost.",
-            "caveat": "Label as current_C5_scope, not full_site_electricity.",
+            "caveat": "Label as current_C5_scope with reporting-only generator offset, not full_site_net_electricity.",
         },
         {
             "utility_area": "residual_NG",
@@ -622,7 +754,7 @@ def write_report(
         "",
         "## Purpose And Scope",
         "",
-        "This is a diagnostic-only review of the current C5 plant-layer artifacts after KGF/BF/BOF/HSM/WBW/Sinter/PEFA/pellet burden/DRP/EAF/DSP. It does not change model equations, parameters, targets, route shares, coefficients, utility layers, or economics.",
+        "This is a diagnostic-only review of the current C5 plant-layer artifacts after KGF/BF/BOF/HSM/WBW/Sinter/PEFA/pellet burden/DRP/EAF/DSP, Linde/ASU oxygen, boiler/steam-circuit accounting and IJ01/VN25 generator-interface accounting. It does not change production targets, route shares, process coefficients or economics.",
         "",
         "The model remains a public Tata Steel IJmuiden-inspired development model. It is not a confidential digital twin and not thesis-approved.",
         "",
@@ -630,8 +762,8 @@ def write_report(
         "",
         "- Active C0/C1 liquid-steel target remains 6.75 Mt/y.",
         "- C5l_d `base_0_50` remains the default HSM/WBW heat case.",
-        "- PEFA, pellet burden, DRP, EAF, DSP and Linde/ASU oxygen are represented as development-only accounting/physical layers with compact healthchecks.",
-        "- Linde/ASU oxygen now adds current-C5 process electricity accounting, but WAG, CO2 and steam remain diagnostic or partial utility layers, not economic objective layers.",
+        "- PEFA, pellet burden, DRP, EAF, DSP, Linde/ASU oxygen, boiler/steam and IJ01/VN25 generators are represented as development-only accounting/physical layers with compact healthchecks.",
+        "- Linde/ASU oxygen adds current-C5 process electricity accounting; C5p_b adds mass-flow steam buses, WAG/NG-to-steam allocation and STEG11/TG2 accounting-only electricity; C5p_c adds carrier-specific C1 IJ01/VN25 accounting plus a C0 residual-WAG-derived generator-interface offset with 2.0 TWh/y as validation anchor only. These are not economic objective layers.",
         "",
         "## Anchor Reconciliation Summary",
         "",
@@ -658,7 +790,7 @@ def write_report(
         f"- C1 final-product proxy is {_fmt(c1_final['model_value'])} t/y versus raw final-product context {_fmt(c1_final['raw_anchor_value'])} t/y.",
         "- Liquid steel is an internal technical target; HSM plus DSP is the current downstream final-product proxy.",
         "- A future economics denominator must be frozen before EUR/t claims. Options are liquid-steel equivalent, current final-product proxy, or an explicitly revised downstream product target.",
-        "- The denominator remains unresolved after C5p_a because boiler/steam and generator/interface layers are still incomplete. Product revenue remains blocked.",
+        "- The denominator remains unresolved after C5p_c because residual electricity/NG, consolidated grid-boundary and product-revenue layers are still incomplete.",
         "",
         "## DSP Route-Origin Status",
         "",
@@ -689,14 +821,14 @@ def write_report(
         "## Key Red Flags",
         "",
         "- No immediate model-health failure is introduced by C5o_c artifacts.",
-        "- The red flags before economics are denominator ambiguity, C1 DSP route-origin opacity, missing governed scrap loop, DRP oxygen-basis review, boiler/steam proxy status, generator/interface absence, residual electricity/NG boundary absence, and diagnostic-only CO2.",
+        "- The red flags before economics are denominator ambiguity, C1 DSP route-origin opacity, missing governed scrap loop, DRP oxygen-basis review, residual electricity/NG boundary absence, and diagnostic-only CO2.",
         "",
         "## Recommended Next Decisions",
         "",
         "1. Freeze denominator policy for future EUR/t reporting: liquid-steel equivalent versus current final-product proxy versus revised downstream target.",
         "2. Decide whether C1 DSP route-origin tagging is required before thesis route-share claims.",
-        "3. Keep C5p_a Linde/ASU as oxygen accounting only until DRP oxygen basis is reviewed and remaining utility boundaries are scoped.",
-        "4. Defer economics until boiler/steam, generator/interface and residual electricity/NG boundaries are explicitly scoped.",
+        "3. Keep C5p_a Linde/ASU, C5p_b boiler/steam and C5p_c generator-interface outputs as accounting-only layers until DRP oxygen basis and remaining utility boundaries are reviewed.",
+        "4. Defer economics until residual electricity/NG and product-revenue boundaries are explicitly scoped.",
         "",
         "## Generated Tables",
         "",
