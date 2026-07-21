@@ -1,0 +1,79 @@
+run_id: steel_s2_pre_dam_operational_boundary_closure_v1_20260720
+lineage_role: derived_operational_hardening
+repair_stage: electricity
+execution_mode: fixed_reference_cost
+fixed_reference_scenario_id: c0_c1_mer_fixed_reference_v1
+external_procurement_flows_enabled: true
+price_series_id: flat_central_reference_v1
+planning_horizon_hours: 168
+execution_block_hours: 24
+replan_count: 7
+quota_per_execution_block_t: 18493.1506849315
+base_quota_per_execution_block_t: 5905.2
+quota_denominator: site_final_product_development_proxy
+annual_reference_target_mt_y: 6.75
+rolling_production_progress_state_enabled: true
+production_envelope_tolerance_fraction: 0.005
+c1_boundary_case: mer_site_product
+imported_slab_annual_cap_mt_y: 0.6
+hsm_slab_input_t_per_t_hrc: 1.06
+dsp_liquid_steel_input_t_per_t_coil: 1.05
+c0_downstream_routing:
+  raw_liquid_steel_mt_y: 7.2
+  raw_hsm_final_mt_y: 5.4
+  raw_dsp_final_mt_y: 1.5
+  bof_hot_metal_t_per_t_liquid_steel: 0.875
+  bof_scrap_t_per_t_liquid_steel: 0.208
+  annual_bof_scrap_cap_mt_y: 1.5
+  dsp_liquid_steel_input_t_per_t_coil: 1.05
+c1_generator_boundary:
+  vn25_bfg_pj_y: 8.4
+  vn25_bofg_pj_y: 1.2
+  vn25_cog_pj_y: 0.1
+  vn25_ng_cap_pj_y: 4.1
+  vn25_total_fuel_pj_y: 13.7
+  vn25_electricity_efficiency: 0.345
+  vn25_volume_cap_nm3_h: 600000
+  ij01_bfg_pj_y: 0.7
+  ij01_bofg_pj_y: 0.1
+  ij01_cog_pj_y: 0.0
+  ij01_total_fuel_pj_y: 0.8
+  ij01_volume_cap_nm3_h: 300000
+represented_electricity_boundary:
+  linde_n2_auxiliary_mw: 45.0
+  eaf_secondary_electricity_mwh_per_t_ls: 0.031
+  dsp_electricity_mwh_per_t_coil: 0.056
+c1_source_backed_energy_boundary:
+  drp_ng_gj_per_t_dri: 9.9
+  drp_electricity_mwh_per_t_dri: 0.08333333333333333
+  eaf_arc_electricity_mwh_per_t_liquid_steel: 0.4222222222222222
+  eaf_ng_gj_per_t_liquid_steel: 0.05
+  natural_gas_lhv_mj_per_nm3: 35.8
+bof_material_balance:
+  hot_metal_t_per_t_liquid_steel: 0.824
+  scrap_t_per_t_liquid_steel: 0.294
+eaf_material_balance:
+  hdri_t_per_t_liquid_steel: 0.8484848485
+  scrap_t_per_t_liquid_steel: 0.2727272727
+scrap_supply_ledger:
+  annual_site_scrap_cap_t_y: 1900000
+  annual_bof_scrap_cap_t_y: 1000000
+  annual_eaf_scrap_cap_t_y: 1800000
+  boundary_role: central_site_supply_with_separate_route_guardrails
+source_coke_chain:
+  dry_coal_t_per_t_coke: 1.285
+  bf_coke_t_per_t_hot_metal: 0.359
+availability_policy:
+  c0: quota_driven_binary_capacity_with_continuous_classes
+  c1: quota_driven_topology
+c1_retained_route_policy: quota_driven_topology
+commitment_granularity: daily_binary_hourly_throughput
+use_c1_component_ontology_continuous_classes: false
+development_controller_activation: full_electricity_boundary
+market_prices_enabled: false
+energy_cost_objective_enabled: true
+product_revenue_enabled: false
+co2_ets_objective_enabled: false
+solver_time_limit_seconds: 300
+required_solver_family: gurobi
+output_policy: minimal

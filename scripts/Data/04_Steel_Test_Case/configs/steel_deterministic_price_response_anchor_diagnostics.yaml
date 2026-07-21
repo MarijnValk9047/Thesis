@@ -1,0 +1,23 @@
+run_id: steel_s2_deterministic_price_response_anchor_diagnostics_v1_20260720
+parent_run_id: steel_s2_hourly_da_dplus4_point_forecast_integration_v1_20260720
+lineage_role: child_diagnostic_validation
+run_class: diagnostic_validation
+output_policy: minimal
+physical_config: steel_hourly_da_dplus4_point_forecast_integration.yaml
+weekly_replan_count: 7
+timestamped_dplus4_rolling_enabled: true
+annual_evaluation:
+  dataset_split: test
+  chunk_replans: 30
+  maximum_runtime_minutes: 90
+  coverage_selection: longest_consecutive_governed_origin_support
+  incomplete_support_label: partial_year_not_annual
+strategies:
+  - flat_price_insensitive
+  - forecast_responsive
+  - perfect_foresight_oracle
+markets_active: false
+bidding_active: false
+settlement_active: false
+revenue_active: false
+residual_inputs_active: false
