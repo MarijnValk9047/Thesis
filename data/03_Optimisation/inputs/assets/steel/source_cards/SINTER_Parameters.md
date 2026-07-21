@@ -3,13 +3,19 @@
 ## Status
 
 - Source-card status: candidate development memo
-- Executable input table status: not executable by itself
+- Executable input table status: Gate-1 development conversion accepted through the governed C0/C1 input table
 - Thesis usability: false
-- Human review required: true
-- Codex may decide: false
+- Human review required: completed for the Gate-1 development use described below
+- Codex may decide: false; the acceptance came from the explicit Gate-1 reconciliation direction
 - Stage scope: S4.4c5m Sinter minimal parameterisation
 
 This memo records compact first-step Sinter Plant coefficients for a development-only C5 stage. The values are not Tata-validated, not thesis-approved, and must remain governed development candidates until targeted provenance and human review are complete.
+
+Gate-1 acceptance is deliberately narrow: the 160--320 t/h activity is
+iron-ore feed, and `1.230 t sinter/t iron ore` converts it to the sinter-output
+inventory basis. The COG value `0.067 GJ_LHV/t sinter` and electricity value
+`0.0343 MWh_e/t sinter` use the converted output denominator. This acceptance
+does not promote any coefficient to Tata-measured or thesis-final truth.
 
 ## First Implementation Scope
 

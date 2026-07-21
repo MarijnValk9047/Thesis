@@ -1,0 +1,22 @@
+run_id: steel_thesis_scale_final_product_feasibility_v3
+planning_horizon_hours: 168
+execution_block_hours: 24
+replan_count: 3
+# 6,750,000 t final-product proxy per 365-day reporting year.
+quota_per_execution_block_t: 18493.1506849315
+base_quota_per_execution_block_t: 5905.2
+quota_denominator: final_product_proxy
+annual_reference_target_mt_y: 6.75
+annualisation_calendar_days: 365
+availability_policy:
+  c0: fixed_static_binary_schedule
+  c1: bottom_up_fixed_retained_route
+c1_route_split_policy: retained_route_as_current_executable_configuration
+c1_route_split_caveat: No empirical fixed BF-BOF versus DRP-EAF share is claimed; the governed executable retained-route policy is preserved.
+development_controller_activation: full
+market_prices_enabled: false
+energy_cost_objective_enabled: false
+product_revenue_enabled: false
+co2_ets_objective_enabled: false
+solver_time_limit_seconds: 300
+output_policy: minimal

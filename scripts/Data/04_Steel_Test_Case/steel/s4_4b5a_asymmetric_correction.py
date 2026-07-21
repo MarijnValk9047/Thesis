@@ -363,6 +363,56 @@ def _patch_wag_sink_eligibility(tables: dict[str, list[dict[str, str]]]) -> None
             row["flaring_allowed"] = "true"
 
 
+def _patch_gate1_sinter_material_basis(
+    tables: dict[str, list[dict[str, str]]],
+) -> dict[str, str]:
+    """Persist the accepted Gate-1 bus0 feed/output conversion on regeneration."""
+
+    row = next(
+        candidate
+        for candidate in tables["process_io_coefficients.csv"]
+        if candidate.get("process_id") == "sintering_plant"
+        and candidate.get("input_material") == "iron_ore"
+        and candidate.get("output_material") == "sinter"
+    )
+    row.update(
+        {
+            "coefficient": "1.230",
+            "coefficient_unit": "t_sinter/t_iron_ore",
+            "basis": "Gate-1 accepted bus0 iron-ore feed to represented sinter output conversion",
+            "source_card_ids": "SINTER_Parameters_candidate_source_card;C5_GATE1_USER_ACCEPTANCE",
+            "candidate_id": "SINTER_OUTPUT_T_PER_T_IRON_ORE_BUS0",
+            "evidence_strength": "source_card_candidate_human_accepted_for_gate1",
+            "input_status": "development_only",
+            "thesis_usability": "false",
+            "codex_may_decide": "false",
+            "human_review_required": "false",
+            "caveat": "Development-only represented-burden conversion; omitted raw-mix inputs remain implicit.",
+            "executable_input": "true",
+            "assumption_id": "C5_GATE1_SINTER_BUS0_CONVERSION",
+            "derivation_method": "rounded_inverse_of_0.813_t_iron_ore_per_t_sinter",
+            "source_hierarchy_used": "SINTER source card plus explicit Gate-1 user acceptance",
+            "sensitivity_required": "false",
+            "human_confirmed_figure_value": "false",
+            "executable_now": "true",
+            "deferred_for_s4_4c_equations": "false",
+            "source_basis": "SINTER_Parameters candidate source card; C5 Gate-1 decision",
+        }
+    )
+    return {
+        "replacement_id": "C5_GATE1_SINTER_BUS0_CONVERSION",
+        "target": "sintering plant bus0 material conversion",
+        "old_assumption": "1.0 t represented sinter per t iron-ore feed",
+        "new_assumption": "1.230 t represented sinter per t iron-ore feed",
+        "derivation_method": "rounded_inverse_of_0.813_t_iron_ore_per_t_sinter",
+        "source_basis": "SINTER_Parameters candidate source card; C5 Gate-1 decision",
+        "sensitivity_required": "false",
+        "thesis_usability": "false",
+        "patch_applied": "true",
+        "caveat": "Development-only represented-burden conversion; not full raw-mix truth.",
+    }
+
+
 def _closure_conflicts() -> list[dict[str, str]]:
     return [
         {
@@ -436,6 +486,7 @@ def run_b5a_correction() -> dict[str, Any]:
         _patch_bf7(tables),
         _patch_cp2_capacity(tables),
         _patch_c1_inactive_legacy_assets(tables, columns),
+        _patch_gate1_sinter_material_basis(tables),
     ]
     gas_rows = _patch_cp_gas_structure(tables, columns)
     _patch_wag_sink_eligibility(tables)

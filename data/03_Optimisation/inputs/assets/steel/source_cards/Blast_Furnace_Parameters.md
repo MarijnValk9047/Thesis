@@ -109,6 +109,16 @@ The first BF parameterisation should only implement the minimum set needed for m
 
 The BF coke rate is new for the BF implementation and will likely expose a coke-balance gap against the KGF system. That gap should be reported, not hidden.
 
+Gate-1 basis audit: the executable `2.1041666667 t hot metal/t represented
+sinter` coefficient implies `0.4752475 t represented sinter/t hot metal`. Its
+lineage is a controlled S4.4b5 development completion proxy rather than a
+measured Tata burden recipe. It represents only the modelled sinter share and
+does not silently include the deferred pellet or direct-ore rows. Coke remains
+on its separate hot-metal balance, while PCI is not yet a closed material-flow
+burden term. The higher `1.088 t sinter/t hot metal` source-card candidate is
+therefore a visible unresolved full-burden reconciliation candidate, not an
+automatic replacement for Gate 1.
+
 ## 6. BFG generation and surplus convention
 
 Use the existing project WAG convention:

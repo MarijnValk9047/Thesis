@@ -1,0 +1,38 @@
+run_id: steel_gate2_closed_loop_mer_site_product_v5_20260716
+planning_horizon_hours: 168
+execution_block_hours: 24
+replan_count: 3
+quota_per_execution_block_t: 18493.1506849315
+base_quota_per_execution_block_t: 5905.2
+quota_denominator: site_final_product_development_proxy
+annual_reference_target_mt_y: 6.75
+c1_boundary_case: mer_site_product
+imported_slab_annual_cap_mt_y: 0.6
+hsm_slab_input_t_per_t_hrc: 1.06
+bof_material_balance:
+  hot_metal_t_per_t_liquid_steel: 0.824
+  scrap_t_per_t_liquid_steel: 0.294
+eaf_material_balance:
+  hdri_t_per_t_liquid_steel: 0.8484848485
+  scrap_t_per_t_liquid_steel: 0.2727272727
+scrap_supply_ledger:
+  annual_site_scrap_cap_t_y: 1900000
+  annual_bof_scrap_cap_t_y: 1000000
+  annual_eaf_scrap_cap_t_y: 1800000
+  boundary_role: central_site_supply_with_separate_route_guardrails
+source_coke_chain:
+  dry_coal_t_per_t_coke: 1.285
+  bf_coke_t_per_t_hot_metal: 0.359
+availability_policy:
+  c0: quota_driven_binary_capacity_with_continuous_classes
+  c1: quota_driven_topology
+c1_retained_route_policy: quota_driven_topology
+commitment_granularity: daily_binary_hourly_throughput
+use_c1_component_ontology_continuous_classes: false
+development_controller_activation: full
+market_prices_enabled: false
+energy_cost_objective_enabled: false
+product_revenue_enabled: false
+co2_ets_objective_enabled: false
+solver_time_limit_seconds: 300
+output_policy: minimal
