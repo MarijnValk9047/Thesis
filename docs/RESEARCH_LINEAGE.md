@@ -12,24 +12,28 @@ It is based on the existing repository docs and the phase3/phase4 lineage and re
 
 ## Canonical Current Path
 
-The current canonical path through the repository is:
+The active thesis implementation frontier is now the C0/C1 steel physical
+model. The canonical high-level sequence is:
 
-1. data cleaning;
-2. standard hourly day-ahead forecasting;
-3. quarter-hour extension with explicit observed-vs-counterfactual separation;
-4. scenario generation and scenario diagnostics;
-5. hydrogen selected-week optimisation through the command centre.
+1. preserve the existing data-cleaning and forecasting lineage;
+2. complete deterministic, price-free steel production feasibility;
+3. close material, carrier-WAG, represented steam/utility and residual
+   reporting boundaries;
+4. validate configuration-matched annual-equivalent outputs against the
+   canonical anchor register;
+5. add deterministic energy costs only after the physical gate;
+6. return to DA, scenarios, CVaR and later mFRR only after deterministic steel
+   cost optimisation is stable.
 
-In practical terms, the current best-supported optimisation path is:
+The active steel task-start document is
+`docs/optimisation/steel/S4/C5_MODEL_STATE_AND_DETERMINISTIC_OPTIMISATION_ROADMAP.md`.
+The active feasibility config is
+`scripts/Data/04_Steel_Test_Case/configs/steel_quota_driven_physical_feasibility.yaml`.
 
-- hourly;
-- `D_only`;
-- `DA_only`;
-- hydrogen test case;
-- selected regimes / selected weeks;
-- risk-neutral command-centre execution.
-
-The main current blocker is upstream scenario support mismatch, not missing MILP infrastructure.
+Hydrogen, hourly/quarter-hour forecasting and scenario work remain important
+methodological lineage. They are not the current implementation priority and
+must not redirect a steel task to the hydrogen command centre or an old fixed
+C0 schedule.
 
 ## Stage 1: Data Cleaning And Feature Preparation
 
@@ -177,9 +181,10 @@ This matters for later optimisation interpretation:
 - exploratory optimisation can proceed with caveats;
 - final robust risk claims should not ignore these caveats.
 
-## Stage 6: Hydrogen Optimisation
+## Stage 6: Hydrogen Optimisation — Historical Methodological Reference
 
-The active frontier of the repository is now the hydrogen optimisation workstream.
+Hydrogen was the earlier optimisation frontier and remains a reusable
+methodological reference. It is not the active thesis implementation path.
 
 The current code/governance surface is built around:
 

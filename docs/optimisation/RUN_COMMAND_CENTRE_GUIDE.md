@@ -306,7 +306,8 @@ Methodological approximations must remain explicitly labelled. The current backe
 
 ## Agent maintenance contract
 
-Whenever an agent adds or changes any of the following:
+Whenever an agent adds or changes a command-centre market backend or any of
+the following command-centre options:
 
 - scenario model
 - artifact ID
@@ -328,7 +329,21 @@ it must update:
 1. `scripts/Data/03_Hydrogen_Test_Case/configs/optimisation_supported_options.yaml`
 2. `docs/optimisation/RUN_COMMAND_CENTRE_GUIDE.md`
 3. command-centre validation and doctor checks
+
+The deterministic C0/C1 steel rolling-feasibility runner is not a market
+backend.  Until DA bidding is in scope, document its changes in the steel S4
+optimiser contract and its own run outputs instead; do not force it through
+this hydrogen market command centre.
 4. relevant tests
 5. any affected run-contract documentation
 
 If one of these items changes without updating the registry and guide, the task is incomplete.
+# Steel deterministic feasibility scope
+
+The active C0/C1 steel rolling-feasibility runner is deliberately **outside**
+the DA command centre while it is price-free.  Use
+`scripts/Data/04_Steel_Test_Case/run_s4_4c5p_ae_rolling_production_feasibility.py`
+with `scripts/Data/04_Steel_Test_Case/configs/steel_rolling_feasibility.yaml`.
+It accepts no DA market/scenario input and must not be presented as a
+command-centre market backend.  Its governed description is in
+`docs/optimisation/steel/S4/C5_ROLLING_PRODUCTION_FEASIBILITY_OPTIMISER.md`.

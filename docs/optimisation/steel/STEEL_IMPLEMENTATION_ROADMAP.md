@@ -1,5 +1,10 @@
 # Steel Implementation Roadmap
 
+> **Roadmap role.** This document preserves the long-term S1-S9 phase
+> architecture. It is not the active C5 task-start or baseline document. For
+> current code, runs, boundaries and the next physical gate, use
+> `S4/C5_MODEL_STATE_AND_DETERMINISTIC_OPTIMISATION_ROADMAP.md`.
+
 ## Goal
 
 Provide the practical implementation sequence for future Codex work on the steel workstream.
@@ -10,10 +15,10 @@ This roadmap is intentionally restrictive. It exists to stop future chats from j
 
 - do not create one-off scripts for every experiment;
 - prefer configs over duplicated code;
-- inspect existing hydrogen helpers before adding new optimisation infrastructure;
-- preserve the hydrogen test case as the verification baseline;
+- reuse hydrogen rolling/reporting helpers only where they reduce duplication;
+- preserve hydrogen as historical methodology, not as the active steel verification prerequisite;
 - reuse shared optimisation and reporting concepts where appropriate;
-- no full steel model implementation until these planning docs and the input schemas are accepted.
+- continue the existing steel implementation through the active C5 gate; do not restart completed S1-S3 setup work from this long-term roadmap.
 
 ## Phase Roadmap
 
