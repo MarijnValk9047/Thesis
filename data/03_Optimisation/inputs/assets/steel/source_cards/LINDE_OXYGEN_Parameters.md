@@ -78,13 +78,14 @@ low capacity / low flexibility caveats.
 | `LINDE_O2_DEMAND_PRECEDENT_T_PER_H` | ~150 | t O2/h | modelling precedent / validation | `S8_ATHANASIADIS_2025`, `S9_BADARINATH_2025` | Useful sanity check only. Do not hard constrain the model to this value without site-approved data. |
 | `LINDE_O2_DEMAND_PRECEDENT_NM3_PER_H` | ~105,000 | Nm3 O2/h | derived sanity check | `S4_LINDE_PDS_O2`, `S8_ATHANASIADIS_2025` | Derived from 150 t/h and density 1.429 kg/Nm3. |
 | `LINDE_ASU_POWER_AT_150_T_H_O2` | ~60 | MW | derived sanity check | `S3_EIGA_PP033`, `S8_ATHANASIADIS_2025` | `150 t/h * 0.400 MWh/t = 60 MW`. Use as consistency check, not hard capacity. |
+| `LINDE_N2_AUXILIARY_ELECTRICITY_CONTEXT_MW` | ~45 | MW | accepted development context / separate site-load diagnostic | `S8_ATHANASIADIS_2025` | Athanasiadis p. 36 models non-steel processes such as N2 as a historical varying Linde electricity load; p. 42 describes about 45 MW unrelated to steel production. Keep separate from O2-specific ASU intensity, material demand and residual electricity. |
 | `LINDE_O2_BUFFER_GEOMETRIC_VOLUME_M3` | 20 × 50 + 670 = 1,670 | m3 vessel volume | structural anchor / not model-ready Nm3 capacity | `S1_MER_HERACLESS_B` | Pressurised gaseous oxygen buffer tanks; not cryogenic. Pressure is not public, so do not convert to Nm3 storage capacity without assumption. |
 | `LINDE_O2_BUFFER_MODE` | `balancing_buffer_only` | policy | base policy | `S1_MER_HERACLESS_B`, `S8_ATHANASIADIS_2025` | Buffers smooth continuous O2 production against discontinuous BOF converter demand; not a strategic electricity-price storage asset. |
 | `LINDE_O2_STRATEGIC_STORAGE_ALLOWED` | false | bool | base policy | `S1_MER_HERACLESS_B`, `S8_ATHANASIADIS_2025` | Prevents fake DA arbitrage through oxygen storage. |
 | `LINDE_ASU_MFRR_ELIGIBLE_BASE` | false | bool | base policy | `S1_MER_HERACLESS_B`, `S8_ATHANASIADIS_2025` | No mFRR from ASU in base. Later only if ASU ramp/source evidence and oxygen-buffer deliverability are explicitly implemented. |
 | `LINDE_LIQUID_O2_BACKUP_EXPANSION` | true | bool / topology | validation / context | `S1_MER_HERACLESS_B` | Linde expands liquid oxygen buffer capacity for back-up. Do not treat as normal dispatch storage. |
 | `LINDE_LIQUID_ARGON_BACKUP_EXPANSION` | true | bool / topology | validation / context | `S1_MER_HERACLESS_B` | Argon remains deferred unless secondary metallurgy is explicitly modelled. |
-| `LINDE_NITROGEN_CHANGE_WITH_HERACLESS` | no major change foreseen | qualitative | validation / context | `S1_MER_HERACLESS_B` | Keep N2 out of first oxygen model. |
+| `LINDE_NITROGEN_CHANGE_WITH_HERACLESS` | no major change foreseen | qualitative | validation / context | `S1_MER_HERACLESS_B` | Supports a same-order C0/C1 N2 context load, but is not a measured hourly Tata profile. |
 | `LINDE_COMPRESSED_DRY_AIR_EXTRA_COMPRESSOR` | 20,000 | Nm3/h | deferred utility anchor | `S1_MER_HERACLESS_B` | Extra compressed dry air compressor; not oxygen. Add later if compressed air is modelled. |
 
 ## Process oxygen demand parameters
@@ -180,6 +181,8 @@ The known geometric buffer volume is **not** enough to define model-ready Nm3 st
 | `oxygen_balance_gap` | detect missing plant oxygen demand or overproduction |
 | `oxygen_store_boundary_hits` | prevent oxygen buffer acting as large battery |
 | `ASU_electricity_MWh` | full-site electricity accounting |
+| `Linde_N2_auxiliary_electricity_MWh` | explicit non-steel site-context load, separately reported |
+| `Linde_total_meter_electricity_MWh` | O2-process electricity plus explicit N2/auxiliary context load |
 | `ASU_average_MW` | compare against high-level ASU demand precedent |
 | `oxygen_residual_or_unmodelled_uses` | report gap to site-level oxygen precedent |
 | `O2_demand_by_plant` | identify whether BF/BOF/EAF/DRP dominate |
@@ -193,3 +196,4 @@ The known geometric buffer volume is **not** enough to define model-ready Nm3 st
 5. Derived C0/C1 core oxygen totals are incomplete by design: secondary metallurgy, maintenance, purging, backup, distribution losses and non-modelled users are not fully included.
 6. Avoid double counting oxygen from both kg/t and Nm3/t source rows. Choose one canonical unit convention and convert explicitly.
 7. If liquid oxygen back-up is represented, keep it separate from normal gaseous ASU production and label it as reliability/back-up, not dispatchable economic storage.
+8. The ~45 MW N2/auxiliary value is a public Athanasiadis model-precedent context load, not a public Tata meter trace. It may be used in a labelled development boundary diagnostic, but must not be converted into O2 demand, a plant fuel split, a residual plug or a price-responsive flexibility resource.

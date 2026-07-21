@@ -1,0 +1,79 @@
+run_id: steel_c1_6_75_wag_sink_source_reconciliation_v1
+horizon_hours: 168
+solver_time_limit_seconds: 90
+output_policy: diagnostics
+market_prices_enabled: false
+economic_terms_enabled: false
+linde_n2_auxiliary_electricity_mwh_h: 45.0
+source_coke_chain:
+  dry_coal_t_per_t_coke: 1.285
+  bf_coke_t_per_t_hot_metal: 0.359
+wag_controller_policy:
+  hsm_eligible_carriers: [COG, NG]
+  hsm_carrier_precedence: [COG, NG]
+  generator_interface_cap_mode: volume_envelope_only
+  source_status: athanasiadis_model_precedent_sensitivity
+  caveat: >-
+    This diagnostic preserves carrier-specific balances. It applies the existing
+    central C1 BOF share as a scenario policy, represents the Athanasiadis HSM
+    architecture as COG plus named NG backup only, retains the explicit
+    Athanasiadis 45-MW Linde/N2 auxiliary context load, and removes only the
+    allocation-derived generator profile cap. The existing structural generator
+    gas-volume envelope remains active. It does not create a WAG/NG ratio,
+    mixed-gas carrier, Wobbe constraint, or base-input migration.
+bof_material_balance:
+  hot_metal_t_per_t_liquid_steel: 0.824
+  scrap_t_per_t_liquid_steel: 0.294
+eaf_material_balance:
+  hdri_t_per_t_liquid_steel: 0.8484848485
+  scrap_t_per_t_liquid_steel: 0.3030303030
+scenarios:
+  - scenario_id: central_route_athan_hsm_generator_envelope
+    source_status: development_policy_with_public_context_and_model_precedent
+    apply_bof_eaf_ledger: true
+    annual_target_mt_y: 6.75
+    annual_site_scrap_cap_t_y: 2800000
+    annual_bof_scrap_cap_t_y: 1000000
+    annual_eaf_scrap_cap_t_y: 1800000
+    c1_liquid_steel_route_band:
+      bof_lower_share: 0.503703704
+      bof_upper_share: 0.503703704
+    caveat: >-
+      The exact BOF share is the existing central-source-ratio scenario
+      (3.4/6.75), used here only as a labelled sensitivity. The high end of the
+      public site-scrap envelope supports feasibility; neither the scrap cap nor
+      the route share is an anchor-fit calibration or a global dispatch default.
+  - scenario_id: central_route_eaf_secondary_electricity
+    source_status: development_policy_with_public_context_and_model_precedent
+    apply_bof_eaf_ledger: true
+    annual_target_mt_y: 6.75
+    annual_site_scrap_cap_t_y: 2800000
+    annual_bof_scrap_cap_t_y: 1000000
+    annual_eaf_scrap_cap_t_y: 1800000
+    c1_liquid_steel_route_band:
+      bof_lower_share: 0.503703704
+      bof_upper_share: 0.503703704
+    electricity_boundary_overrides:
+      eaf_secondary_electricity_mwh_per_t_ls: 0.031
+    caveat: >-
+      Keeps the WAG source-context case unchanged and activates only the
+      separately source-labelled EAF secondary-metallurgy electricity value
+      (31 kWh/t LS). This is a throughput-linked sensitivity load, not a site
+      residual, an EAF arc-electricity replacement or a migration to base inputs.
+  - scenario_id: central_route_eaf_secondary_dsp_high
+    source_status: development_policy_with_public_context_and_model_precedent
+    apply_bof_eaf_ledger: true
+    annual_target_mt_y: 6.75
+    annual_site_scrap_cap_t_y: 2800000
+    annual_bof_scrap_cap_t_y: 1000000
+    annual_eaf_scrap_cap_t_y: 1800000
+    c1_liquid_steel_route_band:
+      bof_lower_share: 0.503703704
+      bof_upper_share: 0.503703704
+    electricity_boundary_overrides:
+      eaf_secondary_electricity_mwh_per_t_ls: 0.031
+      dsp_electricity_mwh_per_t_coil: 0.104
+    caveat: >-
+      Adds the source-labelled EAF secondary-metallurgy electricity sensitivity
+      and the generic HSM-proxy DSP high endpoint. DSP high remains sensitivity
+      only and cannot be used as a Tata-DSP measurement or a base-input migration.

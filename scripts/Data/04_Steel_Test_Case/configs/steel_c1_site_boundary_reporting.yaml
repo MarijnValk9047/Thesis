@@ -1,0 +1,24 @@
+run_id: steel_c1_site_boundary_reporting_v1
+output_policy: diagnostics
+run_class: site_boundary_reporting
+lineage_role: derived_diagnostic
+retention: local_run_artifact_not_git_eligible_by_default
+source_run_id: steel_c1_6_75_wag_sink_source_reconciliation_v3
+natural_gas_lhv_mj_per_nm3: 35.8
+
+# Reporting anchors only.  They never create a residual load, NG allocation or
+# dispatch constraint.
+site_context_anchors:
+  official_c1_gross_electricity_twh_y: 4.944444
+  official_c1_grid_import_twh_y: 3.25
+  official_c1_full_site_ng_pj_y: 46.5
+  official_c1_scope1_mtco2_y: 8.3
+  athanasiadis_table9_electricity_twh_y: 4.89
+
+# Figure 91 is a user-supplied visual, so only its labelled directional errors
+# are retained.  Its bar heights are not promoted to exact source values.
+athanasiadis_figure_91_model_minus_real_share:
+  total_CO2: 0.0906
+  total_site_NG: 0.0711
+  total_site_coal: -0.0768
+  WAG_electricity_generation: 0.0972

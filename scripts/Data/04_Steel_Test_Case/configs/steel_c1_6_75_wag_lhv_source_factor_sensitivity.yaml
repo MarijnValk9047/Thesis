@@ -1,0 +1,48 @@
+run_id: steel_c1_6_75_wag_lhv_source_factor_sensitivity_v1
+horizon_hours: 168
+solver_time_limit_seconds: 90
+output_policy: diagnostics
+market_prices_enabled: false
+economic_terms_enabled: false
+linde_n2_auxiliary_electricity_mwh_h: 45.0
+source_coke_chain:
+  dry_coal_t_per_t_coke: 1.285
+  bf_coke_t_per_t_hot_metal: 0.359
+wag_controller_policy:
+  hsm_eligible_carriers: [COG, NG]
+  hsm_carrier_precedence: [COG, NG]
+  generator_interface_cap_mode: volume_envelope_only
+  source_status: athanasiadis_model_precedent_sensitivity
+  caveat: >-
+    Retains the existing source-context controller case: HSM is COG plus named
+    NG backup, carrier balances remain separate and the generator volume
+    envelope remains active. No WAG/NG mix ratio, mixed-gas carrier, Wobbe
+    model, residual input or base-input migration is created.
+bof_material_balance:
+  hot_metal_t_per_t_liquid_steel: 0.824
+  scrap_t_per_t_liquid_steel: 0.294
+eaf_material_balance:
+  hdri_t_per_t_liquid_steel: 0.8484848485
+  scrap_t_per_t_liquid_steel: 0.3030303030
+scenarios:
+  - scenario_id: central_route_source_card_wag_lhv_set
+    source_status: source_card_coherent_energy_basis_sensitivity
+    apply_bof_eaf_ledger: true
+    annual_target_mt_y: 6.75
+    annual_site_scrap_cap_t_y: 2800000
+    annual_bof_scrap_cap_t_y: 1000000
+    annual_eaf_scrap_cap_t_y: 1800000
+    c1_liquid_steel_route_band:
+      bof_lower_share: 0.503703704
+      bof_upper_share: 0.503703704
+    wag_lhv_mj_per_nm3_override:
+      BFG: 3.85
+      COG: 18.5
+      BOFG: 8.6
+    caveat: >-
+      Sensitivity only: applies the consistent BF/KGF/BOF source-card LHV set
+      to the energy represented by already modelled carrier volumes. It keeps
+      source gas volumes, process heat demand, WAG eligibility, named NG
+      backup, the 15-bar steam abstraction and all base development inputs
+      unchanged. Its purpose is to test the known LHV-source inconsistency,
+      not to fit annual anchors.

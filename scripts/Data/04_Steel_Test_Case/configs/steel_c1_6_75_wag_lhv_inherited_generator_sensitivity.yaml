@@ -1,0 +1,47 @@
+run_id: steel_c1_6_75_wag_lhv_inherited_generator_sensitivity_v1
+horizon_hours: 168
+solver_time_limit_seconds: 90
+output_policy: diagnostics
+market_prices_enabled: false
+economic_terms_enabled: false
+linde_n2_auxiliary_electricity_mwh_h: 45.0
+source_coke_chain:
+  dry_coal_t_per_t_coke: 1.285
+  bf_coke_t_per_t_hot_metal: 0.359
+wag_controller_policy:
+  hsm_eligible_carriers: [COG, NG]
+  hsm_carrier_precedence: [COG, NG]
+  generator_interface_cap_mode: inherited_profile
+  source_status: existing_generator_controller_profile_plus_source_card_LHV_sensitivity
+  caveat: >-
+    Uses the existing generator-interface profile cap rather than a broader
+    gas-volume-only envelope. Any carrier-specific WAG surplus remains
+    explicitly flared; it is not reassigned to an invented sink, mixed gas or
+    NG substitution.
+bof_material_balance:
+  hot_metal_t_per_t_liquid_steel: 0.824
+  scrap_t_per_t_liquid_steel: 0.294
+eaf_material_balance:
+  hdri_t_per_t_liquid_steel: 0.8484848485
+  scrap_t_per_t_liquid_steel: 0.3030303030
+scenarios:
+  - scenario_id: central_route_source_lhv_existing_generator_cap
+    source_status: bounded_existing_controller_and_source_card_sensitivity
+    apply_bof_eaf_ledger: true
+    annual_target_mt_y: 6.75
+    annual_site_scrap_cap_t_y: 2800000
+    annual_bof_scrap_cap_t_y: 1000000
+    annual_eaf_scrap_cap_t_y: 1800000
+    c1_liquid_steel_route_band:
+      bof_lower_share: 0.503703704
+      bof_upper_share: 0.503703704
+    wag_lhv_mj_per_nm3_override:
+      BFG: 3.85
+      COG: 18.5
+      BOFG: 8.6
+    caveat: >-
+      Applies only the source-card carrier-LHV set to already modelled carrier
+      volumes and uses the existing inherited generator interface cap. It does
+      not use an anchor as a dispatch constraint, add a sink, invent a gas
+      mix, add Wobbe logic, allocate residual electricity or NG, or migrate a
+      development input.

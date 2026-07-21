@@ -1,0 +1,44 @@
+run_id: steel_c1_electricity_sensitivity_anchor_reconciliation_v1
+output_policy: diagnostics
+run_class: annual_multi_anchor_reconciliation
+lineage_role: diagnostic
+retention: local_run_artifact_not_git_eligible_by_default
+
+source_runs:
+  - run_id: steel_c1_6_75_mer_site_product_anchor_boundary_v5
+    label: baseline_mer_site_product
+    role: boundary_baseline
+  - run_id: steel_c1_6_75_eaf_secondary_anchor_boundary_v1
+    label: eaf_secondary_electricity_only
+    role: bounded_development_sensitivity
+  - run_id: steel_c1_6_75_hsm_rolling_candidate_anchor_boundary_v1
+    label: hsm_rolling_candidate_only
+    role: bounded_development_sensitivity
+  - run_id: steel_c1_6_75_hsm_eaf_accepted_candidate_anchor_boundary_v1
+    label: hsm_and_eaf_combined
+    role: bounded_development_sensitivity
+
+c1_generator_wag_context_pj_y:
+  BFG: 9.1
+  COG: 0.1
+  BOFG: 1.3
+  flare: 0.1
+  total_wag_plus_flare: 10.6
+
+athanasiadis_figure_91_directional_context:
+  - metric_family: total_CO2
+    athanasiadis_model_minus_real_share: 0.0906
+    comparison_requirement: total_site_CO2_same_boundary
+  - metric_family: total_site_NG
+    athanasiadis_model_minus_real_share: 0.0711
+    comparison_requirement: total_site_NG_same_boundary
+  - metric_family: total_site_coal
+    athanasiadis_model_minus_real_share: -0.0768
+    comparison_requirement: total_site_coal_same_boundary
+  - metric_family: WAG_electricity_generation
+    athanasiadis_model_minus_real_share: 0.0972
+    comparison_requirement: WAG_electricity_output_same_boundary
+
+anchor_proximity_policy:
+  target_abs_residual_share: 0.075
+  review_abs_residual_share: 0.10

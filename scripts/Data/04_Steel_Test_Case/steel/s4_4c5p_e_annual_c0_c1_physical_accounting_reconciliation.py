@@ -13,7 +13,6 @@ from typing import Any
 
 from .s4_4c5_anchor_route_denominator_diagnostics import (
     OUT_DIR as ANCHOR_DIR,
-    build_outputs as build_anchor_route_outputs,
 )
 from .s4_4c5f_coking_plant_minimal_parameterisation import (
     C0,
@@ -24,10 +23,7 @@ from .s4_4c5f_coking_plant_minimal_parameterisation import (
     _write_json,
     _zero,
 )
-from .s4_4c5p_d_buffer_store_register_and_validation import (
-    C5P_D_DIR,
-    run_s4_4c5p_d_buffer_store_register_and_validation,
-)
+from .s4_4c5p_d_buffer_store_register_and_validation import C5P_D_DIR
 
 
 STAGE = "S4.4c5p_e_annual_c0_c1_physical_accounting_reconciliation"
@@ -35,6 +31,8 @@ C5P_E_DIR = S4_ROOT / "s4_4c5p_e_annual_c0_c1_physical_accounting_reconciliation
 REPORT_PATH = Path("docs/optimisation/steel/S4/C5_ANNUAL_C0_C1_PHYSICAL_ACCOUNTING_RECONCILIATION.md")
 
 C5F_DIR = S4_ROOT / "s4_4c5f_coking_plant_minimal_parameterisation"
+C5H_DIR = S4_ROOT / "s4_4c5h_blast_furnace_controller_parameterisation"
+C5J_DIR = S4_ROOT / "s4_4c5j_BOF_OSF_minimal_parameterisation"
 C5K_DIR = S4_ROOT / "s4_4c5k_production_policy_and_route_split_normalisation"
 C5L_D_DIR = S4_ROOT / "s4_4c5l_d_HSM_hot_charge_share_cap_and_reheat_sensitivity_patch"
 C5M_DIR = S4_ROOT / "s4_4c5m_Sinter_minimal_parameterisation"
@@ -88,6 +86,7 @@ FLOW_COLUMNS = [
     "configuration",
     "carrier",
     "generated_or_supplied",
+    "ledger_point",
     "mandatory_process_self_use",
     "preparation_or_process_use",
     "boiler_or_steam_use",
@@ -98,6 +97,25 @@ FLOW_COLUMNS = [
     "model_balance_residual",
     "unit",
     "status",
+    "caveat",
+]
+
+WAG_LEDGER_COLUMNS = [
+    "configuration",
+    "carrier",
+    "source_gross_generation_MWh_LHV_y",
+    "mandatory_source_self_use_MWh_LHV_y",
+    "network_available_after_self_use_MWh_LHV_y",
+    "c5p_e_controller_reconciled_supply_before_steam_MWh_LHV_y",
+    "c5p_e_preparation_or_process_use_MWh_LHV_y",
+    "c5p_e_boiler_or_steam_use_MWh_LHV_y",
+    "c5p_e_generator_use_MWh_LHV_y",
+    "c5p_e_flare_or_spill_MWh_LHV_y",
+    "c5p_e_residual_or_unallocated_MWh_LHV_y",
+    "source_to_c5p_e_supply_gap_MWh_LHV_y",
+    "c5p_e_controller_balance_residual_MWh_LHV_y",
+    "ledger_contract_status",
+    "source_artifacts",
     "caveat",
 ]
 
@@ -361,8 +379,10 @@ def _lever_ids(anchor_id: str, domain: str) -> str:
 
 
 def _payload() -> dict[str, Any]:
-    run_s4_4c5p_d_buffer_store_register_and_validation()
-    build_anchor_route_outputs()
+    # C5p_e is a historical reporting reconstruction.  It must not silently
+    # regenerate the current physical model: that would blur historical and
+    # current lineage and makes this diagnostic depend on unrelated solver code.
+    # Missing source artifacts should therefore fail explicitly at read time.
     return {
         "anchor": _csv(ANCHOR_DIR / "c5_anchor_reconciliation_matrix.csv"),
         "denom": _csv(ANCHOR_DIR / "c5_final_product_denominator_diagnostics.csv"),
@@ -394,6 +414,9 @@ def _payload() -> dict[str, Any]:
         "p_d_values": _csv(C5P_D_DIR / "c5_buffer_store_current_values.csv"),
         "p_d_validation": _csv(C5P_D_DIR / "c5_buffer_store_validation_metrics.csv"),
         "f_wag": _csv(C5F_DIR / "s4_4c5f_wag_compact_balance_reconciliation.csv"),
+        "h_bfg": _csv(C5H_DIR / "s4_4c5h_bfg_gross_self_use_surplus_dashboard.csv"),
+        "f_cog": _csv(C5F_DIR / "s4_4c5f_cog_self_use_surplus_dashboard.csv"),
+        "j_wag": _csv(C5J_DIR / "s4_4c5j_wag_generation_consumption_by_plant.csv"),
     }
 
 
@@ -664,6 +687,7 @@ def _wag_row(payload: dict[str, Any], config: str, carrier: str) -> dict[str, An
         "configuration": config,
         "carrier": carrier,
         "generated_or_supplied": _fmt(generated),
+        "ledger_point": "controller_reconciled_supply_before_steam_not_source_generation",
         "mandatory_process_self_use": _fmt(mandatory),
         "preparation_or_process_use": _fmt(process),
         "boiler_or_steam_use": _fmt(boiler),
@@ -674,7 +698,7 @@ def _wag_row(payload: dict[str, Any], config: str, carrier: str) -> dict[str, An
         "model_balance_residual": _fmt(balance),
         "unit": "MWh_LHV/y",
         "status": "pass_carrier_specific_diagnostic",
-        "caveat": "Carrier-specific balance uses current compact C5 layer interfaces; WAG holders are not stores.",
+        "caveat": "Compatibility field `generated_or_supplied` is controller-reconciled supply before steam, not source gross generation; see c5_annual_wag_ledger_point_reconciliation.csv. WAG holders are not stores.",
     }
 
 
@@ -698,6 +722,7 @@ def _flow_balance_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "configuration": config,
             "carrier": "NG",
             "generated_or_supplied": _fmt(total_ng),
+            "ledger_point": "named_ng_external_import_partial_boundary",
             "mandatory_process_self_use": "0",
             "preparation_or_process_use": _fmt(drp_ng + eaf_ng + pefa_ng),
             "boiler_or_steam_use": _fmt(boiler_ng),
@@ -714,6 +739,7 @@ def _flow_balance_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "configuration": config,
             "carrier": "WAG_total_reporting_only",
             "generated_or_supplied": "",
+            "ledger_point": "aggregate_reporting_only_after_carrier_rows",
             "mandatory_process_self_use": "",
             "preparation_or_process_use": "",
             "boiler_or_steam_use": _fmt(_zero(pb["WAG_to_steam_MWh_LHV_y"])),
@@ -726,6 +752,74 @@ def _flow_balance_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "status": "reporting_total_after_carrier_rows",
             "caveat": "Aggregate WAG row is reporting-only after carrier-specific BFG/BOFG/COG rows.",
         })
+    return rows
+
+
+def _wag_ledger_point_rows(payload: dict[str, Any], flow: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Expose source, network, and C5p_e controller points without joining them physically.
+
+    C5p_e is a historical reconciliation of compact downstream diagnostics.  Its
+    controller balance is useful, but its former `generated_or_supplied` label
+    was too easily read as gross source production.  This table preserves both
+    quantities and makes any cross-stage gap visible instead of tuning it away.
+    """
+    rows: list[dict[str, Any]] = []
+    by_flow = {(row["configuration"], row["carrier"]): row for row in flow}
+    for config in [C0, C1]:
+        for carrier in ["BFG", "COG", "BOFG"]:
+            gross = 0.0
+            self_use = 0.0
+            source_artifacts = ""
+            if carrier == "BFG":
+                source_rows = [
+                    row for row in payload["h_bfg"]
+                    if row["configuration"] == config and row["horizon_hours"] == "24"
+                ]
+                gross = sum(_zero(row["BFG_gross_site_MWh_LHV_y"]) for row in source_rows)
+                self_use = sum(_zero(row["BFG_to_Controller_BF_site_MWh_y"]) for row in source_rows)
+                source_artifacts = "C5h BFG gross/self-use/surplus dashboard"
+            elif carrier == "COG":
+                source_rows = [
+                    row for row in payload["f_cog"]
+                    if row["configuration"] == config and row["horizon_hours"] == "24"
+                ]
+                gross = sum(_zero(row["COG_gross_site_MWh_LHV_y"]) for row in source_rows)
+                self_use = sum(_zero(row["COG_to_KGF_underfiring_site_MWh_LHV_y"]) for row in source_rows)
+                source_artifacts = "C5f COG gross/self-use/surplus dashboard"
+            else:
+                source_rows = [
+                    row for row in payload["j_wag"]
+                    if row["configuration"] == config
+                    and row["horizon_hours"] == "24"
+                    and row["carrier"] == "BOFG"
+                    and _zero(row["generated_MWh_LHV_y"]) > 0.0
+                ]
+                gross = sum(_zero(row["generated_MWh_LHV_y"]) for row in source_rows)
+                source_artifacts = "C5j BOFG generation/consumption ledger"
+
+            network = gross - self_use
+            controller = by_flow[(config, carrier)]
+            reconciled_supply = _zero(controller["generated_or_supplied"])
+            controller_balance = _zero(controller["model_balance_residual"])
+            source_gap = network - reconciled_supply
+            rows.append({
+                "configuration": config,
+                "carrier": carrier,
+                "source_gross_generation_MWh_LHV_y": _fmt(gross),
+                "mandatory_source_self_use_MWh_LHV_y": _fmt(self_use),
+                "network_available_after_self_use_MWh_LHV_y": _fmt(network),
+                "c5p_e_controller_reconciled_supply_before_steam_MWh_LHV_y": _fmt(reconciled_supply),
+                "c5p_e_preparation_or_process_use_MWh_LHV_y": controller["preparation_or_process_use"],
+                "c5p_e_boiler_or_steam_use_MWh_LHV_y": controller["boiler_or_steam_use"],
+                "c5p_e_generator_use_MWh_LHV_y": controller["generator_use"],
+                "c5p_e_flare_or_spill_MWh_LHV_y": controller["flare_or_spill"],
+                "c5p_e_residual_or_unallocated_MWh_LHV_y": controller["residual_or_unallocated"],
+                "source_to_c5p_e_supply_gap_MWh_LHV_y": _fmt(source_gap),
+                "c5p_e_controller_balance_residual_MWh_LHV_y": _fmt(controller_balance),
+                "ledger_contract_status": "historical_cross_stage_scope_not_single_closed_chain",
+                "source_artifacts": source_artifacts,
+                "caveat": "Source/network and C5p_e controller points are reported side by side. Their signed gap is a scope/activity-basis diagnostic, never a coefficient-tuning target or residual allocation.",
+            })
     return rows
 
 
@@ -1070,6 +1164,8 @@ def _write_report(gate: dict[str, Any]) -> None:
         "",
         "- C1 generator fuel gap remains explicit and is not hidden.",
         "- C0 2.0 TWh residual-gas electricity is treated as validation anchor only.",
+        "- `generated_or_supplied` in the carrier flow table is a controller-reconciled pre-steam supply compatibility field, not source gross WAG generation.",
+        "- Gross generation, mandatory source self-use, network availability, and downstream controller supply are side-by-side in `c5_annual_wag_ledger_point_reconciliation.csv`; cross-stage gaps are diagnostics, not tuning targets.",
         "- Final-product denominator, residual electricity/NG, and CO2 boundaries remain open.",
         "- C5p_d buffer/store validation remains pass-with-caveats with no free-source stores.",
         "",
@@ -1086,6 +1182,7 @@ def _write_outputs() -> dict[str, Any]:
     anchor = _annual_anchor_rows(payload)
     config = _config_comparison_rows(payload)
     flow = _flow_balance_rows(payload)
+    wag_ledger = _wag_ledger_point_rows(payload, flow)
     electricity = _electricity_rows(payload)
     ng = _ng_rows(payload)
     co2 = _co2_rows(payload)
@@ -1120,11 +1217,13 @@ def _write_outputs() -> dict[str, Any]:
         "electricity_boundary_status": "incomplete_reporting_only_not_full_site_net_import",
         "ng_boundary_status": "incomplete_no_full_site_NG_claim",
         "co2_boundary_status": "component_diagnostic_only_not_ETS_ready",
+        "wag_ledger_contract_status": "historical_cross_stage_scope_not_single_closed_chain",
     }
 
     _write_csv(C5P_E_DIR / "c5_annual_anchor_reconciliation_matrix.csv", anchor, ANCHOR_COLUMNS)
     _write_csv(C5P_E_DIR / "c5_annual_config_comparison.csv", config, CONFIG_COLUMNS)
     _write_csv(C5P_E_DIR / "c5_annual_flow_balance_by_carrier.csv", flow, FLOW_COLUMNS)
+    _write_csv(C5P_E_DIR / "c5_annual_wag_ledger_point_reconciliation.csv", wag_ledger, WAG_LEDGER_COLUMNS)
     _write_csv(C5P_E_DIR / "c5_annual_electricity_boundary_diagnostics.csv", electricity, ELECTRICITY_COLUMNS)
     _write_csv(C5P_E_DIR / "c5_annual_ng_boundary_diagnostics.csv", ng, NG_COLUMNS)
     _write_csv(C5P_E_DIR / "c5_annual_co2_boundary_diagnostics.csv", co2, CO2_COLUMNS)
@@ -1152,6 +1251,7 @@ def _write_outputs() -> dict[str, Any]:
             "anchor": len(anchor),
             "config": len(config),
             "flow": len(flow),
+            "wag_ledger": len(wag_ledger),
             "electricity": len(electricity),
             "ng": len(ng),
             "co2": len(co2),

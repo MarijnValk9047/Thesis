@@ -31,6 +31,7 @@ from steel.s4_4c5p_e_annual_c0_c1_physical_accounting_reconciliation import (  #
     NG_COLUMNS,
     REDFLAG_COLUMNS,
     REPORT_PATH,
+    WAG_LEDGER_COLUMNS,
     run_s4_4c5p_e_annual_c0_c1_physical_accounting_reconciliation,
 )
 
@@ -39,6 +40,7 @@ REQUIRED_FILES = {
     "c5_annual_anchor_reconciliation_matrix.csv": ANCHOR_COLUMNS,
     "c5_annual_config_comparison.csv": CONFIG_COLUMNS,
     "c5_annual_flow_balance_by_carrier.csv": FLOW_COLUMNS,
+    "c5_annual_wag_ledger_point_reconciliation.csv": WAG_LEDGER_COLUMNS,
     "c5_annual_electricity_boundary_diagnostics.csv": ELECTRICITY_COLUMNS,
     "c5_annual_ng_boundary_diagnostics.csv": NG_COLUMNS,
     "c5_annual_co2_boundary_diagnostics.csv": CO2_COLUMNS,
@@ -137,6 +139,26 @@ def test_domain_coverage_and_c0_c1_presence(c5p_e_outputs: Path):
     for config in [C0, C1]:
         carriers = {row["carrier"] for row in flow if row["configuration"] == config}
         assert {"BFG", "BOFG", "COG", "NG", "WAG_total_reporting_only"} <= carriers
+
+
+def test_wag_ledger_points_keep_source_and_controller_scopes_separate(c5p_e_outputs: Path):
+    flow = _read_csv(c5p_e_outputs / "c5_annual_flow_balance_by_carrier.csv")
+    ledger = _read_csv(c5p_e_outputs / "c5_annual_wag_ledger_point_reconciliation.csv")
+    by_flow = {(row["configuration"], row["carrier"]): row for row in flow}
+
+    for row in ledger:
+        key = (row["configuration"], row["carrier"])
+        assert row["ledger_contract_status"] == "historical_cross_stage_scope_not_single_closed_chain"
+        assert _num(row["source_gross_generation_MWh_LHV_y"]) >= _num(row["network_available_after_self_use_MWh_LHV_y"])
+        assert _num(row["source_gross_generation_MWh_LHV_y"]) == pytest.approx(
+            _num(row["mandatory_source_self_use_MWh_LHV_y"])
+            + _num(row["network_available_after_self_use_MWh_LHV_y"]),
+            abs=1e-6,
+        )
+        assert _num(row["c5p_e_controller_reconciled_supply_before_steam_MWh_LHV_y"]) == pytest.approx(
+            _num(by_flow[key]["generated_or_supplied"]), abs=1e-6
+        )
+        assert by_flow[key]["ledger_point"] == "controller_reconciled_supply_before_steam_not_source_generation"
 
 
 def test_c5_baseline_preservation_snapshots(c5p_e_outputs: Path):
