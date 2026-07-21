@@ -1,0 +1,14 @@
+run_id: steel_c1_canonical_physical_baseline_v2
+metallics_config_path: scripts/Data/04_Steel_Test_Case/configs/steel_c1_6_75_wag_sink_source_reconciliation.yaml
+scenario_id: central_route_athan_hsm_generator_envelope
+downstream_boundary_case: mer_site_product
+
+market_prices_enabled: false
+energy_cost_objective_enabled: false
+product_revenue_enabled: false
+co2_ets_objective_enabled: false
+
+output_policy: diagnostics
+run_class: canonical_physical_baseline
+lineage_role: canonical_current_path
+retention: local_run_artifact_not_git_eligible_by_default

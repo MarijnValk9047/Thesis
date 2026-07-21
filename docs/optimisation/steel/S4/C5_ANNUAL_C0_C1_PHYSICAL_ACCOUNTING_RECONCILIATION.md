@@ -16,6 +16,8 @@ This report is reconstructed from current C5 artifacts by the C5p_e diagnostic s
 
 - C1 generator fuel gap remains explicit and is not hidden.
 - C0 2.0 TWh residual-gas electricity is treated as validation anchor only.
+- `generated_or_supplied` in the carrier flow table is a controller-reconciled pre-steam supply compatibility field, not source gross WAG generation.
+- Gross generation, mandatory source self-use, network availability, and downstream controller supply are side-by-side in `c5_annual_wag_ledger_point_reconciliation.csv`; cross-stage gaps are diagnostics, not tuning targets.
 - Final-product denominator, residual electricity/NG, and CO2 boundaries remain open.
 - C5p_d buffer/store validation remains pass-with-caveats with no free-source stores.
 

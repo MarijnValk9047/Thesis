@@ -1,0 +1,49 @@
+run_id: steel_c1_annual_multi_anchor_reconciliation_v2
+output_policy: diagnostics
+run_class: annual_multi_anchor_reconciliation
+lineage_role: diagnostic
+retention: local_run_artifact_not_git_eligible_by_default
+
+# These are existing physical runs.  This stage reads them; it neither solves a
+# new optimisation nor changes their dispatch.
+source_runs:
+  - run_id: steel_c1_6_75_wag_sink_source_reconciliation_v3
+    label: source_wag_central
+    role: carrier_and_utility_reference
+  - run_id: steel_c1_6_75_full_plant_anchor_eaf_secondary_v1
+    label: eaf_secondary_electricity
+    role: electricity_boundary_sensitivity
+  - run_id: steel_c1_6_75_full_plant_anchor_eaf_secondary_dsp_high_v1
+    label: eaf_secondary_plus_dsp_high
+    role: bounded_electricity_context_sensitivity
+
+# C1 generator-table context, retained as secondary validation only.  It is
+# not an hourly fuel constraint, a target mix, or a WAG/NG split rule.
+c1_generator_wag_context_pj_y:
+  BFG: 9.1
+  COG: 0.1
+  BOFG: 1.3
+  flare: 0.1
+  total_wag_plus_flare: 10.5
+
+# User-supplied visual reading of Athanasiadis Figure 91.  These figures are
+# directional model-vs-real context, not values to scale or tune against.
+athanasiadis_figure_91_directional_context:
+  - metric_family: total_CO2
+    athanasiadis_model_minus_real_share: 0.0906
+    comparison_requirement: total_site_CO2_same_boundary
+  - metric_family: total_site_NG
+    athanasiadis_model_minus_real_share: 0.0711
+    comparison_requirement: total_site_NG_same_boundary
+  - metric_family: total_site_coal
+    athanasiadis_model_minus_real_share: -0.0768
+    comparison_requirement: total_site_coal_same_boundary
+  - metric_family: WAG_electricity_generation
+    athanasiadis_model_minus_real_share: 0.0972
+    comparison_requirement: WAG_electricity_output_same_boundary
+
+# A close result is aspirational.  The strict <7.5% target applies only after
+# the numerator, denominator and boundary are marked comparable.
+anchor_proximity_policy:
+  target_abs_residual_share: 0.075
+  review_abs_residual_share: 0.10

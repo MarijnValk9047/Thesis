@@ -1,0 +1,42 @@
+run_id: steel_c0_source_corrected_schedule_basis_diagnostic_v5
+configuration_id: C0_current_BF_BOF_reference
+canonical_c1_run_id: steel_c1_canonical_physical_baseline_v2
+
+planning_horizon_hours: 168
+execution_block_hours: 24
+quota_per_execution_block_t: 5905.2
+base_quota_per_execution_block_t: 5905.2
+quota_denominator: final_product_proxy
+c0_schedule_policy: fixed_static_binary_schedule
+c0_fixed_schedule:
+  schedule_id: inherited_wag_compatible_static_profile_v1
+  source_status: inherited_static_regression_not_source_backed
+  source_hierarchy: historical_internal_regression
+  source_locator: scripts/Data/04_Steel_Test_Case/steel/s4_4c_unified_physical_modelbuilder.py::_apply_c0_static_binary_schedule
+  caveat: >-
+    This static profile is inherited solely to reproduce the historical C0
+    regression. It has no primary-source availability calendar and cannot
+    support a canonical C0 physical claim.
+  active_hours_by_process:
+    coking_plant_1: [0, 2, 4, 6, 8]
+    coking_plant_2: [1, 3, 5, 7]
+    sintering_plant: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    blast_furnace_6: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    blast_furnace_7: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    basic_oxygen_furnace: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    hot_strip_mill: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+development_controller_activation: full
+solver_time_limit_seconds: 120
+source_coke_chain:
+  dry_coal_t_per_t_coke: 1.285
+  bf_coke_t_per_t_hot_metal: 0.359
+
+market_prices_enabled: false
+energy_cost_objective_enabled: false
+product_revenue_enabled: false
+co2_ets_objective_enabled: false
+
+output_policy: diagnostics
+run_class: c0_reporting_only_rolling_physical
+lineage_role: c0_schedule_basis_diagnostic
+retention: local_run_artifact_not_git_eligible_by_default

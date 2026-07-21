@@ -1,0 +1,16 @@
+run_id: steel_c1_anchor_boundary_closure_v3
+output_policy: diagnostics
+run_class: physical_anchor_reconciliation
+lineage_role: diagnostic
+retention: local_run_artifact_not_git_eligible_by_default
+
+# The two cases must be produced from the same C1 physical interface.  They are
+# deliberately separate: imported slab is a source-bounded site boundary, not
+# a residual or an all-endogenous production input.
+source_runs:
+  - run_id: steel_c1_6_75_mer_site_product_anchor_boundary_v5
+    label: mer_site_product
+
+# The simplified origin-feasibility audit retains the all-endogenous stress
+# case separately.  It is not an energy-anchor source run.
+origin_feasibility_run_id: steel_downstream_origin_interface_feasibility_v5
