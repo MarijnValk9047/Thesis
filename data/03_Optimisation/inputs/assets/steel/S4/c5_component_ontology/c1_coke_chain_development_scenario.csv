@@ -1,0 +1,2 @@
+scenario_id,dry_coal_t_per_t_coke,bf_coke_t_per_t_hot_metal,source_card_id,source_status,allowed_use,caveat
+c1_source_backed_coke_chain_central,1.285,0.359,Coking_Plants_Parameters.md;Blast_Furnace_Parameters.md,accepted_development_candidate,bounded_fifth_physical_sensitivity,Generic technical candidate values; not Tata-specific truth and not a default-input migration.

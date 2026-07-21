@@ -1,0 +1,5 @@
+scenario_id,description,bof_lower_share,bof_upper_share,material_balance_mode,hdri_t_per_t_liquid_steel,scrap_t_per_t_liquid_steel,annual_scrap_supply_t_y,source_status,caveat
+free_route_reference,Current quota-driven topology with no C1 liquid-steel route constraint,,,none,,,,development_reference,Preserves the active policy; no route split is forced.
+source_informed_band,BOF liquid-steel share band around source context,0.45,0.55,none,,,,development_policy_with_public_context,Diagnostic band only; downstream HSM/DSP split remains endogenous.
+central_source_ratio,Exact central C1 BOF liquid-steel share 3.4/6.75,0.503703704,0.503703704,none,,,,development_policy_with_public_context,Explicit scenario only; not a global dispatch default.
+central_source_ratio_named_scrap,Central C1 route ratio with MER HDRI plus named scrap material context,0.503703704,0.503703704,named_hdri_scrap,0.848484848,0.303030303,1000000,primary_public_validation_context,Annual scrap cap is normalised to the run horizon; no capacity or WAG/NG ratio changes.

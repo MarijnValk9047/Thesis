@@ -1,0 +1,61 @@
+contract_id: steel_hourly_da_dplus4_point_forecast_v1
+price_series_id: hourly_da_dplus4_point_forecast
+market_area: NL
+currency: EUR
+price_unit: EUR_per_MWh_e
+resolution_minutes: 60
+source_run_id: 20260706_024807_lago_lear_six_year_benchmark
+source_run_relative_files:
+  predictions: predictions/predictions_long.parquet
+  run_summary: run_summary.json
+  metrics_by_lead_day: metrics_by_lead_day.csv
+source_file_sha256:
+  predictions: e245867c1f6772a34d7f9e26445d26f8abc4005b426b4aa021fd4e56e21551f5
+  run_summary: d9961f56b560bcdc437bd0b05d3d060e34d0ee4d2d2363ffe8c6c6149be1eb73
+  metrics_by_lead_day: 6c4a3b9ac314dc2017ebba83913613f83671222194495819e4689ff69907a334
+source_file_size_bytes:
+  predictions: 2184410
+  run_summary: 2526
+  metrics_by_lead_day: 3160
+source_split_policy: thesis_official
+model_id: lear_lago_direct_dplus4_strict_no_future_1092
+feature_variant: LEAR_LAGO_DIRECT_DPLUS4_STRICT_NO_FUTURE
+allowed_dataset_splits:
+  - validation
+  - test
+allowed_lead_days:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+forecast_origin_field: forecast_origin_utc
+delivery_timestamp_field: target_timestamp_utc
+information_available_field: target_known_at_utc
+optimisation_price_field: y_pred
+ex_post_outcome_field: y_true
+ex_post_outcome_policy: prohibited_from_optimisation_interface
+required_prediction_schema:
+  run_id: string
+  model: string
+  feature_variant: string
+  dataset_split: string
+  forecast_origin_utc: timestamp_utc
+  forecast_origin_local: string_with_utc_offset
+  target_timestamp_utc: timestamp_utc
+  target_delivery_local_date: local_date_string
+  target_hour_local: integer
+  target_known_at_utc: timezone_aware_timestamp_string
+  lead_day: integer_0_to_4
+  y_pred: finite_float_EUR_per_MWh
+  y_true: nullable_float_ex_post_only
+missing_price_policy: fail_closed
+duplicate_delivery_policy: fail_closed
+dst_policy: preserve_local_delivery_day_and_contiguous_utc_hours
+timezone_policy: UTC_for_origin_and_target_Europe_Amsterdam_for_delivery_labels
+runtime_root_policy: explicit_argument_or_STEEL_DA_FORECAST_RUN_ROOT_environment_variable
+validation_start_origin_utc: 2023-09-30T06:00:00+00:00
+test_start_origin_utc: 2024-09-30T06:00:00+00:00
+required_replan_count: 7
+acceptance_metric_policy: MAE_and_RMSE_only_no_MAPE
+settlement_status: interface_only_no_settlement
