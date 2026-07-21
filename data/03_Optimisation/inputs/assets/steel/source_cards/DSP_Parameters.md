@@ -101,6 +101,26 @@ The reason is methodological: public sources support DSP topology and output anc
 | `DSP_FUEL_GAS_BASE_ACTIVE` | false | bool | modelling policy | evidence limitation + WAG governance | Avoid fake WAG demand. Fuel/gas heat may be added later as sensitivity if source-backed. |
 | `DSP_ALLOWED_FUEL_CARRIERS_IF_HEAT_ACTIVE` | COG, BFG, BOFG, NG | carriers | deferred eligibility | generic FMP / site WAG context | Eligibility only. No demand without `DSP_TUNNEL_FURNACE_HEAT_GJ_PER_T`. |
 
+### 3.3a 2026 source repair update - DSP electricity assumption boundary
+
+This update preserves the existing compact DSP electricity assumption but makes
+its evidence status stricter. The rows below are not executable base inputs by
+themselves and are not DSP-specific public Tata measurements. They clarify the
+current development assumption, the sensitivity need, and the HSM proxy ceiling
+that can be used in diagnostics.
+
+| Parameter ID | Value / range | Unit | Original basis | Converted basis / derivation | Status label | Recommended model use | Source title, authors, year, URL/DOI | Locator status | Caveat |
+|---|---:|---|---|---|---|---|---|---|---|
+| `DSP_ELECTRICITY_MWH_PER_T_DSP_COIL_BASE` | 0.056 | MWh/t DSP coil | Existing compact development assumption aligned with thin-slab/casting-and-rolling order-of-magnitude evidence | same as existing `DSP_ELECTRICITY_MWH_PER_T_COIL_BASE` | governed_assumption | development_input_candidate only with `thesis_usability=false` | Existing DSP source-card evidence stack; Worrell/LBNL best-practice context already listed in this card | existing source-card locator | No direct DSP-specific public source found; value is a compact development assumption and sensitivity-requiring. |
+| `DSP_ELECTRICITY_MWH_PER_T_DSP_COIL_SENS_LOW` | 0.056 | MWh/t DSP coil | Current compact DSP assumption | no conversion | governed_assumption | sensitivity_range | Existing DSP source-card evidence stack | existing source-card locator | Low sensitivity endpoint only; do not claim as measured DSP electricity. |
+| `DSP_ELECTRICITY_MWH_PER_T_DSP_COIL_SENS_HIGH` | 0.104 | MWh/t DSP coil | Khalid hot rolling proxy: 0.104 kWh/kg hot rolled steel | 0.104 kWh/kg = 0.104 MWh/t | source_backed_candidate / sensitivity_only | sensitivity_range | Khalid et al. (2021), *Oxygen enrichment combustion to reduce fossil energy consumption and emissions in hot rolling steel production*, https://doi.org/10.1016/j.jclepro.2021.128714 | source_locator_not_verified_in_repo | HSM/WBW proxy, not DSP-specific; value_from_reviewed_research_note_not_locally_verified. |
+
+Conventional hot rolling sources show electricity commonly above
+0.070 MWh/t and Khalid gives 0.104 MWh/t for a hot mill context. DSP's lower
+compact value must therefore remain justified by the direct/continuous process
+abstraction and treated as sensitivity-requiring. Do not add HSM reheating fuel
+to DSP unless a reviewed tunnel-furnace or DSP fuel coefficient is added later.
+
 ### 3.4 CO2 and emissions
 
 | Parameter ID | Value / range | Unit | Status | Source(s) | Interpretation / caveat |

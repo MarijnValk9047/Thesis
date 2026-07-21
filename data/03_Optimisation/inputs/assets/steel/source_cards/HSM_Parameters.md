@@ -40,6 +40,35 @@ WAG producer, not a product-revenue asset, and not a market-dispatch component.
 | `HSM_DIRECT_CO2_MODE` | `derived_from_reheat_fuel_mix` | n/a | accounting mode | diagnostic policy |
 | `HSM_FLEXIBILITY_CLASS` | `bounded_downstream_scheduling_asset` | n/a | class | diagnostic policy |
 
+## 2026 Source Repair Update - Hot Rolling Energy Candidates
+
+This update records reviewed public literature values for HSM/WBW electricity,
+fuel and aggregate GHG sanity checks. It is a source-card repair only: the rows
+below are not executable inputs, not Tata IJmuiden measurements, and not
+thesis-approved values. The original articles were not locally inspected in this
+repository during this repair, so source locators remain non-verified until a
+later provenance pass.
+
+| Parameter ID | Value / range | Unit | Original basis | Converted basis / derivation | Status label | Recommended model use | Source title, authors, year, URL/DOI | Locator status | Caveat |
+|---|---:|---|---|---|---|---|---|---|---|
+| `HSM_ROLLING_ELECTRICITY_MWH_PER_T_HRC_KHALID` | 0.104 | MWh/t hot rolled steel | 0.104 kWh/kg hot rolled steel | 0.104 kWh/kg = 0.104 MWh/t | source_backed_candidate | development_input_candidate / sensitivity_range | Khalid et al. (2021), *Oxygen enrichment combustion to reduce fossil energy consumption and emissions in hot rolling steel production*, Journal of Cleaner Production 320, 128714, https://doi.org/10.1016/j.jclepro.2021.128714 | source_locator_not_verified_in_repo | ArcelorMittal North America hot mill / LCA context, not Tata WBW-specific; value_from_reviewed_research_note_not_locally_verified. |
+| `HSM_REHEAT_FUEL_GJ_PER_T_HRC_KHALID` | 1.268 | GJ/t hot rolled steel | 1.268 MJ/kg hot rolled steel | 1.268 MJ/kg = 1.268 GJ/t | source_backed_candidate | development_input_candidate / sensitivity_range | Khalid et al. (2021), DOI above | source_locator_not_verified_in_repo | Baseline natural-gas-fired pusher reheating furnace; Tata may use a WAG/NG mix; value_from_reviewed_research_note_not_locally_verified. |
+| `HSM_GHG_T_PER_T_HRC_KHALID` | 0.113 | tCO2e/t hot rolled steel | 0.113 kg CO2-eq/kg hot rolled steel | 0.113 kg/kg = 0.113 t/t | source_backed_candidate | validation_target / aggregate sanity check | Khalid et al. (2021), DOI above | source_locator_not_verified_in_repo | Aggregate LCA/GHG value; do not add to fuel-explicit HSM combustion CO2; value_from_reviewed_research_note_not_locally_verified. |
+| `HSM_OXYGEN_ENRICHMENT_FUEL_REDUCTION_SENS` | 19.6-26.8 | % natural gas reduction | Oxygen-enrichment cases in hot rolling furnace study | no conversion | sensitivity_only | future technology sensitivity only | Khalid et al. (2021), DOI above | source_locator_not_verified_in_repo | Not base case; avoid changing fuel technology in forecast-quality or C5 baseline comparisons. |
+| `HSM_OXYGEN_ENRICHMENT_TOTAL_ENERGY_REDUCTION_SENS` | 15.1-20.7 | % total energy reduction | Oxygen-enrichment cases in hot rolling furnace study | no conversion | sensitivity_only | future technology sensitivity only | Khalid et al. (2021), DOI above | source_locator_not_verified_in_repo | Not base case; value_from_reviewed_research_note_not_locally_verified. |
+| `HSM_OXYGEN_ENRICHMENT_GHG_REDUCTION_SENS` | 11.1-15.2 | % GHG reduction | Oxygen-enrichment cases in hot rolling furnace study | no conversion | sensitivity_only | future technology sensitivity only | Khalid et al. (2021), DOI above | source_locator_not_verified_in_repo | Not base case; value_from_reviewed_research_note_not_locally_verified. |
+| `HSM_ROLLING_ELECTRICITY_MWH_PER_T_HRC_CANDIDATE` | 0.104 | MWh/t HRC | Khalid hot mill electricity candidate | same as `HSM_ROLLING_ELECTRICITY_MWH_PER_T_HRC_KHALID` | source_backed_candidate | development_input_candidate / sensitivity_range | Khalid et al. (2021), DOI above | source_locator_not_verified_in_repo | First-pass candidate only; do not promote until reconciled against MER downstream electricity/gas anchors and current HSM/WBW assumptions. |
+| `HSM_REHEAT_FUEL_GJ_PER_T_HRC_CANDIDATE` | 1.268 | GJ/t HRC | Khalid hot mill fuel candidate | same as `HSM_REHEAT_FUEL_GJ_PER_T_HRC_KHALID` | source_backed_candidate | development_input_candidate / sensitivity_range | Khalid et al. (2021), DOI above | source_locator_not_verified_in_repo | First-pass candidate only; do not promote until WAG/NG fuel boundary is reviewed. |
+| `HSM_ELECTRICITY_LOWER_CONTEXT_ORCAJO` | >0.070 | MWh/t hot rolled steel | More than 70 kWh/t | >70 kWh/t = >0.070 MWh/t | generic_range | lower-bound sanity check | Orcajo et al. (2016), *Dynamic Estimation of Electrical Demand in Hot Rolling Mills*, IEEE Transactions on Industry Applications 52(3), 2714-2723, https://doi.org/10.1109/TIA.2016.2533483 | source_locator_not_verified_in_repo | Generic hot rolling demand context; value_from_reviewed_research_note_not_locally_verified. |
+| `HSM_ELECTRICITY_TYPICAL_CONTEXT_ORCAJO` | approximately 0.080 | MWh/t hot rolled steel | Approximately 80 kWh/t | 80 kWh/t = 0.080 MWh/t | generic_range / context_only | validation/context | Orcajo et al. (2016), DOI above | source_locator_not_verified_in_repo | Context only, not executable base input. |
+| `HSM_AUXILIARY_ELECTRICITY_SHARE_ORCAJO` | 0.25 | fraction of electrical energy | Auxiliary equipment around 25% of electrical energy | no conversion | context_only / sensitivity_only | split motors vs auxiliaries only if needed | Orcajo et al. (2016), DOI above | source_locator_not_verified_in_repo | Do not split HSM electricity unless a later plant-level electricity boundary requires it. |
+| `HSM_ELECTRICITY_DYNAMIC_LOAD_NOTE` | true | context flag | rolling stands/coilers have dynamic loads | no conversion | context_only | source_card_repair_needed / deferred | Orcajo et al. (2016), DOI above | source_locator_not_verified_in_repo | HSM power can be highly dynamic, but do not create DA/mFRR flexibility without slab, thermal and product constraints. |
+
+Keep earlier BAT/FMP and project-development ranges as sensitivities. This
+repair does not retune `HSM_REHEAT_ENERGY_GJ_PER_T_HRC`, does not change
+`HSM_ROLLING_ELECTRICITY_MWH_PER_T_HRC`, and does not add HSM/WBW market
+flexibility.
+
 ## Hot-Charge Share Cap Candidate Evidence
 
 `S4.4c5l_d_HSM_hot_charge_share_cap_and_reheat_sensitivity_patch` adds

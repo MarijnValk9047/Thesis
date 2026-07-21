@@ -41,6 +41,40 @@ So the KGF heat demand can in principle be supplied fully by cleaned COG, but th
 | 4 | **Ge, X., et al. (2016). _Greenhouse-Gas Emissions by the Chinese Coking Industry_. Polish Journal of Environmental Studies, 25(2), 593-598. DOI: 10.15244/pjoes/61065.** URL: https://www.pjoes.com/Greenhouse-Gas-Emissions-by-the-Chinese-Coking-Industry%2C61065%2C0%2C2.html and PDF: https://www.pjoes.com/pdf-61065-23683?filename=Greenhouse-Gas-Emissions.pdf | Useful for GHG intensity, fuel-gas-type effects, COG composition/carbon content, and load-rate/coking-time effects. | Medium for emissions and ramping/load sensitivity. | Peer-reviewed but Chinese coking-industry context; use as sensitivity/interpretation, not Tata truth. |
 | 5 | **Athanasiadis, I. (2025). _Modeling the Energy Transition of an Integrated Steel Site: The Case of Tata Steel's IJmuiden Site_. MSc thesis, TU Delft.** Local project file: `Master_Thesis_Report_Athanasiadis (1).pdf` | Useful as Tata-inspired modelling precedent for WAG/gas-network architecture and gas-mixing simplification. | Medium for modelling structure; low for directly approved values because public version contains redactions and model-specific assumptions. | Use as precedent and architecture context, not as independent public Tata operating truth. |
 
+## 2026 source repair update - Radó-Fóty et al. 2025 real-plant LCI candidates
+
+This update adds reviewed coke-production LCI candidates from Radó-Fóty et al.
+(2025). It is a source-card repair only: no row below is an executable input,
+Tata IJmuiden measurement, or thesis-approved value. The original article was
+not locally inspected in this repository during this repair, so page/table
+locators remain non-verified and all values carry the
+`value_from_reviewed_research_note_not_locally_verified` caveat.
+
+| Parameter ID | Value / range | Unit | Original basis | Converted basis / derivation | Status label | Recommended model use | Source title, authors, year, URL/DOI | Locator status | Caveat |
+|---|---:|---|---|---|---|---|---|---|---|
+| `KGF_COAL_BLEND_T_PER_T_COKE` | 1.39 | t coal blend/t coke | Overall inputs and outputs per 1 t coke, scenario 1 | source unit retained | source_backed_candidate | development_input_candidate or sensitivity_range | Radó-Fóty, Domokos, Nagy, Sebestyén and Egedy (2025), *Life cycle assessment of coke production based on real plant and model-optimised data*, International Journal of Life Cycle Assessment 30, 2203-2220, https://doi.org/10.1007/s11367-025-02455-6 | source_locator_not_verified_in_repo | Hungarian real-plant LCI, not Tata IJmuiden; compare with existing BREF/Tata candidate; value_from_reviewed_research_note_not_locally_verified. |
+| `KGF_COG_FOR_HEATING_GJ_PER_T_COKE` | 4.30 | GJ/t coke | COG for coke-oven heating | source unit retained | source_backed_candidate | development_input_candidate for coking underfiring candidate | Radó-Fóty et al. (2025), DOI above | source_locator_not_verified_in_repo | Use as self-use/underfiring candidate; do not also treat the same gas energy as surplus. |
+| `KGF_COG_FOR_TRADING_GJ_PER_T_COKE` | 3.74 | GJ/t coke | COG for trading / outside-coking use in source | source unit retained | source_backed_candidate | WAG surplus sanity check | Radó-Fóty et al. (2025), DOI above | source_locator_not_verified_in_repo | In this thesis, "trading" is only candidate clean COG available to the site WAG network, not external revenue. |
+| `KGF_ELECTRICITY_PURCHASED_GJ_PER_T_COKE` | 0.24 | GJ/t coke | Purchased electricity per t coke | 0.24 / 3.6 = 0.0667 MWh/t = 66.7 kWh/t | source_backed_candidate | development_input_candidate for external/purchased electricity candidate | Radó-Fóty et al. (2025), DOI above | source_locator_not_verified_in_repo | Non-Tata boundary and CDQ/recovery context may differ. |
+| `KGF_ELECTRICITY_PRODUCED_GJ_PER_T_COKE` | 0.11 | GJ/t coke | Internally produced electricity per t coke | 0.11 / 3.6 = 0.0306 MWh/t = 30.6 kWh/t | context_only or sensitivity_only | validation/context if CDQ or internal recovery is explicitly represented | Radó-Fóty et al. (2025), DOI above | source_locator_not_verified_in_repo | Do not net against purchased electricity unless internal recovery is modelled. |
+| `KGF_ELECTRICITY_GROSS_SERVICE_GJ_PER_T_COKE` | 0.35 | GJ/t coke | Purchased 0.24 + produced 0.11 GJ/t | 0.35 / 3.6 = 0.0972 MWh/t = 97.2 kWh/t | derived_candidate | sensitivity_range / gross auxiliary demand candidate | Derived from Radó-Fóty et al. (2025) values | source_locator_not_verified_in_repo | Use only if modelling gross demand before internal recovery. |
+| `KGF_STEAM_PURCHASED_GJ_PER_T_COKE` | 0.33 | GJ/t coke | Purchased steam per t coke | source unit retained | source_backed_candidate | sensitivity_range / steam demand check | Radó-Fóty et al. (2025), DOI above | source_locator_not_verified_in_repo | Steam-network relevance depends on source boundary and Tata steam topology. |
+| `KGF_STEAM_PRODUCED_GJ_PER_T_COKE` | 1.73 | GJ/t coke | Produced steam per t coke | source unit retained | context_only | recovery context only unless CDQ/heat recovery is represented | Radó-Fóty et al. (2025), DOI above | source_locator_not_verified_in_repo | Do not create steam credit unless recovery technology is explicitly modelled. |
+| `KGF_STEAM_GROSS_SERVICE_GJ_PER_T_COKE` | 2.06 | GJ/t coke | Purchased 0.33 + produced 1.73 GJ/t | 0.33 + 1.73 = 2.06 GJ/t | derived_candidate | sensitivity_range only | Derived from Radó-Fóty et al. (2025) values | source_locator_not_verified_in_repo | Not Tata-specific; do not impose without steam-network review. |
+| `KGF_DIRECT_CO2_T_PER_T_COKE_AGGREGATE` | 0.4595 | tCO2/t coke | Aggregate direct/process CO2 from source note | source unit retained | source_backed_candidate | aggregate CO2 validation/sensitivity | Radó-Fóty et al. (2025), DOI above | source_locator_not_verified_in_repo | High double-counting risk if COG carbon is later counted at boilers/generators; use either aggregate KGF counter or WAG-explicit combustion, not both. |
+
+Contextual repair notes:
+
+- The reviewed note reports CDQ-produced electricity covering approximately
+  30-40% of plant electricity demand and produced steam covering approximately
+  70-80% of steam needs. Treat this as context unless Tata-specific CDQ/heat
+  recovery is explicitly modelled.
+- Do not combine Radó-Fóty `COG_FOR_TRADING` with an independently modelled COG
+  generation coefficient unless the source-card explicitly reconciles gross COG
+  production, coking self-use and clean COG surplus.
+- Do not use Radó-Fóty aggregate CO2 together with WAG-explicit COG combustion
+  in a consolidated CO2 total.
+
 ## 3. Candidate parameter table
 
 ### 3.1 High-priority base-case parameters

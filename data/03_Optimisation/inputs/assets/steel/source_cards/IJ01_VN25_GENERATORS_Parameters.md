@@ -297,6 +297,21 @@ Recommended first implementation:
 | `gas_to_electricity_efficiency_warning` | Prevent thesis use of unreviewed development efficiency. |
 | `generator_price_response_flag` | Ensure base runs do not silently include price-responsive generator dispatch. |
 
+## 2026 source repair update - residual boundary and C0 split policy
+
+This update records residual electricity/NG policy wording and the C0 generator
+split status after the C5p_g/C5p_h diagnostic work. It is source-card repair
+only: it does not create residual-load variables, generator dispatch rules,
+electricity revenue, NG residuals, CO2 objective terms, or executable inputs.
+
+| Parameter ID | Value / range | Unit | Original basis | Converted basis / derivation | Status label | Recommended model use | Source title, authors/organisation, year, URL/DOI | Locator status | Caveat |
+|---|---|---|---|---|---|---|---|---|---|
+| `RESIDUAL_ELECTRICITY_POLICY_STATUS` | residual/background electricity is a governed diagnostic boundary term | policy | C5p_g residual electricity/NG boundary diagnostics and project governance | n/a | governed_assumption | residual_policy_candidate / deferred | Project C5p_g diagnostics and steel model governance, 2026 | not_applicable | May reconcile full-site public electricity anchors only after source-backed modelled plant loads and internal offsets are accounted for. It is not an executable plant parameter, not a flexibility asset, and not a hidden calibration plug. |
+| `RESIDUAL_NG_POLICY_STATUS` | residual/background natural gas is a governed diagnostic boundary term | policy | C5p_g residual electricity/NG boundary diagnostics and project governance | n/a | governed_assumption | residual_policy_candidate / deferred | Project C5p_g diagnostics and steel model governance, 2026 | not_applicable | May reconcile full-site public gas anchors after DRP, EAF, HSM/WBW, BOF, PEFA, sinter, boilers, STEG11/IJ01/VN25 and other modelled gas uses are accounted for. It is not a plant-level dispatch variable unless a later reviewed residual-load policy explicitly allows it. |
+| `C0_VN25_IJ01_PER_UNIT_FUEL_SPLIT_STATUS` | not_found | status | No reviewed source provides a C0 per-unit VN25/IJ01 fuel split | n/a | not_found | deferred | Project C5p_c/C5p_g diagnostics and IJ01/VN25 source-card governance, 2026 | not_applicable | Do not derive C0 VN25/IJ01 split from total capacity, total WAG availability or 2.0 TWh/y residual-gas electricity. |
+| `C0_GENERATOR_EVIDENCE_ROLE` | aggregate_system_validation_only | status | Current C0 sources support aggregate residual-gas electricity context, not unit-specific dispatch | n/a | context_only | validation_target / deferred | Project C5p_c/C5p_g diagnostics and IJ01/VN25 source-card governance, 2026 | not_applicable | C0 generator evidence remains aggregate system validation only; C1 unit-specific MER Energie anchors are stronger and remain validation anchors. |
+| `C0_GENERATOR_2TWH_ANCHOR_ROLE` | validation anchor only | TWh/y role | Current residual-gas electricity anchor = 2.0 TWh/y | no conversion | context_only | validation_target | Existing annual validation anchors in this card and C5p_c diagnostics | not_applicable | Do not force generator output to 2.0 TWh/y and do not back-calculate fuel from this anchor. |
+
 ## Model red flags
 
 - Do not let generator export revenue enter the base objective.

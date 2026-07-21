@@ -368,6 +368,31 @@ Where detailed load allocation is missing, use explicitly named residual steam l
 
 ---
 
+## 2026 source repair update - boiler efficiency and operational detail assumptions
+
+This update records governed development assumptions for boiler efficiency
+sensitivity and explicitly keeps ramp, minimum-load and reserve logic deferred.
+It does not replace the source-table-derived fuel/steam ratios used in the
+first boiler/steam implementation, does not retune WAG balances, and does not
+activate new executable inputs by itself.
+
+| Parameter ID | Value / range | Unit | Original basis | Converted basis / derivation | Status label | Recommended model use | Source title, authors/organisation, year, URL/DOI | Locator status | Caveat |
+|---|---:|---|---|---|---|---|---|---|---|
+| `BOILER_EFFICIENCY_BASE` | 0.85 | fraction fuel energy to useful steam energy | Governed project assumption for first sensitivity framing | no conversion | governed_assumption | development_input_candidate / sensitivity_range | Project governance and boiler source-card repair note, 2026 | not_applicable | No Tata-specific efficiency source found; MER Energie gives boiler thermal and steam capacities, but not verified fuel-to-steam efficiency. Use only as governed sensitivity framing before thesis claims. |
+| `BOILER_EFFICIENCY_LOW` | 0.80 | fraction fuel energy to useful steam energy | Governed low sensitivity | no conversion | governed_assumption | sensitivity_range | Project governance and boiler source-card repair note, 2026 | not_applicable | Do not use to calibrate WAG balances to anchors in this task. |
+| `BOILER_EFFICIENCY_HIGH` | 0.90 | fraction fuel energy to useful steam energy | Governed high sensitivity | no conversion | governed_assumption | sensitivity_range | Project governance and boiler source-card repair note, 2026 | not_applicable | No source-backed Tata efficiency claim. |
+| `BOILER_RAMP_LIMIT` | deferred | t/h/h or MW/h | No reviewed public ramp evidence | n/a | not_found | deferred | Project governance and boiler source-card repair note, 2026 | not_applicable | Avoid false precision and extra binaries until source-backed ramp/min-load evidence exists. |
+| `BOILER_MIN_LOAD` | deferred | fraction | No reviewed public minimum-stable-load evidence | n/a | not_found | deferred | Project governance and boiler source-card repair note, 2026 | not_applicable | Do not add minimum-load constraints without source review. |
+| `BOILER_MFRR_ENABLED_BASE` | false | bool | Project market-scope policy | n/a | governed_assumption | deferred | Project governance and boiler source-card repair note, 2026 | not_applicable | Boilers/STEG11/TG2 are not base reserve assets; no mFRR in this stage. |
+
+Existing fuel eligibility remains unchanged: K15/K16 use BFG + COG + NG,
+K23/K24 use BFG + COG + NG, K41 uses BFG + NG, TG2 is steam-only, and STEG11
+follows the already documented steam-circuit eligibility. Boiler efficiencies
+are sensitivity/governance rows only and must not become hidden calibration
+plugs.
+
+---
+
 ## Model abstraction choices and rationale
 
 ### Why group K15/K16 but split K23/K24 from K41?
