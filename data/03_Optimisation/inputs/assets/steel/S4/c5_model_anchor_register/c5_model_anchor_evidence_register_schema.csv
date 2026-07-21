@@ -1,0 +1,33 @@
+field,description
+anchor_id,Stable unique ID. Do not reuse after supersession.
+anchor_name,Human-readable anchor name.
+configuration,C0 or C1 or both or generic or blocked.
+anchor_category,Production electricity grid import onsite generation NG WAG CO2 utility downstream active target or blocked category.
+metric,Measured quantity or policy metric.
+raw_value,Original value exactly as represented in source or register. Blank if missing.
+raw_unit,Original unit.
+converted_value,Converted value in comparison-ready unit where safe.
+converted_unit,Converted unit.
+scaled_value_to_6_75,Value scaled to active 6.75 Mt per year target only where scaling is allowed.
+scaled_unit,Unit for scaled value.
+scaling_method,Scaling rule or reason for not scaling.
+scaling_allowed,yes no approximate or not_applicable.
+production_denominator_raw,Raw production denominator such as 7.2 Mt liquid steel or unknown.
+denominator_type,liquid_steel crude_steel final_product HRC rolled_steel site_total unknown or not_applicable.
+source_title,Source document source card or C5 diagnostic artifact.
+source_type,official_public_site_specific public_thesis_model_precedent generic_literature internal_c5_diagnostic source_card_candidate policy_register or missing.
+source_trust_rank,Rank 1 Rank 2 Rank 3 Rank 4 Rank 5 Rank X or internal_c5_diagnostic.
+evidence_tier,Tier A Tier B Tier C Tier D Tier E Tier F Tier X or internal_diagnostic.
+source_locator,Page table section file path or missing locator.
+locator_quality,exact partial indirect missing or not_applicable.
+anchor_role,primary_validation secondary_validation model_precedent reporting_context sensitivity_context active_model_target or blocked.
+model_use_status,validation_only reporting_only residual_kpi sensitivity_scoring executable_constraint or blocked.
+use_in_primary_score,yes or no.
+thesis_claim_eligibility,yes no or limited.
+conflict_status,none conflicts_with_other_anchor denominator_unclear unit_unclear boundary_unclear obsolete or blocked.
+supersedes_anchor_id,Prior anchor ID superseded by this row if any.
+superseded_by_anchor_id,Replacement anchor ID if any.
+caveat,Main caveat.
+review_status,open reviewed_for_development thesis_approved or blocked.
+last_reviewed_stage,C5 stage or governance step.
+notes,Additional compact notes.
