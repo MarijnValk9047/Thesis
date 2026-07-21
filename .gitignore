@@ -47,6 +47,9 @@ workspace_triage/
 # Hydrogen optimisation run artifacts
 scripts/Data/03_Hydrogen_Test_Case/runs/
 
+# Steel optimisation run artifacts (compact provenance may be promoted manually)
+data/03_Optimisation/runs/
+
 # Documentation export bundles
 docs/optimisation/exports/
 docs/optimisation/*.zip
