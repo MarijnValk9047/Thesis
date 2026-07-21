@@ -1,0 +1,35 @@
+run_id: steel_c1_6_75_source_interval_feasibility_v4
+horizon_hours: 168
+solver_time_limit_seconds: 90
+output_policy: diagnostics
+market_prices_enabled: false
+economic_terms_enabled: false
+source_coke_chain:
+  dry_coal_t_per_t_coke: 1.285
+  bf_coke_t_per_t_hot_metal: 0.359
+wag_controller_policy:
+  hsm_carrier_precedence: [COG, BFG, BOFG, NG]
+  source_status: athanasiadis_informed_development_order
+  caveat: "Carrier order only: COG is preferred at the HSM after mandatory process sinks, then eligible BFG/BOFG, then named NG backup. It does not impose a WAG/NG ratio, mixed-gas composition, or Wobbe constraint."
+bof_material_balance:
+  hot_metal_t_per_t_liquid_steel: 0.824
+  scrap_t_per_t_liquid_steel: 0.294
+eaf_material_balance:
+  hdri_t_per_t_liquid_steel: 0.8484848485
+  scrap_t_per_t_liquid_steel: 0.3030303030
+scenarios:
+  - scenario_id: source_upper_envelope_technical_capacity_context
+    source_status: primary_public_upper_supply_envelope_for_capacity_context
+    apply_bof_eaf_ledger: true
+    annual_site_scrap_cap_t_y: 2800000
+    annual_bof_scrap_cap_t_y: 1000000
+    annual_eaf_scrap_cap_t_y: 1800000
+    caveat: "Tests technical capacity within the public 1.9-2.8 Mt/y site-scrap envelope. It is not an active central scrap assumption or an anchor-fit calibration."
+  - scenario_id: source_interval_exact_6_75_feasibility
+    source_status: primary_public_upper_supply_envelope_for_feasibility_only
+    apply_bof_eaf_ledger: true
+    annual_target_mt_y: 6.75
+    annual_site_scrap_cap_t_y: 2800000
+    annual_bof_scrap_cap_t_y: 1000000
+    annual_eaf_scrap_cap_t_y: 1800000
+    caveat: "Tests whether the 6.75-Mt final-product target is physically feasible inside the public 1.9-2.8 Mt/y site-scrap envelope. It is not an anchor-fit calibration or a selected central scrap assumption."

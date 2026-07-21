@@ -1,0 +1,16 @@
+run_id: steel_ground_up_anchor_boundary_closure_v1
+output_policy: diagnostics
+run_class: ground_up_physical_audit
+lineage_role: diagnostic
+retention: local_run_artifact_not_git_eligible_by_default
+
+# Recompile the boundary contract only from the two runs made by this audit.
+# The C1 endogeneous case is intentionally retained separately as a stress
+# result because it has no accepted physical solution and cannot be an annual
+# utility/anchor source.
+source_runs:
+  - run_id: steel_ground_up_c1_mer_site_product_v1
+    label: mer_site_product_6_75_quota
+    role: explicit_imported_slab_site_boundary_case
+
+origin_feasibility_run_id: steel_downstream_origin_interface_feasibility_v5

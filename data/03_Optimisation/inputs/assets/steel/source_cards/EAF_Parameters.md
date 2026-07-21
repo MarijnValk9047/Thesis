@@ -175,6 +175,22 @@ The earlier literature review noted that some studies investigate higher power r
 | `EAF_SECONDARY_MET_ELECTRICITY_MWH_PER_T_LS` | MWh/t LS | 0.023-0.042 | 0.031 | linked downstream parameter | Energy & CO2 study §5.4.2; MER Deel B §11.5 gives similar order | Ladle furnace / secondary metallurgy electricity. Keep separate from EAF arc electricity. |
 | `EAF_SECONDARY_MET_STEAM_T_PER_H_PER_DEGASSER` | t steam/h | 17 | 17 | linked downstream parameter | Energy & CO2 study §5.4.1 and §5.4.2 | RH degasser steam demand; not EAF arc-process steam. |
 
+### 2026-07-16 Gate-2 scrap-boundary resolution
+
+MER Deel B Table 5.2 is the governing central-case locator. It reports 0.9
+Mt/y EAF scrap at 3.3 Mt/y EAF liquid steel, so the central material coefficient
+is `0.9 / 3.3 = 0.272727273 t scrap/t liquid steel`. The approximately 1.0-Mt/y
+statement in Section 11.1 is rounded process-description context and is not the
+more precise central route ledger.
+
+The 0.9-1.8-Mt/y EAF range and 1.9-2.8-Mt/y site range are operational
+high-scrap variants in which scrap replaces DRI while liquid-steel production
+does not increase. They are not technical EAF melt-capacity additions. For the
+active central rolling case, 1.9 Mt/y is therefore a site supply boundary;
+1.0 Mt/y BOF and 1.8 Mt/y EAF remain separate consumer guardrails. Their sum is
+deliberately above the site boundary, so the same 1.9-Mt/y allowance is not
+reapplied as two route allocations or used to fix the BOF/EAF production split.
+
 ## EAF off-gas heat recovery parameters
 
 | Parameter ID | Unit | Range / value | Most likely / selected | Status | Source and locator | Model role and caveat |

@@ -1,0 +1,41 @@
+run_id: steel_c1_bof_eaf_metallics_ledger_v1
+horizon_hours: 168
+solver_time_limit_seconds: 90
+output_policy: diagnostics
+market_prices_enabled: false
+economic_terms_enabled: false
+source_coke_chain:
+  dry_coal_t_per_t_coke: 1.285
+  bf_coke_t_per_t_hot_metal: 0.359
+bof_material_balance:
+  hot_metal_t_per_t_liquid_steel: 0.824
+  scrap_t_per_t_liquid_steel: 0.294
+eaf_material_balance:
+  hdri_t_per_t_liquid_steel: 0.8484848485
+  scrap_t_per_t_liquid_steel: 0.3030303030
+scenarios:
+  - scenario_id: legacy_no_named_metallics
+    source_status: historical_development_reference
+    apply_bof_eaf_ledger: false
+    caveat: "Existing source-corrected coke-chain capacity reference; no named BOF/EAF metallics."
+  - scenario_id: official_lower_named_supply
+    source_status: primary_public_lower_envelope
+    apply_bof_eaf_ledger: true
+    annual_site_scrap_cap_t_y: 1900000
+    annual_bof_scrap_cap_t_y: 1000000
+    annual_eaf_scrap_cap_t_y: 900000
+    caveat: "Fully bounded lower official envelope: 1.0 Mt/y BOF plus 0.9 Mt/y EAF scrap."
+  - scenario_id: rounded_central_named_consumption
+    source_status: primary_public_with_development_centralisation
+    apply_bof_eaf_ledger: true
+    annual_site_scrap_cap_t_y: 2000000
+    annual_bof_scrap_cap_t_y: 1000000
+    annual_eaf_scrap_cap_t_y: 1000000
+    caveat: "Rounded 1.0 Mt/y BOF plus 1.0 Mt/y EAF consumption context; 2.0 Mt/y lies within the public 1.9-2.8 Mt/y envelope but is not allocated between external and internal supply categories."
+  - scenario_id: official_upper_envelope_context
+    source_status: primary_public_upper_envelope_context_only
+    apply_bof_eaf_ledger: true
+    annual_site_scrap_cap_t_y: 2800000
+    annual_bof_scrap_cap_t_y: 1000000
+    annual_eaf_scrap_cap_t_y: 1800000
+    caveat: "Upper public EAF-scrap envelope; context only and not eligible for active-target selection without simultaneous DRI-availability reconciliation."

@@ -1,0 +1,10 @@
+run_id: steel_c1_hdri_scrap_material_balance_v1
+horizon_hours: 168
+annual_scrap_supply_t_y: 1000000
+hdri_t_per_t_liquid_steel: 0.8484848485
+scrap_t_per_t_liquid_steel: 0.3030303030
+source_basis: MER_Deel_B_section_11_1_2_8_Mt_HDRI_plus_approximately_1_0_Mt_scrap_to_3_3_Mt_LS
+output_policy: diagnostics
+market_prices_enabled: false
+economic_terms_enabled: false
+note: Diagnostic-only named material balance. It is not an executable input migration or annual dispatch schedule.

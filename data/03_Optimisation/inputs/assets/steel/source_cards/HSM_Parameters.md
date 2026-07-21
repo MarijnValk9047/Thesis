@@ -33,12 +33,52 @@ WAG producer, not a product-revenue asset, and not a market-dispatch component.
 | Parameter | Value | Range | Unit | Status |
 |---|---:|---:|---|---|
 | `HSM_OUTPUT_BASIS` | `t_hot_rolled_coil` | n/a | basis | candidate/development |
-| `HSM_SLAB_INPUT_T_PER_T_HRC` | 1.10 | 1.07-1.15 | t slab / t HRC | candidate/development |
+| `HSM_SLAB_INPUT_T_PER_T_HRC` | 1.10 | 1.07-1.15 | t slab / t HRC | retired broad development proxy; historical sensitivity only |
+| `HSM_SLAB_INPUT_T_PER_T_HRC_GATE2_CENTRAL` | 1.06 | 1.01-1.073 | t slab / t HRC | governed Gate-2 development central; source-boundary reconciled |
 | `HSM_REHEAT_ENERGY_GJ_PER_T_HRC` | 1.35 | 1.2-1.5 | GJ / t HRC | candidate/development |
 | `HSM_ROLLING_ELECTRICITY_MWH_PER_T_HRC` | 0.070 | 0.028-0.111 | MWh / t HRC | candidate/development |
 | `HSM_REHEAT_FUEL_CARRIERS` | BFG, COG, BOFG, NG | n/a | eligible carriers | candidate/development |
 | `HSM_DIRECT_CO2_MODE` | `derived_from_reheat_fuel_mix` | n/a | accounting mode | diagnostic policy |
 | `HSM_FLEXIBILITY_CLASS` | `bounded_downstream_scheduling_asset` | n/a | class | diagnostic policy |
+
+## 2026-07-16 Gate-2 Material-Conversion Evidence Resolution
+
+The historical 1.10 value had no verified source locator. It represented a
+broad combined material-loss proxy, not a measured IJmuiden HSM yield. Because
+its basis is explicitly slab input per tonne hot-rolled coil, it must not also
+contain liquid-steel-to-slab casting loss. In the active origin ledger the same
+coefficient applies to endogenous BOF slab, endogenous EAF slab and imported
+slab; no origin receives a different HSM yield.
+
+The active Gate-2 development central is 1.06 t slab/t HRC, rounded from the
+MER boundary reconciliation at the existing 1.05 DSP development conversion:
+
+- MER material input: 6.8 Mt/y liquid steel + 0.6 Mt/y imported slab;
+- MER final products: 5.5 Mt/y rolled coils + 1.5 Mt/y DSP rolls, with cutting
+  losses already deducted from those product volumes;
+- implied HSM input/output at DSP 1.05: `(7.4 - 1.5 * 1.05) / 5.5 = 1.05909`;
+- the DSP 1.03-1.07 sensitivity range implies HSM 1.05364-1.06455;
+- even assuming zero DSP material loss gives an HSM ceiling of 1.07273.
+
+Two independent generic technical sources support a value below that MER
+ceiling:
+
+1. European Commission, *Reference Document on Best Available Techniques in
+   the Ferrous Metals Processing Industry*, 2001, hot rolling sections
+   A.3.1.3-A.3.1.5, reports hot-coil scale-loss reference 0.7% (0.5-2.0%) and
+   finishing-loss reference 0.4% (0.0-1.6%). If combined conservatively as
+   distinct loss categories, the reference ratio is about 1.011 and the sum of
+   the reported upper ranges gives about 1.037. Locator:
+   https://www.umweltbundesamt.de/system/files/medien/publikation/long/2490.pdf
+2. JICA, steel-plant engineering report, Chapter 13, Table 13-10-1, specifies
+   97.5% slab-to-hot-coil yield for both project stages, equivalent to
+   1.02564 t slab/t hot coil. Locator:
+   https://openjicareport.jica.go.jp/pdf/10466621_13.pdf
+
+The 1.06 central remains a development boundary reconciliation, not a Tata
+measurement. The wider 1.10 proxy is retained only for labelled historical
+high-loss sensitivity. HSM material difference is an explicit internal
+loss/scrap diagnostic and may not disappear into a residual supply term.
 
 ## 2026 Source Repair Update - Hot Rolling Energy Candidates
 
