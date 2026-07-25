@@ -538,6 +538,33 @@ permitted step is governed deterministic DAM-response interpretation. This is
 not `DAM_ready` and does not authorise bidding, settlement, export revenue,
 ETS, stochasticity, CVaR or mFRR.
 
+### 4O. User-authorized full-site emulation is a separate overlay
+
+The user-authorized full-site emulation reopening does not replace or mutate
+the strict source-driven baseline. Checkpoint 1 freezes its accepted anchors,
+explicit 5/15/25% background-electricity cases and permitted sensitivity
+ranges in separate overlay contracts. The completed Checkpoint-6 held-out
+evaluation retains the source-driven baseline as central and keeps
+`recovery_bg25` as a nonpromoted `emulation_sensitivity_only` case. Its
+independent decision is `complete`; the next bounded thesis gate is
+terminal-inventory equivalence and a terminal-inventory value bridge before
+any economic-uplift claim.
+
+The later bounded DEVELOPMENT-only C0 mechanism experiment does not reopen
+that held-out decision. With the physical interface structurally invariant,
+lower NG activates named generator NG in the volatile cases but not in the
+calm case. The builder tie-break penalizes flexible-heat NG but not generator
+NG, so zero flexible NG is allocation-location non-identifiability rather than
+proof of no substitution; realised WAG-generation spreads remain
+endogenous-dispatch diagnostics rather than a parameter or promotion gate.
+The source-driven baseline remains central, all repair candidates remain
+nonpromoted, and the decision is
+`lower_ng_activates_generator_ng_in_volatile_cases_allocation_location_tiebreak_selected_stop_no_second_search`.
+
+Any later result remains a Tata IJmuiden-inspired full-site emulation, not an
+exact digital twin. The Tata-facing questionnaire is a separate workstream,
+and the physical and first-order full-site CO2 ledgers must remain separate.
+
 ## Benchmark Decisions
 
 ### 5. Perfect foresight is oracle only

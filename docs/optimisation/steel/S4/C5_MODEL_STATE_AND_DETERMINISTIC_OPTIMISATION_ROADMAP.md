@@ -2,11 +2,14 @@
 
 ## Decision in one sentence
 
+Current gate: `lower_ng_activates_generator_ng_in_volatile_cases_allocation_location_tiebreak_selected_stop_no_second_search`. A bounded DEVELOPMENT-only mechanism experiment reused 15 fingerprint-checked case caches (210/210 optimal models): lower NG activates named generator NG in the governed volatile and oracle cases but not in the calm case. The builder tie-break penalizes flexible-heat NG but not generator NG, so zero flexible NG is non-identifiable and does not prove absence of substitution. Realised WAG-generation spreads are diagnostic endogenous-dispatch outcomes, not parameter drift or a promotion gate. The strict source-driven baseline remains immutable and central; all repair candidates remain nonpromoted, no second search is authorized, and held-out periods remain untouched. The completed Checkpoint-6 held-out result remains valid. The next thesis gate is terminal-inventory equivalence and a terminal-inventory value bridge before any economic-uplift claim. The work remains a Tata IJmuiden-inspired full-site emulation rather than an exact digital twin. Bidding, settlement, revenue, ETS, stochasticity, CVaR and mFRR remain unauthorised.
+
 The fixed-reference deterministic procurement-cost path, pre-DAM
 operational-hardening validation, bounded VN25 development response and
 governed D-D+4 point-forecast integration and deterministic response diagnostics
-pass. The current decision is `price_response_valid_anchor_coverage_partial`,
-not `DAM_ready`. C0 and C1 use machine-readable cumulative route bands with
+previously passed. The pre-benchmark decision was
+`price_response_valid_anchor_coverage_partial`, not `DAM_ready`. C0 and C1 use
+machine-readable cumulative route bands with
 actual 23/24/25-hour local-day execution deadlines inside timestamp-derived
 119/120/121-hour replans; no hourly production profile, historical C0
 calendar or free route substitution is imposed. The cost baseline
@@ -99,6 +102,11 @@ before changing code or launching a broad audit.
 | Bounded VN25 development price response | generator operating-mode contract, existing price-series adapter, unified builder and p_af rolling runner | `steel_s2_vn25_development_price_response_v1_20260720` | four Gurobi cases are optimal with zero failed guardrails; flat development mode reproduces the reference physics, 100 EUR/MWh_e keeps VN25 NG at zero, 220 activates NG up to the 350-MW cap, and IJ01 remains non-price-responsive; decision `development_VN25_price_response_ready` |
 | Governed hourly D-D+4 point forecast | existing price-series adapter, unified p_af rolling builder and `run_s4_4c5p_bk_hourly_da_dplus4_forecast_integration.py` | `steel_s2_hourly_da_dplus4_point_forecast_integration_v1_20260720` | five 120-hour-plan/24-hour-execution cases pass; all 70 C0/C1 Gurobi models are optimal, the mandatory price-insensitive benchmark is included, flat adapter parity is exact, validation and frozen held-out windows each contain seven replans, final C0/C1 production is exactly 6.75 Mt/y, and decision is `ready_for_deterministic_DAM_price_response` |
 | Deterministic response and configuration-matched anchor diagnostics | timestamp-aware p_af runner and `run_s4_4c5p_bl_deterministic_price_response_anchor_diagnostics.py` | `steel_s2_deterministic_price_response_anchor_diagnostics_v1_20260720` | pass: 444/444 Gurobi models optimal; flat adapter parity, identical-state y_pred dominance, separately labelled perfect-foresight regret, unit/cost identities, VN25 break-even response and all rolling physical guardrails pass; longest coherent held-out support is 4,321 h (49.326%) and is explicitly `partial_year_not_annual`; decision `price_response_valid_anchor_coverage_partial` |
+| Transparent source-emulation prescreen | existing annual ledgers, frozen target/parameter contracts and the analytical-only prescreen | `steel_c5_tata_benchmark_v1_20260721` | reviewed complete: five PeFa overlays rejected before rolling; KGF and PeFa remain frozen with `may_move=false`; no eligible rolling candidate exists; decision `source_valid_emulation_rejected` |
+| Source-driven representative-period validation | frozen four validation/four held-out periods, three governed strategies and cached deterministic C0/C1 cases | `steel_c5_source_emulation_validation_v1_20260721` | pass: 24/24 cases and physical guardrails pass; MER C1 DRI is scenario-definition consistency context and zero strict independent quantitative MER families remain; whole-period procurement-cost differences are descriptive arithmetic pending a terminal-inventory value bridge; reviewer decision `complete` |
+| User-authorized full-site emulation Checkpoint 4 | five retained development candidates, two development weeks and cached deterministic C0/C1 solves | `steel_c5_user_authorized_full_site_emulation_v1_20260722` | stop-rule complete: 30/30 cases and 420/420 solver models are optimal with all physical gates passing; cache-only independent review `complete`; the reviewed baseline/`recovery_bg25` pair advanced to the separate held-out checkpoint while all overlays retained sensitivity-only status |
+| Real-anchor energy-recovery Checkpoint 6 | independently selected eight-week TEST set, source-driven baseline plus `recovery_bg25`, and three governed strategies | `steel_c5_real_anchor_energy_recovery_v1_20260722/checkpoint6` | independent review `complete`: 48/48 cases and 672/672 models optimal; 24 raw fixed-background flags preserved and disposed as serialization false positives (0.00412 MWh/y, 5.2e-9 relative), with zero material physical failures; source baseline central, `recovery_bg25` sensitivity-only/nonpromoted; aggregates are `weighted_annual_equivalent_from_representative_held_out_weeks`, not an annual backtest |
+| C0 real-anchor mechanism experiment | source baseline plus four frozen nonpromoted repair candidates over two DEVELOPMENT validation weeks and three governed price cases | `steel_c5_real_anchor_mechanism_experiment_v1_20260723` | 15/15 fingerprint-checked caches reused, 210/210 models optimal and all guardrails pass; lower NG activates generator NG only in volatile cases; zero flexible NG is allocation-location non-identifiability under the builder tie-break, realised WAG spreads remain diagnostic, source baseline stays central, and decision is `lower_ng_activates_generator_ng_in_volatile_cases_allocation_location_tiebreak_selected_stop_no_second_search` |
 | Gate-2 boundary-reconciliation evidence | source cards, MER Table 5.2, EU FMP BREF, JICA engineering yield and the same p_af runner | `steel_gate2_closed_loop_mer_site_product_v5_20260716`; older sprint runs retained as diagnostics | 1.10 HSM is retired as an unlocated broad proxy; 1.06 is the rounded MER-boundary development central independently supported by lower generic technical ratios; central site scrap is 1.9 Mt/y and is not duplicated as two route allocations; the 1.07/1.03 solved case remains `development_feasibility_sensitivity` only |
 | C1 annual physical context | `run_s4_4c5p_bb_canonical_c1_physical_baseline.py` | `steel_c1_canonical_physical_baseline_v2` | exact 6.75-Mt/y MER-site-product case, pass with boundary caveats |
 | Annual anchor closure audit | `run_s4_4c5p_aw_annual_multi_anchor_reconciliation.py` with `configs/steel_gate1_anchor_closure_audit.yaml` | `c5_gate1_anchor_closure_reconciliation_v4_20260715` | one independent comparable family is below the strict 7.5% threshold; production target excluded; anchor-stop readiness is false (1 of 4) |
@@ -645,17 +653,149 @@ The same solved rolling lineage produces the physical and anchor ledgers. It
 contains two primary-comparable Rank-1 generator rows, but neither is below
 7.5%: VN25 named NG is 0.6985 versus 4.1 PJ/y and generator WAG plus flare is
 7.0618 versus 10.6 PJ/y. This is an evidence/coverage gap, not a calibration
-target. The current decision is `price_response_valid_anchor_coverage_partial`.
-The next permitted task is governed deterministic DAM-response interpretation;
-it does not authorise bidding, settlement, revenue, ETS, stochasticity, CVaR
-or mFRR.
+target. The decision was `price_response_valid_anchor_coverage_partial`. It
+permitted the governed deterministic DAM-response interpretation now completed
+below; it did not authorise bidding, settlement, revenue, ETS, stochasticity,
+CVaR or mFRR.
+
+### Source-driven deterministic D-D+4 thesis interpretation
+
+Current status: complete. The governed interpretation is recorded in
+`C5_SOURCE_DRIVEN_DETERMINISTIC_DPLUS4_INTERPRETATION.md` and uses four frozen
+validation and four frozen held-out representative periods. It retains the
+decision `source_valid_emulation_rejected`.
+
+The result is configuration-specific. C0 response is mainly substitution of
+selectively timed grid import for WAG-derived internal generation and reports
+zero expensive-to-cheap load shift. C1 adds material-buffered DRP/EAF demand
+timing and shifts 10.962 GWh/y in validation and 11.822 GWh/y held out on the
+`representative_period_annualised` basis. Final product remains 6.75 Mt/y, all
+336 rolling replans are optimal, and all 736 physical guardrails pass.
+
+Whole-period strategy costs remain arithmetic only. Governed C1 ends with
+4.340 kt more DRI inventory than flat operation in validation and 4.189 kt more
+held out, so the EUR +63.612 million/y and EUR +46.542 million/y arithmetic
+must not be described as adverse forecast value. The identical-state
+first-planning-window oracle comparisons remain the only valid upper-bound
+claim.
+
+A post-review aggregate-only correction fixed the compact named-NG PJ-to-MWh
+conversion by a factor of 1,000. The governed long-form ledger, cached cases,
+physical model and solver results were unchanged; held-out governed C1 named NG
+is 8.28557 TWh-LHV/y.
+
+The source-driven interpretation gate is closed. Its next permitted use is
+thesis-manuscript integration of this bounded result. Outside the separately
+authorized overlay below, any later calibrated-emulation or economic-uplift
+claim first requires source-backed PeFa consumption/inventory/terminal closure,
+a terminal-inventory value bridge, and requalified genuinely independent
+validation evidence.
+
+### User-authorized full-site emulation overlay
+
+Checkpoint 2 is repaired and pending reviewer re-review under
+`steel_c5_user_authorized_full_site_emulation_v1_20260722`. The immutable
+strict target and parameter contracts remain unchanged; separate overlays
+freeze the accepted full-site anchors, explicit background-load cases and the
+first bounded sensitivity ledger. The analytical design is limited to three
+background shares crossed with nine one-family-at-a-time recipes (27
+candidates) plus the immutable source baseline. Carrier yields never co-move
+within an analytical candidate; at most one named process-electricity intensity
+moves in the corresponding recipe. At most 30 candidates and five retained are
+allowed. The active builder and closed-loop runner now expose an opt-in,
+non-negative site-background electricity term with a zero default; explicit
+WAG-only, named-NG-only and total generator electricity; gross import, zero
+gross export and net-exchange identities; a separate reporting-only first-order
+process-factor CO2 ledger; physically represented/full-site coverage shares;
+and traceable prior/relaxed parameter-range exceptions. The historical
+`wag_electricity_mwh` alias retains its total internal-offset meaning for
+regression compatibility; new WAG-only interpretation uses the explicit
+generator field. The first-order factors are BF 1.495 tCO2/t hot metal, BOF
+0.0825 tCO2/t liquid steel, KGF 0.20 tCO2/t coke, sinter 0.248 tCO2/t sinter,
+PeFa 0.105 tCO2/t pellets and EAF 0.126 tCO2/t liquid steel. The DRP 0.286
+tCO2/t DRI capture stream is explicitly excluded from direct CO2. These
+selected diagnostic factors are not Mode-B, ETS-ready or Tata truth. Execution
+remains disabled pending reviewer approval; no candidate or governed annual run
+has been created.
+
+The one allowed repair cycle additionally enforces that selected-factor CO2
+plus its visible constant cannot exceed the configured target, requires an
+explicit valid named process for the electricity, NG and coking-input selection
+rules, and permits separate C0/C1 background loads while retaining the scalar
+zero-default fallback. A local-only one-replan Gurobi smoke comparison used the
+governed flat fixed-reference cost configuration. Omitted background and
+explicit zero were exactly identical for production, generator output and grid
+import. The 5% case applied 18.0936073059 MWh/h to C0 and 27.9109589041 MWh/h
+to C1; all six configuration solves were optimal, production changed by at
+most 0.000002 t over the executed block, material/carrier and electricity
+identity residuals were zero, export remained zero and cost reconciliation
+passed. C0 responded with +239.129058 MWh internal generation and +197.035074
+MWh grid import. C1 responded with -276.117903 MWh internal generation and
++877.869929 MWh grid import; this reflects an alternative feasible WAG/grid
+allocation and a small represented-load timing change, while each case's gross
+electricity identity remained exact. Temporary smoke outputs were removed and
+are not governed lineage.
+
+Checkpoint 3 then evaluated the immutable source baseline plus exactly 27
+structured analytical candidates: 5%, 15% and 25% explicit background shares
+crossed with the frozen nine one-family-at-a-time recipes. BF in C0 and EAF arc
+in C1 were selected for the named electricity-intensity recipes by the
+result-independent largest-baseline-represented-load rule. Six candidates were
+rejected by explicit physical/bound checks and five were retained for review.
+Gross electricity, WAG electricity, NG, first-order
+CO2, C0 coal/material, source deviation, bridge size and physical penalties
+remain separate score families. The retention-only repair now keeps
+`source_driven_baseline`, the boundary-only control
+`bg25_central_no_movement`, the dose control `bg15_central_no_movement`,
+`bg25_single_process_electricity_high` and `bg25_cog_yield_high`.
+`bg25_bfg_yield_high` and `bg25_bofg_yield_high` are excluded as strictly
+dominated by the retained COG-high response. This retention is analytical triage only and
+does not authorize promotion, rolling execution or calibration claims.
+
+Checkpoint 4 subsequently solved all five retained candidates for the two
+governed development weeks: 30/30 cases completed, 420/420 solver models were
+optimal and every physical gate passed. The cache-only independent review is
+`complete`. The frozen Badarinath relationships BF6 > BF7 and positive DRI
+storage correlation failed for every candidate, while HSM > DSP throughput,
+expensive-hour EAF reduction and oracle dominance passed. The five-candidate
+and two-repair stop rules were reached; only the source-driven baseline and
+`recovery_bg25` reviewed comparison pair continued to the separately governed
+held-out evaluation.
+
+Checkpoint 6 then completed all 48 candidate/week/strategy rolling cases over
+the independently selected eight-week TEST set, with 672/672 optimal solver
+models. Independent review is `complete`. The 24 raw duration-aware
+fixed-background flags are preserved in the run ledger and classified as
+`serialization_false_positive_reviewer_disposition`: their approximately
+0.00412-MWh/y residual is 5.2e-9 relative, so the material physical failure
+count is zero. The source-driven baseline remains central; `recovery_bg25`
+remains `emulation_sensitivity_only` and nonpromoted. Results are weighted
+annual equivalents from representative held-out weeks, not an annual backtest.
+The next bounded thesis gate is terminal-inventory equivalence and a
+terminal-inventory value bridge before any economic-uplift claim.
+
+The subsequent bounded DEVELOPMENT-only C0 mechanism experiment keeps the
+accepted physical interface structurally invariant and leaves the held-out
+weeks untouched. Its 15 cached cases contain 210/210 optimal models. Lower NG
+activates named generator NG in the two volatile cases but not in the calm
+case. Because the builder tie-break penalizes flexible-heat NG but not
+generator NG, zero flexible NG is an allocation-location non-identifiability,
+not proof of no substitution. Small realised WAG-generation spreads are
+endogenous-dispatch diagnostics, not parameter drift. The source-driven
+baseline remains central, all repair candidates remain nonpromoted, and the
+stop rule authorizes no second search.
+
+This reopening does not authorize an exact digital-twin claim or combine the
+physical fuel/oxidation CO2 ledger with the first-order full-site ledger. The
+Tata questionnaire remains outside this calibration workstream.
 
 ## 7. Explicit no-go items
 
 The physical, fixed-reference S2, governed point-forecast integration and
 deterministic response diagnostics pass. The accepted physical baseline remains
-separately price-free; the next task is governed interpretation of the solved
-deterministic response, not live market operation or bidding. Do not add:
+separately price-free; the governed deterministic-response interpretation is
+complete and its next use is bounded thesis-manuscript integration, not live
+market operation or bidding. Do not add:
 
 - a static C0 hour calendar or fixed production profile;
 - fixed C0/C1 route shares chosen to make the model feasible;
@@ -664,7 +804,9 @@ deterministic response, not live market operation or bidding. Do not add:
 - aggregate process CO2 plus Mode-B fuel CO2 in one total;
 - ungoverned prices, live-market operation, DA bidding or settlement, generator
   export revenue, ETS, mFRR, stochasticity, CVaR or product revenue;
-- an objective or parameter choice designed to fit public anchors.
+- a public-anchor-fitting objective or parameter choice in the immutable strict
+  source-driven baseline; the separate user-authorized emulation overlay is
+  governed by its own explicit contracts and sensitivity labels.
 
 ## 8. Historical and conflicting documents
 
