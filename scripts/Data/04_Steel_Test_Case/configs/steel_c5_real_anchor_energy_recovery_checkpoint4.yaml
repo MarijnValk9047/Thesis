@@ -1,0 +1,166 @@
+run_id: steel_c5_real_anchor_energy_recovery_v1_20260722
+mode: c0_real_anchor_energy_recovery_checkpoint4
+checkpoint_id: checkpoint_4_frozen_behavioural_development_validation
+lineage_role: opt_in_behavioural_sensitivity_over_checkpoint3_source_and_recovery_pair
+run_class: deterministic_c0_real_anchor_behavioural_development_validation
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_real_anchor_energy_recovery_v1_20260722/checkpoint4
+execution_authorized: true
+review_status: checkpoint4_prepared_reviewed_checkpoint3
+
+checkpoint_4:
+  physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
+  checkpoint3_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_real_anchor_energy_recovery.yaml
+  period_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/representative_week_selection_contract.csv
+  checkpoint3_scorecard: data/03_Optimisation/runs/steel_c5_real_anchor_energy_recovery_v1_20260722/candidate_scorecard.csv
+  scratch_root: tmp/steel_c5_real_anchor_energy_recovery_checkpoint4_cases
+  expected_rolling_case_count: 12
+  expected_model_count: 168
+  held_out_periods_used: false
+  identical_initial_state_policy: base_config_default_initial_state_for_every_independent_candidate_scenario_case
+  identical_production_policy: cumulative_production_progress_then_represented_procurement_cost_then_physical_tiebreak
+  material_capacity_and_quota_policy: inherited_unchanged_from_accepted_p_af_runner
+  c1_policy: solved_naturally_by_accepted_runner_unchanged_by_c0_repair_no_recalibration_claim
+
+  development_periods:
+    - period_id: validation_2024-02-12
+      dataset_split: validation
+      period_role: development
+      regime_role: calm
+      frozen_forecast_start_origin_utc: '2024-02-11T07:00:00+00:00'
+      delivery_start_utc: '2024-02-11T23:00:00+00:00'
+      delivery_end_exclusive_utc: '2024-02-18T23:00:00+00:00'
+      final_held_out_selection_eligible: false
+    - period_id: validation_2024-07-01
+      dataset_split: validation
+      period_role: development
+      regime_role: volatile_negative
+      frozen_forecast_start_origin_utc: '2024-06-30T06:00:00+00:00'
+      delivery_start_utc: '2024-06-30T22:00:00+00:00'
+      delivery_end_exclusive_utc: '2024-07-07T22:00:00+00:00'
+      final_held_out_selection_eligible: false
+
+  candidates:
+    - candidate_id: source_driven_baseline
+      candidate_classification: source_driven_reference_baseline
+      repair_interface_active: false
+      explicit_background_twh_y: 0.0
+      explicit_background_mwh_h: 0.0
+      promotable_central_from_checkpoint4: false
+    - candidate_id: recovery_bg25
+      candidate_classification: emulation_sensitivity_only
+      repair_interface_active: true
+      explicit_background_twh_y: 0.7925
+      explicit_background_mwh_h: 90.46803652968036
+      promotable_central_from_checkpoint4: false
+
+  scenarios:
+    - scenario_id: calm_price_insensitive
+      period_id: validation_2024-02-12
+      price_field: y_pred
+      flat_price_eur_per_mwh: 80.0
+      perfect_foresight_oracle: false
+    - scenario_id: calm_flat_low
+      period_id: validation_2024-02-12
+      price_field: y_pred
+      flat_price_eur_per_mwh: 40.0
+      perfect_foresight_oracle: false
+    - scenario_id: calm_flat_high
+      period_id: validation_2024-02-12
+      price_field: y_pred
+      flat_price_eur_per_mwh: 120.0
+      perfect_foresight_oracle: false
+    - scenario_id: calm_governed_y_pred
+      period_id: validation_2024-02-12
+      price_field: y_pred
+      flat_price_eur_per_mwh:
+      perfect_foresight_oracle: false
+    - scenario_id: volatile_negative_governed_y_pred
+      period_id: validation_2024-07-01
+      price_field: y_pred
+      flat_price_eur_per_mwh:
+      perfect_foresight_oracle: false
+    - scenario_id: volatile_negative_oracle_y_true
+      period_id: validation_2024-07-01
+      price_field: y_true
+      flat_price_eur_per_mwh:
+      perfect_foresight_oracle: true
+
+  recovery_interface:
+    c0_aggregate_generator_technical_interface:
+      enabled: true
+      electricity_efficiency: 0.345
+      total_fuel_volume_cap_nm3_h: 900000.0
+      electrical_capacity_mw: 770.0
+      natural_gas_lhv_mj_per_nm3: 35.8
+      export_allowed: false
+    c0_full_site_energy_bridge:
+      enabled: true
+      inferred_low_case_full_site_ng_floor_pj_y: 8.005
+      already_represented_fixed_ng_pj_y: 0.0
+      already_represented_fixed_ng_component_id: none_identified
+      already_represented_fixed_ng_derivation: explicit_zero_no_represented_fixed_full_site_ng_component_identified
+      flexible_other_site_heat_service_envelope_pj_y: 3.07
+      normal_case_flexible_ng_validation_reference_pj_y: 1.65
+
+  physical_stress_contract:
+    stress_id: aggregate_vn25_off_proxy
+    candidate_id: recovery_bg25
+    scenario_id: calm_price_insensitive
+    synthetic_proxy: true
+    historical_tata_event: false
+    exact_vn25_ij01_split: false
+    proposed_electrical_capacity_mw: 420.0
+    proposed_total_fuel_volume_cap_nm3_h: 300000.0
+    base_electrical_capacity_mw: 770.0
+    base_total_fuel_volume_cap_nm3_h: 900000.0
+    execution_availability: structurally_unavailable
+    unavailability_reason: accepted_p_af_validator_freezes_recovery_interface_at_770MW_and_900000Nm3h
+    safeguard_bypass_allowed: false
+
+  expectations:
+    - expectation_id: all_physical_and_accounting_guardrails
+      scope: all_candidates_all_12_scenarios
+      applicability: required
+      expected_direction: production_material_wag_electricity_named_ng_cost_identities_and_no_export_pass
+      assessment_rule: accepted_runner_validation_plus_reconstructed_identity_checks
+    - expectation_id: recovery_low_vs_high_energy_response
+      scope: recovery_bg25_calm_flat_low_vs_high
+      applicability: required
+      expected_direction: wag_generator_low_non_increasing_wag_flexible_heat_low_non_decreasing_flexible_ng_low_non_increasing_fixed_ng_invariant_grid_import_may_rise
+      assessment_rule: directional_with_1e_4_absolute_tolerance_no_exact_magnitude
+    - expectation_id: recovery_high_vs_low_energy_response
+      scope: recovery_bg25_calm_flat_high_vs_low
+      applicability: required
+      expected_direction: converse_of_low_case_for_wag_generation_wag_flexible_heat_and_flexible_ng_fixed_ng_invariant_grid_import_may_fall
+      assessment_rule: directional_with_1e_4_absolute_tolerance_no_exact_magnitude
+    - expectation_id: baseline_flexible_bridge_response
+      scope: source_driven_baseline_calm_flat_low_vs_high
+      applicability: not_applicable
+      expected_direction: baseline_has_no_flexible_full_site_bridge
+      assessment_rule: report_not_applicable_never_fail
+    - expectation_id: volatile_predicted_price_response
+      scope: both_candidates_volatile_negative_governed_y_pred
+      applicability: required
+      expected_direction: more_internal_generation_or_lower_grid_import_in_expensive_predicted_hours_or_equivalent_positive_load_shift
+      assessment_rule: above_vs_at_or_below_median_optimizer_visible_y_pred
+    - expectation_id: negative_price_redistribution
+      scope: volatile_predicted_and_oracle_cases
+      applicability: report_only
+      expected_direction: report_grid_generator_and_wag_redistribution_without_forced_exact_response
+      assessment_rule: descriptive_aggregate_no_exact_direction_gate
+    - expectation_id: oracle_first_window_realised_cost_dominance
+      scope: each_candidate_volatile_first_planning_window
+      applicability: required
+      expected_direction: y_true_oracle_weakly_lower_realised_price_cost_than_y_pred_from_identical_state
+      assessment_rule: first_window_plan_revalued_on_y_true_with_0p01_eur_tolerance
+    - expectation_id: aggregate_vn25_off_proxy_response
+      scope: recovery_bg25_synthetic_proxy_only
+      applicability: structurally_unavailable
+      expected_direction: generator_output_non_increasing_grid_import_or_flare_non_decreasing_feasibility_or_explained_infeasibility_fixed_ng_invariant
+      assessment_rule: do_not_execute_while_accepted_validator_freezes_base_interface
+    - expectation_id: c1_unchanged_by_c0_repair
+      scope: all_12_cases_when_runner_naturally_solves_c1
+      applicability: report_only
+      expected_direction: include_same_rolling_c1_outputs_without_recalibration_claim
+      assessment_rule: compact_reporting_only

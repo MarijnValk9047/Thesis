@@ -1,0 +1,81 @@
+run_id: steel_c5_source_emulation_validation_v1_20260721
+parent_run_id: steel_s2_deterministic_price_response_anchor_diagnostics_v1_20260720
+lineage_role: child_of_accepted_D_to_Dplus4_with_separate_source_and_emulation_branches
+run_class: deterministic_source_and_emulation_validation
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_source_emulation_validation_v1_20260721
+contract_root: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract
+parent_checkpoint_state: data/03_Optimisation/runs/steel_c5_tata_benchmark_v1_20260721/checkpoint_state.json
+target_contract_path: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/calibration_validation_target_contract.csv
+parameter_contract_path: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/calibratable_parameter_contract.csv
+forecast_source_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_component_ontology/c5_hourly_da_dplus4_forecast_source_contract.yaml
+annualisation_label: representative_period_annualised
+coverage_status: partial_support_not_full_year
+selection_solver_runs_enabled: false
+selection:
+  dataset_splits: [validation, test]
+  target_periods_per_split: 4
+  origins_per_period: 7
+  candidate_week_anchor: monday_local_delivery
+  execution_policy: first_local_delivery_day_each_origin
+  method: central_medoid_plus_dst_medoid_then_deterministic_farthest_point
+  weighting: nearest_selected_standardised_medoid_member_week_share_within_split
+  feature_fields:
+    - calendar_position_fraction
+    - realised_mean_eur_per_mwh
+    - realised_volatility_eur_per_mwh
+    - negative_price_share
+    - forecast_mae_eur_per_mwh
+  y_true_use: ex_post_regime_classification_only_never_optimizer_input
+  prohibited_selection_inputs:
+    - optimisation_results
+    - model_dispatch
+    - represented_cost
+    - anchor_residual
+    - preferred_c0_c1_outcome
+    - achieved_savings
+output_limits:
+  maximum_artifact_count: 35
+  maximum_size_bytes: 26214400
+evaluation:
+  physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
+  scratch_root: tmp/c5_source_emulation_validation_v1_20260721_cases
+  expected_case_count: 24
+  maximum_materially_distinct_repairs: 3
+  strategies:
+    - price_insensitive
+    - governed_y_pred
+    - oracle_y_true
+  price_insensitive_definition: timestamped_Dplus4_adapter_flat_80_EUR_per_MWh_no_temporal_signal
+  flat_price_parity_evidence: data/03_Optimisation/runs/steel_s2_deterministic_price_response_anchor_diagnostics_v1_20260720/diagnostic_test_results.csv
+  flat_price_parity_policy: reuse_accepted_ordinary_week_evidence_DST_whole_period_parity_not_directly_comparable
+  identical_initial_state_policy: base_config_default_initial_state_for_every_independent_period_strategy_case
+  identical_physical_policy: one_frozen_physical_config_no_parameter_overrides
+  residual_inputs_active: false
+  export_allowed: false
+  annualisation_label: representative_period_annualised
+frozen_selection:
+  - period_id: validation_2024-07-29
+    frozen_forecast_start_origin_utc: '2024-07-28T06:00:00+00:00'
+    split_weight: 0.553191489362
+  - period_id: validation_2023-10-23
+    frozen_forecast_start_origin_utc: '2023-10-22T06:00:00+00:00'
+    split_weight: 0.148936170213
+  - period_id: validation_2024-07-01
+    frozen_forecast_start_origin_utc: '2024-06-30T06:00:00+00:00'
+    split_weight: 0.106382978723
+  - period_id: validation_2024-02-12
+    frozen_forecast_start_origin_utc: '2024-02-11T07:00:00+00:00'
+    split_weight: 0.191489361702
+  - period_id: test_2025-09-08
+    frozen_forecast_start_origin_utc: '2025-09-07T06:00:00+00:00'
+    split_weight: 0.413043478261
+  - period_id: test_2024-10-21
+    frozen_forecast_start_origin_utc: '2024-10-20T06:00:00+00:00'
+    split_weight: 0.391304347826
+  - period_id: test_2024-12-09
+    frozen_forecast_start_origin_utc: '2024-12-08T07:00:00+00:00'
+    split_weight: 0.021739130435
+  - period_id: test_2025-01-13
+    frozen_forecast_start_origin_utc: '2025-01-12T07:00:00+00:00'
+    split_weight: 0.173913043478

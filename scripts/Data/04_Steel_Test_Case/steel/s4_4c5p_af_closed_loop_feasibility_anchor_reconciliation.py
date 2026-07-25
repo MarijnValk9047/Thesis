@@ -64,6 +64,7 @@ from .s4_4c_unified_physical_modelbuilder import (
 DEFAULT_CONFIG_PATH = REPO_ROOT / "scripts" / "Data" / "04_Steel_Test_Case" / "configs" / "steel_closed_loop_feasibility_anchor_reconciliation.yaml"
 DEFAULT_RUN_ROOT = REPO_ROOT / "data" / "03_Optimisation" / "runs"
 ANCHOR_REGISTER_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "S4" / "c5_model_anchor_register" / "c5_model_anchor_evidence_register.csv"
+USER_AUTHORIZED_EMULATION_PARAMETER_OVERLAY_PATH = REPO_ROOT / "data" / "03_Optimisation" / "inputs" / "assets" / "steel" / "S4" / "c5_tata_benchmark_target_contract" / "user_authorized_emulation_parameter_overlay.csv"
 CONFIGURATIONS = ("C0_current_BF_BOF_reference", "C1_phase1_BF_BOF_plus_DRP_EAF")
 PJ_PER_MWH = 3.6e-6
 TOLERANCE_T = 1e-5
@@ -75,6 +76,73 @@ ANNUALISED_ACCOUNTING_TOLERANCE_MWH = 0.01
 HOURS_PER_YEAR = 8760.0
 C0_CONFIGURATION = CONFIGURATIONS[0]
 C1_CONFIGURATION = CONFIGURATIONS[1]
+
+FIRST_ORDER_FULL_SITE_CO2_TARGET_MT_Y = {
+    C0_CONFIGURATION: 13.24,
+    C1_CONFIGURATION: 9.107793,
+}
+
+# Reporting-only selected activity factors. These are deliberately separate
+# from the carrier-explicit Mode-B ledger and never enter dispatch or ETS.
+FIRST_ORDER_PROCESS_CO2_FACTORS = (
+    {
+        "component": "BF_direct_CO2",
+        "factor": 1.495,
+        "unit": "tCO2/t_hot_metal",
+        "activity_fields": {
+            C0_CONFIGURATION: "C0_BF_hot_iron_output_t",
+            C1_CONFIGURATION: "C1_retained_BF_hot_iron_output_t_h",
+        },
+        "source_locator": "s4_4c5h_blast_furnace_controller_parameterisation.py: BF_CO2_COUNTER_AGG_T_PER_T_HM; source_cards/Blast_Furnace_Parameters.md",
+    },
+    {
+        "component": "BOF_direct_CO2",
+        "factor": 0.0825,
+        "unit": "tCO2/t_liquid_steel",
+        "activity_fields": {
+            C0_CONFIGURATION: "C0_BOF_crude_steel_output_t",
+            C1_CONFIGURATION: "C1_BOF_liquid_steel_output_t_h",
+        },
+        "source_locator": "s4_4c5k_bof_osf_coefficient_rows_inherited_from_c5j.csv: BOF_DIRECT_CO2_T_PER_T_LS",
+    },
+    {
+        "component": "KGF_direct_CO2",
+        "factor": 0.20,
+        "unit": "tCO2/t_coke",
+        "activity_fields": {
+            C0_CONFIGURATION: "C0_coke_output_t_h",
+            C1_CONFIGURATION: "C1_retained_coke_output_t_h",
+        },
+        "source_locator": "s4_4c5f_kgf_parameter_values.csv: KGF_DIRECT_CO2_T_PER_T_COKE; source_cards/Coking_Plants_Parameters.md",
+    },
+    {
+        "component": "sinter_direct_CO2",
+        "factor": 0.248,
+        "unit": "tCO2/t_sinter",
+        "activity_fields": {
+            C0_CONFIGURATION: "C0_sinter_output_t_h",
+            C1_CONFIGURATION: "C1_retained_sinter_output_t_h",
+        },
+        "source_locator": "s4_4c5m_sinter_development_input_rows.csv: SINTER_DIRECT_CO2_T_PER_T_SINTER",
+    },
+    {
+        "component": "PeFa_direct_CO2",
+        "factor": 0.105,
+        "unit": "tCO2/t_pellets",
+        "activity_fields": {
+            C0_CONFIGURATION: "PEFA_pellet_output_t",
+            C1_CONFIGURATION: "PEFA_pellet_output_t",
+        },
+        "source_locator": "s4_4c5n_a_pefa_development_input_rows.csv: PEFA_DIRECT_CO2_T_PER_T",
+    },
+    {
+        "component": "EAF_direct_CO2",
+        "factor": 0.126,
+        "unit": "tCO2/t_liquid_steel",
+        "activity_fields": {C1_CONFIGURATION: "C1_EAF_liquid_steel_output_t_h"},
+        "source_locator": "s4_4c5o_b_eaf_development_input_rows.csv: EAF_DIRECT_CO2_T_PER_T_LS_BREF_MIDPOINT",
+    },
+)
 
 
 class ClosedLoopFeasibilityError(ValueError):
@@ -427,9 +495,24 @@ def _deterministic_cost_policy(
             config.get("perfect_foresight_oracle", False)
         ),
     )
+    real_anchor_c0_cost_flow_ids = {
+        "C0_NG_GENERATOR",
+        "C0_NG_FIXED_FULL_SITE",
+        "C0_NG_FLEXIBLE_OTHER_SITE_HEAT",
+    }
+    real_anchor_c0_costs_active = bool(
+        isinstance(config.get("c0_aggregate_generator_technical_interface"), Mapping)
+        and config["c0_aggregate_generator_technical_interface"].get("enabled", False)
+        and isinstance(config.get("c0_full_site_energy_bridge"), Mapping)
+        and config["c0_full_site_energy_bridge"].get("enabled", False)
+    )
     flows: list[dict[str, Any]] = []
     for row in cost_rows:
-        if row.get("objective_enabled") != "true":
+        opt_in_real_anchor_flow = (
+            real_anchor_c0_costs_active
+            and row.get("flow_id") in real_anchor_c0_cost_flow_ids
+        )
+        if row.get("objective_enabled") != "true" and not opt_in_real_anchor_flow:
             continue
         price_id = row["price_id"]
         scenario_id = str(
@@ -487,6 +570,9 @@ def _cost_component_for_attribute(component: str, attribute: str) -> str:
         "NG_to_PEFA_branderij_mwh": "PEFA_branderij",
         "natural_gas_boiler_mwh": "represented_15bar_boiler",
         "VN25_NG_fuel_mwh": "VN25",
+        "generator_named_ng_mwh": "aggregate_generator",
+        "full_site_fixed_ng_component_mwh": "fixed_full_site_component",
+        "flexible_other_site_heat_ng_mwh": "flexible_other_site_heat",
     }
     return aliases.get(attribute, component)
 
@@ -740,14 +826,142 @@ def _generator_unit_interface(
     }
 
 
+def _c0_real_anchor_energy_recovery_interfaces(
+    config: Mapping[str, Any],
+) -> tuple[dict[str, Any] | None, dict[str, float] | None]:
+    """Resolve the opt-in C0 aggregate generator and full-site NG bridge."""
+
+    generator = config.get("c0_aggregate_generator_technical_interface")
+    bridge = config.get("c0_full_site_energy_bridge")
+    if generator is None and bridge is None:
+        return None, None
+    if not isinstance(generator, Mapping) or not bool(generator.get("enabled", False)):
+        raise ClosedLoopFeasibilityError(
+            "C0 real-anchor energy recovery requires the enabled aggregate generator interface."
+        )
+    if not isinstance(bridge, Mapping) or not bool(bridge.get("enabled", False)):
+        raise ClosedLoopFeasibilityError(
+            "C0 real-anchor energy recovery requires the enabled full-site energy bridge."
+        )
+    required_generator = {
+        "electricity_efficiency": 0.345,
+        "total_fuel_volume_cap_nm3_h": 900_000.0,
+        "natural_gas_lhv_mj_per_nm3": 35.8,
+        "electrical_capacity_mw": 770.0,
+    }
+    for key, expected in required_generator.items():
+        if key not in generator or abs(float(generator[key]) - expected) > 1e-9:
+            raise ClosedLoopFeasibilityError(
+                f"C0 aggregate generator {key} must remain {expected}."
+            )
+    if bool(generator.get("export_allowed", False)):
+        raise ClosedLoopFeasibilityError("C0 aggregate generator export must remain disabled.")
+
+    required_bridge = {
+        "inferred_low_case_full_site_ng_floor_pj_y",
+        "already_represented_fixed_ng_pj_y",
+        "already_represented_fixed_ng_component_id",
+        "already_represented_fixed_ng_derivation",
+        "flexible_other_site_heat_service_envelope_pj_y",
+        "normal_case_flexible_ng_validation_reference_pj_y",
+    }
+    missing = required_bridge.difference(bridge)
+    if missing:
+        raise ClosedLoopFeasibilityError(
+            f"C0 full-site energy bridge is missing: {sorted(missing)}"
+        )
+    fixed_target_pj_y = float(bridge["inferred_low_case_full_site_ng_floor_pj_y"])
+    already_represented_pj_y = float(bridge["already_represented_fixed_ng_pj_y"])
+    overlap_component_id = str(bridge["already_represented_fixed_ng_component_id"]).strip()
+    overlap_derivation = str(bridge["already_represented_fixed_ng_derivation"]).strip()
+    flexible_service_pj_y = float(
+        bridge["flexible_other_site_heat_service_envelope_pj_y"]
+    )
+    normal_case_flexible_ng_pj_y = float(
+        bridge["normal_case_flexible_ng_validation_reference_pj_y"]
+    )
+    if not 8.0 <= fixed_target_pj_y <= 8.12:
+        raise ClosedLoopFeasibilityError(
+            "The inferred fixed full-site NG component must stay inside 8.0-8.12 PJ/y."
+        )
+    if not 0.0 <= already_represented_pj_y < 8.0:
+        raise ClosedLoopFeasibilityError(
+            "Already-represented fixed NG must be non-negative and below the 8.0 PJ/y inferred floor."
+        )
+    if not overlap_component_id or not overlap_derivation:
+        raise ClosedLoopFeasibilityError(
+            "Fixed-NG overlap subtraction requires an explicit component id and derivation."
+        )
+    if already_represented_pj_y == 0.0 and "zero" not in overlap_derivation.lower():
+        raise ClosedLoopFeasibilityError(
+            "A zero fixed-NG overlap must be stated explicitly in its derivation."
+        )
+    net_fixed_pj_y = fixed_target_pj_y - already_represented_pj_y
+    if (
+        abs(flexible_service_pj_y - 3.07) > 1e-9
+        or abs(normal_case_flexible_ng_pj_y - 1.65) > 1e-9
+    ):
+        raise ClosedLoopFeasibilityError(
+            "C0 flexible heat must retain the 3.07 PJ/y service envelope and 1.65 PJ/y normal-case validation reference."
+        )
+    pj_y_to_mwh_h = 1.0 / (HOURS_PER_YEAR * PJ_PER_MWH)
+    return (
+        {
+            "electricity_efficiency": 0.345,
+            "total_fuel_volume_cap_nm3_h": 900_000.0,
+            "natural_gas_lhv_mj_per_nm3": 35.8,
+            "electrical_capacity_mw": 770.0,
+            "export_allowed": False,
+        },
+        {
+            "fixed_full_site_ng_component_mwh_h": net_fixed_pj_y * pj_y_to_mwh_h,
+            "flexible_other_site_heat_service_envelope_mwh_h": flexible_service_pj_y
+            * pj_y_to_mwh_h,
+            "normal_case_flexible_ng_validation_reference_mwh_h": normal_case_flexible_ng_pj_y
+            * pj_y_to_mwh_h,
+        },
+    )
+
+
 def _electricity_boundary_levers(
     config: Mapping[str, Any]
-) -> tuple[float, float | None, float | None]:
+) -> tuple[float, float | None, float | None, float, dict[str, float]]:
     """Return explicit named electricity additions; unknown site load remains outside dispatch."""
 
-    if str(config.get("repair_stage", "none")) != "electricity":
-        return 0.0, None, None
     payload = config.get("represented_electricity_boundary")
+    payload_mapping = payload if isinstance(payload, Mapping) else {}
+    background = float(
+        config.get(
+            "site_background_electricity_mwh_h",
+            payload_mapping.get("site_background_electricity_mwh_h", 0.0),
+        )
+    )
+    raw_background_by_configuration = config.get(
+        "site_background_electricity_mwh_h_by_configuration",
+        payload_mapping.get("site_background_electricity_mwh_h_by_configuration", {}),
+    )
+    if not isinstance(raw_background_by_configuration, Mapping):
+        raise ClosedLoopFeasibilityError(
+            "site_background_electricity_mwh_h_by_configuration must be a mapping."
+        )
+    background_by_configuration = {
+        str(key): float(value) for key, value in raw_background_by_configuration.items()
+    }
+    unknown = set(background_by_configuration).difference(CONFIGURATIONS)
+    if unknown:
+        raise ClosedLoopFeasibilityError(
+            f"Unknown site-background configuration(s): {sorted(unknown)}."
+        )
+    resolved_background_by_configuration = {
+        configuration: background_by_configuration.get(configuration, background)
+        for configuration in CONFIGURATIONS
+    }
+    if background < 0.0 or any(
+        value < 0.0 for value in resolved_background_by_configuration.values()
+    ):
+        raise ClosedLoopFeasibilityError("Site background electricity must be non-negative.")
+    if str(config.get("repair_stage", "none")) != "electricity":
+        return 0.0, None, None, background, resolved_background_by_configuration
     if not isinstance(payload, Mapping):
         raise ClosedLoopFeasibilityError(
             "Electricity repair requires represented_electricity_boundary."
@@ -767,7 +981,7 @@ def _electricity_boundary_levers(
     dsp = None if raw_dsp in {None, ""} else float(raw_dsp)
     if dsp is not None and abs(dsp - 0.056) > 1e-12:
         raise ClosedLoopFeasibilityError("DSP electricity must remain the 0.056 MWh/t source-card value.")
-    return linde_n2, eaf_secondary, dsp
+    return linde_n2, eaf_secondary, dsp, background, resolved_background_by_configuration
 
 
 def _c1_source_backed_energy_boundary(config: Mapping[str, Any]) -> dict[str, float] | None:
@@ -1196,6 +1410,85 @@ def _scrap_supply_ledger(
             for deadline in deadlines
         },
     }
+
+
+def _user_authorized_emulation_overlays(
+    config: Mapping[str, Any],
+    c1_energy_boundary: Mapping[str, float] | None,
+) -> tuple[dict[str, dict[str, float]], dict[str, float], dict[str, float] | None]:
+    """Resolve the frozen Checkpoint-4 yield and named-load overlays."""
+
+    raw_yields = config.get("wag_generation_yield_overrides_by_configuration", {})
+    raw_scales = config.get(
+        "named_process_electricity_intensity_scales_by_configuration", {}
+    )
+    if not isinstance(raw_yields, Mapping) or not isinstance(raw_scales, Mapping):
+        raise ClosedLoopFeasibilityError(
+            "User-authorized yield and named-process electricity overlays must be mappings."
+        )
+    unknown_configurations = (set(raw_yields) | set(raw_scales)).difference(
+        CONFIGURATIONS
+    )
+    if unknown_configurations:
+        raise ClosedLoopFeasibilityError(
+            f"Unknown user-authorized overlay configuration(s): {sorted(unknown_configurations)}."
+        )
+    yield_overrides: dict[str, dict[str, float]] = {}
+    for configuration, carrier_values in raw_yields.items():
+        if not isinstance(carrier_values, Mapping):
+            raise ClosedLoopFeasibilityError(
+                f"{configuration} WAG yield overrides must be a mapping."
+            )
+        unknown_carriers = set(carrier_values).difference({"BFG", "COG", "BOFG"})
+        if unknown_carriers:
+            raise ClosedLoopFeasibilityError(
+                f"Unsupported WAG yield carrier(s): {sorted(unknown_carriers)}."
+            )
+        resolved = {str(key): float(value) for key, value in carrier_values.items()}
+        if any(value <= 0.0 for value in resolved.values()):
+            raise ClosedLoopFeasibilityError("Every WAG yield override must be positive.")
+        yield_overrides[str(configuration)] = resolved
+
+    allowed_processes = {
+        C0_CONFIGURATION: {"BF"},
+        C1_CONFIGURATION: {"EAF_arc"},
+    }
+    process_scales: dict[str, dict[str, float]] = {}
+    for configuration, process_values in raw_scales.items():
+        if not isinstance(process_values, Mapping):
+            raise ClosedLoopFeasibilityError(
+                f"{configuration} named-process electricity scales must be a mapping."
+            )
+        unknown_processes = set(process_values).difference(
+            allowed_processes[str(configuration)]
+        )
+        if unknown_processes:
+            raise ClosedLoopFeasibilityError(
+                f"Unsupported named-process electricity scale(s) for {configuration}: "
+                f"{sorted(unknown_processes)}."
+            )
+        resolved = {str(key): float(value) for key, value in process_values.items()}
+        if any(value <= 0.0 for value in resolved.values()):
+            raise ClosedLoopFeasibilityError(
+                "Every named-process electricity-intensity scale must be positive."
+            )
+        process_scales[str(configuration)] = resolved
+
+    bf_scales = {
+        C0_CONFIGURATION: process_scales.get(C0_CONFIGURATION, {}).get("BF", 1.0),
+        C1_CONFIGURATION: 1.0,
+    }
+    resolved_c1_energy = (
+        None if c1_energy_boundary is None else dict(c1_energy_boundary)
+    )
+    eaf_scale = process_scales.get(C1_CONFIGURATION, {}).get("EAF_arc", 1.0)
+    if eaf_scale != 1.0:
+        if resolved_c1_energy is None:
+            raise ClosedLoopFeasibilityError(
+                "EAF-arc electricity scaling requires the existing C1 source-backed energy boundary."
+            )
+        resolved_c1_energy["eaf_arc_electricity_mwh_per_t_liquid_steel"] *= eaf_scale
+    return yield_overrides, bf_scales, resolved_c1_energy
 
 
 def _model_target_multiplier(config: Mapping[str, Any], plan: Any) -> float:
@@ -1711,7 +2004,8 @@ def _annual_model_metrics(hourly_rows: list[dict[str, Any]]) -> tuple[dict[str, 
         wag_generated = total("WAG_generated")
         wag_used = total("WAG_used")
         wag_flared = total("WAG_flared")
-        wag_power = total("wag_electricity_mwh")
+        wag_power = total("WAG_generator_electricity_mwh")
+        ng_generator_electricity_mwh = total("NG_generator_electricity_mwh")
         generator_fuel = total("vattenfall_fuel_mwh")
         generator_named_ng_mwh = total("generator_named_ng_mwh")
         generator_total_fuel_mwh = total("generator_total_fuel_mwh")
@@ -1725,6 +2019,8 @@ def _annual_model_metrics(hourly_rows: list[dict[str, Any]]) -> tuple[dict[str, 
         hsm_ng_mwh = total("NG_to_HSM_mwh")
         pefa_ng_mwh = total("NG_to_PEFA_malerij_mwh") + total("NG_to_PEFA_branderij_mwh")
         boiler_ng_mwh = total("natural_gas_boiler_mwh")
+        fixed_bridge_ng_mwh = total("full_site_fixed_ng_component_mwh")
+        flexible_bridge_ng_mwh = total("flexible_other_site_heat_ng_mwh")
         represented_ng_mwh = (
             drp_ng_mwh
             + eaf_ng_mwh
@@ -1732,6 +2028,8 @@ def _annual_model_metrics(hourly_rows: list[dict[str, Any]]) -> tuple[dict[str, 
             + pefa_ng_mwh
             + boiler_ng_mwh
             + generator_named_ng_mwh
+            + fixed_bridge_ng_mwh
+            + flexible_bridge_ng_mwh
         )
         hsm_slab_field = "C0_HSM_input_t_h" if configuration.startswith("C0") else "C1_retained_HSM_input_t_h"
         hsm_output_field = "C0_HSM_final_product_t" if configuration.startswith("C0") else "C1_HSM_final_product_output_t"
@@ -1770,6 +2068,9 @@ def _annual_model_metrics(hourly_rows: list[dict[str, Any]]) -> tuple[dict[str, 
             "generator_total_fuel_pj_y": generator_total_fuel_mwh * factor * PJ_PER_MWH,
             "generator_total_fuel_plus_flare_pj_y": (generator_total_fuel_mwh + wag_flared) * factor * PJ_PER_MWH,
             "generator_electricity_twh_y": generator_electricity_mwh * factor / 1_000_000.0,
+            "ng_generator_electricity_twh_y": ng_generator_electricity_mwh
+            * factor
+            / 1_000_000.0,
             "vn25_total_fuel_pj_y": total("VN25_total_fuel_mwh") * factor * PJ_PER_MWH,
             "ij01_total_fuel_pj_y": total("IJ01_total_fuel_mwh") * factor * PJ_PER_MWH,
             "wag_power_twh_y": wag_power * factor / 1_000_000.0,
@@ -1781,7 +2082,12 @@ def _annual_model_metrics(hourly_rows: list[dict[str, Any]]) -> tuple[dict[str, 
             "pefa_named_ng_pj_y": pefa_ng_mwh * factor * PJ_PER_MWH,
             "boiler_named_ng_pj_y": boiler_ng_mwh * factor * PJ_PER_MWH,
             "generator_named_ng_pj_y": generator_named_ng_mwh * factor * PJ_PER_MWH,
-            "generator_named_ng_available": total("generator_unit_interface_active") > 0.0,
+            "fixed_bridge_named_ng_pj_y": fixed_bridge_ng_mwh * factor * PJ_PER_MWH,
+            "flexible_bridge_named_ng_pj_y": flexible_bridge_ng_mwh * factor * PJ_PER_MWH,
+            "generator_named_ng_available": (
+                total("generator_unit_interface_active") > 0.0
+                or total("aggregate_generator_technical_interface_active") > 0.0
+            ),
             "max_abs_generator_fuel_identity_residual_mwh": max(
                 (abs(_float(row.get("generator_fuel_identity_residual_mwh"))) for row in rows),
                 default=0.0,
@@ -1919,6 +2225,299 @@ def _anchor_value(anchor_id: str) -> float:
     raise ClosedLoopFeasibilityError(f"Missing numeric anchor value for {anchor_id}.")
 
 
+def _first_order_full_site_co2_ledger(
+    hourly_rows: list[dict[str, Any]],
+    *,
+    constant_mt_y_by_configuration: Mapping[str, float] | None = None,
+    target_mt_y_by_configuration: Mapping[str, float] | None = None,
+) -> list[dict[str, Any]]:
+    """Build a reporting-only process-factor ledger; never feed it to Mode B."""
+
+    constants = constant_mt_y_by_configuration or {}
+    targets = target_mt_y_by_configuration or FIRST_ORDER_FULL_SITE_CO2_TARGET_MT_Y
+    result: list[dict[str, Any]] = []
+    for configuration in CONFIGURATIONS:
+        selected = [row for row in hourly_rows if row.get("configuration_id") == configuration]
+        if not selected:
+            continue
+        annualisation_factor = HOURS_PER_YEAR / len(selected)
+        subtotal_t = 0.0
+        for definition in FIRST_ORDER_PROCESS_CO2_FACTORS:
+            activity_field = definition["activity_fields"].get(configuration)
+            activity_available = bool(
+                activity_field
+                and any(activity_field in row and row.get(activity_field) not in {None, ""} for row in selected)
+            )
+            activity_t_y = (
+                sum(_float(row.get(activity_field)) for row in selected) * annualisation_factor
+                if activity_available
+                else 0.0
+            )
+            emissions_t_y = activity_t_y * float(definition["factor"])
+            subtotal_t += emissions_t_y
+            result.append(
+                {
+                    "configuration_id": configuration,
+                    "component": definition["component"],
+                    "activity_field": activity_field or "",
+                    "annual_activity_t_y": round(activity_t_y, 6),
+                    "factor_value": definition["factor"],
+                    "factor_unit": definition["unit"],
+                    "annual_co2_t_y": round(emissions_t_y, 6),
+                    "inclusion_status": "included_selected_activity_factor" if activity_available else "omitted_activity_unavailable",
+                    "included_in_mode_b_co2": "false",
+                    "feeds_dispatch": "false",
+                    "source_locator": definition["source_locator"],
+                    "caveat": "Selected diagnostic factor; not Mode-B, ETS-ready, or Tata truth.",
+                }
+            )
+        # 0.286 tCO2/t DRI is a capture-stream coefficient, not direct emissions.
+        result.append(
+            {
+                "configuration_id": configuration,
+                "component": "DRP_capture_stream_CO2",
+                "activity_field": "C1_DRP_DRI_output_t_h" if configuration == C1_CONFIGURATION else "",
+                "annual_activity_t_y": "",
+                "factor_value": 0.286,
+                "factor_unit": "tCO2_captured/t_DRI",
+                "annual_co2_t_y": 0.0,
+                "inclusion_status": "excluded_capture_stream_not_direct_CO2",
+                "included_in_mode_b_co2": "false",
+                "feeds_dispatch": "false",
+                "source_locator": "s4_4c5o_a_drp_development_input_rows.csv: DRP_CAPTURED_CO2_T_PER_T_DRI",
+                "caveat": "Capture-stream quantity; never added as direct process emissions.",
+            }
+        )
+        target_mt_y = float(targets[configuration])
+        subtotal_mt_y = subtotal_t / 1_000_000.0
+        if subtotal_mt_y > target_mt_y + 1e-9:
+            raise ClosedLoopFeasibilityError(
+                f"{configuration} selected process-factor subtotal {subtotal_mt_y:.6f} MtCO2/y "
+                f"exceeds target {target_mt_y:.6f}; a negative constant is forbidden."
+            )
+        constant_mt_y = float(constants.get(configuration, 0.0))
+        if constant_mt_y < 0.0:
+            raise ClosedLoopFeasibilityError(
+                f"{configuration} first-order CO2 constant must be non-negative."
+            )
+        total_mt_y = subtotal_mt_y + constant_mt_y
+        if total_mt_y > target_mt_y + 1e-9:
+            raise ClosedLoopFeasibilityError(
+                f"{configuration} first-order CO2 subtotal plus constant {total_mt_y:.6f} "
+                f"MtCO2/y exceeds configured target {target_mt_y:.6f}."
+            )
+        result.extend(
+            [
+                {
+                    "configuration_id": configuration,
+                    "component": "selected_process_factor_subtotal",
+                    "annual_co2_t_y": round(subtotal_t, 6),
+                    "annual_co2_mt_y": round(subtotal_mt_y, 9),
+                    "target_mt_y": target_mt_y,
+                    "constant_share_of_total": 0.0,
+                    "inclusion_status": "subtotal_before_nonnegative_constant",
+                    "included_in_mode_b_co2": "false",
+                    "feeds_dispatch": "false",
+                    "caveat": "Validated at or below target before any constant is applied.",
+                },
+                {
+                    "configuration_id": configuration,
+                    "component": "explicit_nonnegative_constant",
+                    "annual_co2_t_y": round(constant_mt_y * 1_000_000.0, 6),
+                    "annual_co2_mt_y": round(constant_mt_y, 9),
+                    "target_mt_y": target_mt_y,
+                    "constant_share_of_total": round(constant_mt_y / total_mt_y, 9) if total_mt_y else 0.0,
+                    "inclusion_status": "explicit_reporting_only_constant",
+                    "included_in_mode_b_co2": "false",
+                    "feeds_dispatch": "false",
+                    "caveat": "Visible configuration-specific constant; never a hidden physical flow.",
+                },
+                {
+                    "configuration_id": configuration,
+                    "component": "first_order_full_site_CO2_total",
+                    "annual_co2_t_y": round(total_mt_y * 1_000_000.0, 6),
+                    "annual_co2_mt_y": round(total_mt_y, 9),
+                    "target_mt_y": target_mt_y,
+                    "constant_share_of_total": round(constant_mt_y / total_mt_y, 9) if total_mt_y else 0.0,
+                    "inclusion_status": "selected_factors_plus_explicit_constant",
+                    "included_in_mode_b_co2": "false",
+                    "feeds_dispatch": "false",
+                    "caveat": "First-order emulation diagnostic only; not Scope 1, ETS-ready, Mode-B, or Tata truth.",
+                },
+            ]
+        )
+    return result
+
+
+def _full_site_coverage_share_rows(
+    hourly_rows: list[dict[str, Any]],
+    first_order_co2_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Report represented versus explicit-bridge coverage for electricity and CO2."""
+
+    result: list[dict[str, Any]] = []
+    for configuration in CONFIGURATIONS:
+        selected = [row for row in hourly_rows if row.get("configuration_id") == configuration]
+        if not selected:
+            continue
+        factor = HOURS_PER_YEAR / len(selected)
+        represented_electricity = sum(
+            _float(row.get("represented_gross_electricity_before_background_mwh", row.get("gross_electricity_mwh")))
+            for row in selected
+        ) * factor
+        background_electricity = sum(
+            _float(row.get("site_background_electricity_mwh")) for row in selected
+        ) * factor
+        full_electricity = represented_electricity + background_electricity
+        subtotal = next(
+            (_float(row.get("annual_co2_t_y")) for row in first_order_co2_rows
+             if row.get("configuration_id") == configuration and row.get("component") == "selected_process_factor_subtotal"),
+            0.0,
+        )
+        constant = next(
+            (_float(row.get("annual_co2_t_y")) for row in first_order_co2_rows
+             if row.get("configuration_id") == configuration and row.get("component") == "explicit_nonnegative_constant"),
+            0.0,
+        )
+        for family, represented, bridge, full, unit in (
+            ("gross_site_electricity", represented_electricity, background_electricity, full_electricity, "MWh_e/y"),
+            ("first_order_full_site_CO2", subtotal, constant, subtotal + constant, "tCO2/y"),
+        ):
+            result.append(
+                {
+                    "configuration_id": configuration,
+                    "coverage_family": family,
+                    "physically_represented_value": round(represented, 6),
+                    "explicit_bridge_value": round(bridge, 6),
+                    "full_site_emulation_value": round(full, 6),
+                    "unit": unit,
+                    "physically_represented_share": round(represented / full, 9) if full else 0.0,
+                    "explicit_bridge_share": round(bridge / full, 9) if full else 0.0,
+                    "coverage_status": "represented_plus_explicit_reporting_bridge",
+                    "feeds_dispatch": str(family == "gross_site_electricity").lower(),
+                    "caveat": "Coverage share is descriptive and is not evidence of Tata truth.",
+                }
+            )
+    return result
+
+
+def _parameter_range_exception_report(
+    candidate_rows: list[dict[str, Any]],
+    *,
+    overlay_rows: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Classify candidate values against prior and user-authorized relaxed ranges."""
+
+    definitions = overlay_rows or _read_csv(USER_AUTHORIZED_EMULATION_PARAMETER_OVERLAY_PATH)
+    by_id = {str(row["parameter_id"]): row for row in definitions}
+    result: list[dict[str, Any]] = []
+    for candidate in candidate_rows:
+        parameter_id = str(candidate["parameter_id"])
+        if parameter_id not in by_id:
+            raise ClosedLoopFeasibilityError(f"Unknown emulation parameter_id: {parameter_id}")
+        definition = by_id[parameter_id]
+        value = float(candidate["candidate_value"])
+        prior_low = float(definition["baseline_low"])
+        prior_high = float(definition["baseline_high"])
+        relaxed_low = float(definition["first_relaxed_low"])
+        relaxed_high = float(definition["first_relaxed_high"])
+        selected_process = str(candidate.get("selected_process", "")).strip()
+        affected_processes = str(definition.get("affected_processes", ""))
+        allowed_processes = {item.strip() for item in affected_processes.split(";") if item.strip()}
+        selection_rule = str(definition.get("selection_rule", ""))
+        normalized_rule = selection_rule.lower()
+        requires_named_process = any(
+            marker in normalized_rule
+            for marker in (
+                "exactly one recorded named process",
+                "exactly one recorded hsm",
+                "one recorded coking-input",
+            )
+        )
+        if requires_named_process and selected_process not in allowed_processes:
+            raise ClosedLoopFeasibilityError(
+                f"{parameter_id} requires one selected_process from {sorted(allowed_processes)}."
+            )
+        prior_exception = max(prior_low - value, value - prior_high, 0.0)
+        relaxed_exception = max(relaxed_low - value, value - relaxed_high, 0.0)
+        status = (
+            "within_prior_range"
+            if prior_exception == 0.0
+            else "within_user_authorized_relaxed_range"
+            if relaxed_exception == 0.0
+            else "outside_user_authorized_relaxed_range"
+        )
+        result.append(
+            {
+                "parameter_id": parameter_id,
+                "configuration": candidate.get("configuration", definition.get("configuration", "")),
+                "parameter_family": definition.get("parameter_family", ""),
+                "selected_process": selected_process,
+                "affected_targets": definition.get("affected_targets", ""),
+                "affected_processes": affected_processes,
+                "selection_rule": selection_rule,
+                "baseline_central": definition.get("baseline_central", ""),
+                "prior_low": prior_low,
+                "prior_high": prior_high,
+                "relaxed_low": relaxed_low,
+                "relaxed_high": relaxed_high,
+                "candidate_value": value,
+                "prior_range_exception_magnitude": round(prior_exception, 12),
+                "relaxed_range_exception_magnitude": round(relaxed_exception, 12),
+                "range_status": status,
+                "unit": definition.get("unit", ""),
+                "user_authorized_sensitivity": str(prior_exception > 0.0).lower(),
+                "source_locator": definition.get("source_locator", ""),
+                "caveat": definition.get("caveat", ""),
+            }
+        )
+    return result
+
+
+def _generator_electricity_reporting_split(
+    hourly_rows: list[dict[str, Any]],
+) -> dict[str, float]:
+    """Attribute solved generator output to WAG and named NG for reporting only."""
+
+    if all("WAG_generator_electricity_mwh" in row for row in hourly_rows):
+        wag_generator = sum(_float(row.get("WAG_generator_electricity_mwh")) for row in hourly_rows)
+        ng_generator = sum(_float(row.get("NG_generator_electricity_mwh")) for row in hourly_rows)
+        total_generator = sum(_float(row.get("total_generator_electricity_mwh")) for row in hourly_rows)
+        return {
+            "WAG_generator_electricity_mwh": wag_generator,
+            "NG_generator_electricity_mwh": ng_generator,
+            "generator_internal_electricity_total_mwh": total_generator,
+            "sum_identity_residual_mwh": total_generator - wag_generator - ng_generator,
+        }
+
+    total_generator = sum(
+        _float(row.get("generator_electricity_mwh", row.get("wag_electricity_mwh")))
+        for row in hourly_rows
+    )
+    ng_generator = 0.0
+    for row in hourly_rows:
+        vn25_fuel = _float(row.get("VN25_total_fuel_mwh"))
+        named_ng = _float(row.get("generator_named_ng_mwh"))
+        vn25_electricity = _float(row.get("VN25_electricity_mwh"))
+        if vn25_fuel > TOLERANCE_T:
+            ng_generator += vn25_electricity * named_ng / vn25_fuel
+        elif named_ng > TOLERANCE_T:
+            raise ClosedLoopFeasibilityError(
+                "Cannot attribute named-NG generator electricity without VN25 fuel."
+            )
+    wag_generator = total_generator - ng_generator
+    if wag_generator < -TOLERANCE_T:
+        raise ClosedLoopFeasibilityError(
+            "Named-NG generator attribution exceeds total generator electricity."
+        )
+    return {
+        "WAG_generator_electricity_mwh": max(0.0, wag_generator),
+        "NG_generator_electricity_mwh": ng_generator,
+        "generator_internal_electricity_total_mwh": total_generator,
+        "sum_identity_residual_mwh": total_generator - wag_generator - ng_generator,
+    }
+
+
 def _annual_physical_boundary_ledger(hourly_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Annualise solved executed blocks without feeding residuals back to dispatch."""
 
@@ -1940,15 +2539,16 @@ def _annual_physical_boundary_ledger(hourly_rows: list[dict[str, Any]]) -> list[
         "BFG": (
             "BFG_to_BF_hot_stove_mwh", "BFG_to_KGF1_mwh", "BFG_to_HSM_mwh",
             "BFG_to_boiler_mwh", "BFG_to_vattenfall_mwh",
+            "BFG_to_flexible_other_site_heat_mwh",
         ),
         "COG": (
             "COG_to_KGF1_mwh", "COG_to_KGF2_mwh", "COG_to_sinter_mwh",
             "COG_to_HSM_mwh", "COG_to_PEFA_branderij_mwh", "COG_to_boiler_mwh",
-            "COG_to_vattenfall_mwh",
+            "COG_to_vattenfall_mwh", "COG_to_flexible_other_site_heat_mwh",
         ),
         "BOFG": (
             "BOFG_to_HSM_mwh", "BOFG_to_PEFA_malerij_mwh", "BOFG_to_boiler_mwh",
-            "BOFG_to_vattenfall_mwh",
+            "BOFG_to_vattenfall_mwh", "BOFG_to_flexible_other_site_heat_mwh",
         ),
     }
 
@@ -2015,14 +2615,44 @@ def _annual_physical_boundary_ledger(hourly_rows: list[dict[str, Any]]) -> list[
             add("WAG", carrier, "flare", f"{carrier}_flared", total(f"{carrier}_flared_mwh"), "MWh_LHV/y", "carrier_specific", physical=True)
             add("WAG", carrier, "accounting_residual", f"{carrier}_balance_residual", total(f"{carrier}_balance_residual_mwh"), "MWh_LHV/y", "must_equal_zero", physical=False)
 
-        gross_electricity = total("gross_electricity_mwh")
-        internal_electricity = total("wag_electricity_mwh")
-        net_grid = total("net_grid_import_mwh")
-        electricity_residual = gross_electricity - internal_electricity - net_grid
-        add("electricity", "electricity", "demand", "represented_gross_electricity", gross_electricity, "MWh_e/y", "represented_process_boundary", physical=True)
-        add("electricity", "electricity", "internal_supply", "WAG_internal_generation", internal_electricity, "MWh_e/y", "no_export_internal_offset", physical=True)
-        add("electricity", "electricity", "external_supply", "represented_net_grid_import", net_grid, "MWh_e/y", "represented_process_boundary", physical=True)
-        add("electricity", "electricity", "accounting_residual", "gross_minus_internal_minus_grid", electricity_residual, "MWh_e/y", "must_equal_zero", physical=False)
+        represented_gross_before_background = (
+            total("represented_gross_electricity_before_background_mwh")
+            if any("represented_gross_electricity_before_background_mwh" in row for row in selected)
+            else total("gross_electricity_mwh")
+        )
+        site_background_electricity = total("site_background_electricity_mwh")
+        gross_electricity = (
+            total("gross_total_electricity_mwh")
+            if any("gross_total_electricity_mwh" in row for row in selected)
+            else total("gross_electricity_mwh")
+        )
+        generator_split = _generator_electricity_reporting_split(selected)
+        wag_generator_electricity = (
+            generator_split["WAG_generator_electricity_mwh"] * factor
+        )
+        ng_generator_electricity = (
+            generator_split["NG_generator_electricity_mwh"] * factor
+        )
+        internal_electricity = (
+            generator_split["generator_internal_electricity_total_mwh"] * factor
+        )
+        gross_grid_import = total("gross_grid_import_mwh") or total("net_grid_import_mwh")
+        gross_grid_export = total("gross_grid_export_mwh")
+        net_grid = total("net_grid_exchange_mwh") or total("net_grid_import_mwh")
+        electricity_residual = (
+            gross_electricity - internal_electricity - gross_grid_import + gross_grid_export
+        )
+        add("electricity", "electricity", "demand", "represented_gross_before_background", represented_gross_before_background, "MWh_e/y", "represented_process_boundary", physical=True)
+        add("electricity", "electricity", "demand_bridge", "explicit_site_background_electricity", site_background_electricity, "MWh_e/y", "opt_in_additive_full_site_bridge", physical=True, caveat="Additive; never replaces residual electricity, represented auxiliaries, or Linde N2 load.")
+        add("electricity", "electricity", "demand_total", "gross_total_electricity", gross_electricity, "MWh_e/y", "represented_plus_explicit_background", physical=True)
+        add("electricity", "electricity", "internal_supply", "WAG_generator_electricity", wag_generator_electricity, "MWh_e/y", "fuel_attributed_reporting_split", physical=True, caveat="WAG-attributed share of solved generator output; not an Athanasiadis calibration target.")
+        add("electricity", "electricity", "internal_supply", "NG_generator_electricity", ng_generator_electricity, "MWh_e/y", "fuel_attributed_reporting_split", physical=True, caveat="Named-NG-attributed share of solved VN25 output.")
+        add("electricity", "electricity", "internal_supply_total", "generator_internal_electricity_total", internal_electricity, "MWh_e/y", "no_export_internal_offset", physical=True, caveat="Total solved generator output; equals WAG plus named-NG generator electricity.")
+        add("electricity", "electricity", "accounting_residual", "generator_electricity_attribution_sum_residual", generator_split["sum_identity_residual_mwh"] * factor, "MWh_e/y", "must_equal_zero", physical=False)
+        add("electricity", "electricity", "gross_import", "gross_grid_import", gross_grid_import, "MWh_e/y", "represented_process_boundary", physical=True)
+        add("electricity", "electricity", "gross_export", "gross_grid_export", gross_grid_export, "MWh_e/y", "zero_export_active_boundary", physical=True)
+        add("electricity", "electricity", "net_exchange", "net_grid_exchange", net_grid, "MWh_e/y", "gross_import_minus_gross_export", physical=True)
+        add("electricity", "electricity", "accounting_residual", "gross_total_minus_internal_minus_import_plus_export", electricity_residual, "MWh_e/y", "must_equal_zero", physical=False)
         electricity_buckets = {
             "DRP": ("DRP_electricity_mwh", "named_process_load"),
             "EAF_arc": ("EAF_arc_electricity_mwh", "named_process_load_no_secondary_overlap"),
@@ -2069,13 +2699,23 @@ def _annual_physical_boundary_ledger(hourly_rows: list[dict[str, Any]]) -> list[
             "PEFA_branderij": total("NG_to_PEFA_branderij_mwh"),
             "boiler": total("natural_gas_boiler_mwh"),
             "VN25_generator": total("generator_named_ng_mwh"),
+            "fixed_full_site_component": total("full_site_fixed_ng_component_mwh"),
+            "flexible_other_site_heat": total("flexible_other_site_heat_ng_mwh"),
         }
         for component, amount in named_ng.items():
             add("named_NG", "NG", "use", component, amount, "MWh_LHV/y", "represented_named_consumer", physical=True, mode_b=True)
         named_ng_total = sum(named_ng.values())
         add("named_NG", "NG", "subtotal", "represented_named_NG", named_ng_total, "MWh_LHV/y", "represented_named_consumers_only", physical=True, mode_b=True)
         full_site_ng_gap = full_site_anchors[configuration]["ng_pj"] - named_ng_total * PJ_PER_MWH
-        add("named_NG", "NG", "boundary_gap", "full_site_anchor_minus_named_NG", full_site_ng_gap, "PJ/y", "partial_provenance_reporting_kpi_not_input", physical=False, caveat="Unallocated residual NG remains outside dispatch and CO2.")
+        add("named_NG", "NG", "boundary_gap", "full_site_anchor_minus_named_NG", full_site_ng_gap, "PJ/y", "partial_provenance_reporting_kpi_not_input", physical=False, caveat="Signed reporting gap after all represented named NG components; it is not a dispatchable residual or calibration plug.")
+
+        if total("aggregate_generator_technical_interface_active") > 0.0:
+            aggregate_fuel = total("vattenfall_fuel_mwh") + total("generator_named_ng_mwh")
+            aggregate_electricity = internal_electricity
+            add("generator", "mixed_named_fuels", "input", "aggregate_C0_generator_total_fuel", aggregate_fuel, "MWh_LHV/y", "carrier_explicit_900000_Nm3_h_envelope", physical=True)
+            add("generator", "electricity", "output", "aggregate_C0_generator_electricity", aggregate_electricity, "MWh_e/y", "fixed_0.345_efficiency_no_export", physical=True)
+            add("generator", "conversion_loss", "loss", "aggregate_C0_generator_conversion_loss", aggregate_fuel - aggregate_electricity, "MWh/y", "fuel_minus_electricity", physical=True)
+            add("generator", "volume", "unused_envelope", "aggregate_C0_generator_unused_volume", total("aggregate_generator_volume_unused_nm3_h"), "Nm3/y", "technical_envelope_not_annual_fuel_anchor", physical=False)
 
         if total("generator_unit_interface_active") > 0.0:
             vn25_fuel = total("VN25_total_fuel_mwh")
@@ -2326,7 +2966,7 @@ def _anchor_metric(anchor: Mapping[str, str], values: Mapping[str, Any]) -> dict
             return contract("generator_wag_pj_y", values["generator_wag_pj_y"], "PJ/y", "actual WAG sent to aggregate generator interface", "BFG + COG + BOFG to aggregate generator", "PJ_LHV per year", "aggregate generator WAG only", "not_comparable", "IJ01 unit split is not present in model")
         return contract("ij01_total_fuel_pj_y", values["ij01_total_fuel_pj_y"], "PJ/y", "IJ01 BFG plus COG plus BOFG; NG prohibited", "annual IJ01 total fuel", "PJ_LHV per year", "IJ01 unit fuel boundary", "directly_comparable")
     if "natural gas" in metric or " ng " in f" {metric} ":
-        return contract("represented_ng_pj_y", values["represented_ng_pj_y"], "PJ/y", "subtotal of named represented NG consumers", "DRP + HSM + PEFA + boiler named NG", "PJ_LHV per year", "partial represented site boundary", "partially_comparable_reporting_only", "full-site NG includes unrepresented consumers and residual remains reporting-only")
+        return contract("represented_ng_pj_y", values["represented_ng_pj_y"], "PJ/y", "subtotal of named represented NG consumers", "DRP + EAF + HSM + PEFA + boiler + generator + fixed bridge + flexible heat bridge named NG", "PJ_LHV per year", "shared represented named-NG subtotal", "partially_comparable_reporting_only", "every represented named NG component is counted once; any remaining signed anchor gap stays reporting-only")
     if anchor_id == "c1_generator_wag_with_flare_10_6":
         return contract("generator_wag_plus_flare_pj_y", values["generator_wag_plus_flare_pj_y"], "PJ/y", "actual BFG/COG/BOFG sent to generator interface plus carrier flare", "generator WAG + WAG flare", "PJ_LHV per year", "aggregate represented generator-WAG boundary", "directly_comparable")
     if "flare" in metric:
@@ -2860,8 +3500,23 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             "Runtime y_true use requires an explicitly labelled perfect-foresight oracle."
         )
     generator_interface_cap_mode, hsm_rolling_electricity = _source_bounded_sensitivity_levers(config)
-    linde_n2_mwh_h, eaf_secondary_electricity, dsp_electricity = _electricity_boundary_levers(config)
+    (
+        linde_n2_mwh_h,
+        eaf_secondary_electricity,
+        dsp_electricity,
+        site_background_electricity_mwh_h,
+        site_background_electricity_mwh_h_by_configuration,
+    ) = _electricity_boundary_levers(config)
     c1_energy_boundary = _c1_source_backed_energy_boundary(config)
+    (
+        wag_generation_yield_overrides,
+        bf_electricity_intensity_scales,
+        c1_energy_boundary,
+    ) = _user_authorized_emulation_overlays(config, c1_energy_boundary)
+    (
+        c0_aggregate_generator_technical_interface,
+        c0_full_site_energy_bridge,
+    ) = _c0_real_anchor_energy_recovery_interfaces(config)
     route_boundary_contract = load_route_boundary_contract()
     future_cost_boundary_contract = load_future_cost_boundary_contract()
     external_procurement_coefficients = _external_procurement_flow_coefficients(
@@ -2978,6 +3633,20 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         == "hourly_da_dplus4_point_forecast"
         and config.get("forecast_price_override_eur_per_mwh") in {None, ""}
     )
+    raw_allocation_envelope = config.get("c0_allocation_envelope_diagnostic")
+    if raw_allocation_envelope is not None:
+        if (
+            not isinstance(raw_allocation_envelope, Mapping)
+            or raw_allocation_envelope.get("enabled") is not True
+            or raw_allocation_envelope.get("endpoint") not in {"min", "max"}
+        ):
+            raise ClosedLoopFeasibilityError(
+                "C0 allocation-envelope diagnostic requires enabled=true and endpoint=min|max."
+            )
+        if float(raw_allocation_envelope.get("state_tolerance", 1e-6)) != 1e-6:
+            raise ClosedLoopFeasibilityError(
+                "C0 allocation-envelope state tolerance must remain 1e-6 model units."
+            )
     for replan_index in range(int(config["replan_count"])):
         plan = rolling_plans[replan_index]
         target_multiplier = _model_target_multiplier(config, plan)
@@ -3155,10 +3824,32 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             generator_unit_interface=generator_unit_interface,
             c1_energy_boundary=c1_energy_boundary,
             linde_n2_auxiliary_electricity_mwh_h=linde_n2_mwh_h,
+            site_background_electricity_mwh_h=site_background_electricity_mwh_h,
+            site_background_electricity_mwh_h_by_configuration=(
+                site_background_electricity_mwh_h_by_configuration
+            ),
             eaf_secondary_electricity_mwh_per_t_ls_override=eaf_secondary_electricity,
             dsp_electricity_mwh_per_t_coil_override=dsp_electricity,
             external_procurement_flow_coefficients=external_procurement_coefficients,
             deterministic_cost_policy=deterministic_cost_policy,
+            wag_generation_yield_overrides_by_configuration=(
+                wag_generation_yield_overrides
+            ),
+            bf_electricity_intensity_scale_by_configuration=(
+                bf_electricity_intensity_scales
+            ),
+            c0_aggregate_generator_technical_interface=(
+                c0_aggregate_generator_technical_interface
+            ),
+            c0_full_site_energy_bridge=c0_full_site_energy_bridge,
+            c0_allocation_envelope_diagnostic=(
+                {
+                    **dict(raw_allocation_envelope),
+                    "execution_hours": plan.execution_block_hours,
+                }
+                if raw_allocation_envelope is not None
+                else None
+            ),
             solver_time_limit_seconds=float(config.get("solver_time_limit_seconds", 120)),
         )
         if first_report is None:
@@ -3196,6 +3887,14 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 tie_break_model_cost = audit.get(
                     "tie_break_cost_objective_eur"
                 )
+                endpoint_model_cost = audit.get(
+                    "allocation_envelope_cost_eur"
+                )
+                executed_solution_model_cost = (
+                    endpoint_model_cost
+                    if endpoint_model_cost not in {None, ""}
+                    else tie_break_model_cost
+                )
                 planned_cost = sum(
                     float(row["cost_eur"])
                     for row in planned_cost_ledger
@@ -3207,9 +3906,15 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                     and tie_break_model_cost not in {None, ""}
                     else float("inf")
                 )
+                endpoint_preservation_residual = (
+                    float(endpoint_model_cost) - float(primary)
+                    if primary not in {None, ""}
+                    and endpoint_model_cost not in {None, ""}
+                    else preservation_residual
+                )
                 reporting_residual = (
-                    planned_cost - float(tie_break_model_cost)
-                    if tie_break_model_cost not in {None, ""}
+                    planned_cost - float(executed_solution_model_cost)
+                    if executed_solution_model_cost not in {None, ""}
                     else float("inf")
                 )
                 cost_objective_reconciliation_rows.append(
@@ -3218,11 +3923,16 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                         "configuration_id": configuration_id,
                         "primary_cost_objective_eur": primary,
                         "tie_break_model_cost_eur": tie_break_model_cost,
-                        "tie_break_solution_cost_eur": round(planned_cost, 6),
+                        "allocation_envelope_endpoint_cost_eur": endpoint_model_cost,
+                        "executed_solution_model_cost_eur": executed_solution_model_cost,
+                        "executed_solution_reported_cost_eur": round(planned_cost, 6),
                         "tie_break_minus_primary_cost_eur": round(
                             preservation_residual, 9
                         ),
-                        "reported_ledger_minus_tie_break_cost_eur": round(
+                        "endpoint_minus_primary_cost_eur": round(
+                            endpoint_preservation_residual, 9
+                        ),
+                        "reported_ledger_minus_executed_solution_cost_eur": round(
                             reporting_residual, 9
                         ),
                         "allowed_tolerance_eur": deterministic_cost_policy[
@@ -3230,7 +3940,10 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                         ],
                         "status": (
                             "pass"
-                            if -1e-4 <= preservation_residual
+                            if preservation_residual
+                            <= float(deterministic_cost_policy["objective_tolerance_eur"])
+                            + 1e-4
+                            and endpoint_preservation_residual
                             <= float(deterministic_cost_policy["objective_tolerance_eur"])
                             + 1e-4
                             and abs(reporting_residual) <= 1e-4
@@ -3394,6 +4107,28 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         )
         c0_origin_rows = _annual_c0_downstream_origin_ledger(executed_hourly_rows)
         physical_boundary_rows = _annual_physical_boundary_ledger(executed_hourly_rows)
+        raw_co2_constants = config.get("first_order_co2_constant_mt_y_by_configuration", {})
+        if not isinstance(raw_co2_constants, Mapping):
+            raise ClosedLoopFeasibilityError(
+                "first_order_co2_constant_mt_y_by_configuration must be a mapping."
+            )
+        first_order_co2_rows = _first_order_full_site_co2_ledger(
+            executed_hourly_rows,
+            constant_mt_y_by_configuration={
+                str(key): float(value) for key, value in raw_co2_constants.items()
+            },
+        )
+        coverage_share_rows = _full_site_coverage_share_rows(
+            executed_hourly_rows, first_order_co2_rows
+        )
+        raw_parameter_candidates = config.get("user_authorized_parameter_candidates", [])
+        if not isinstance(raw_parameter_candidates, list):
+            raise ClosedLoopFeasibilityError(
+                "user_authorized_parameter_candidates must be a list."
+            )
+        parameter_range_exception_rows = _parameter_range_exception_report(
+            raw_parameter_candidates
+        )
         anchor_family_rows = _annual_anchor_family_summary(anchor_rows)
         annual_equivalent_rows = _annual_equivalent_views(
             executed_hourly_rows, list(first_report["hourly_rows"])
@@ -3403,6 +4138,8 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         annual_metrics, plant_rows, anchor_rows, origin_rows = {}, [], [], []
         c0_origin_rows = []
         physical_boundary_rows, anchor_family_rows = [], []
+        first_order_co2_rows, coverage_share_rows = [], []
+        parameter_range_exception_rows = []
         annual_equivalent_rows, inventory_effect_rows = [], []
     mode_comparison_rows: list[dict[str, Any]] = []
     if config.get("execution_mode") == "reference_validation":
@@ -3964,8 +4701,18 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         "linde_n2_auxiliary_electricity_mwh_h": linde_n2_mwh_h,
         "eaf_secondary_electricity_mwh_per_t_ls": eaf_secondary_electricity,
         "dsp_electricity_mwh_per_t_coil": dsp_electricity,
+        "site_background_electricity_mwh_h": site_background_electricity_mwh_h,
+        "site_background_electricity_mwh_h_by_configuration": dict(
+            site_background_electricity_mwh_h_by_configuration
+        ),
     }
     resolved["c1_source_backed_energy_boundary"] = dict(c1_energy_boundary or {})
+    resolved["wag_generation_yield_overrides_by_configuration"] = (
+        wag_generation_yield_overrides
+    )
+    resolved["named_process_electricity_intensity_scales_by_configuration"] = dict(
+        config.get("named_process_electricity_intensity_scales_by_configuration", {})
+    )
     resolved["future_deterministic_cost_contract"] = {
         "activation_status": (
             "active_fixed_reference_only" if cost_mode_active else "prepared_not_active"
@@ -4036,6 +4783,9 @@ def run_closed_loop_feasibility_anchor_reconciliation(
     _write_csv(run_directory / "annual_origin_material_ledger.csv", origin_rows)
     _write_csv(run_directory / "annual_c0_downstream_origin_ledger.csv", c0_origin_rows)
     _write_csv(run_directory / "annual_physical_boundary_ledger.csv", physical_boundary_rows)
+    _write_csv(run_directory / "first_order_full_site_co2_ledger.csv", first_order_co2_rows)
+    _write_csv(run_directory / "full_site_coverage_shares.csv", coverage_share_rows)
+    _write_csv(run_directory / "parameter_range_exceptions.csv", parameter_range_exception_rows)
     _write_csv(run_directory / "annual_equivalent_views.csv", annual_equivalent_rows)
     _write_csv(run_directory / "inventory_effects.csv", inventory_effect_rows)
     _write_csv(run_directory / "reference_definition.csv", reference_definition_rows)
@@ -4292,6 +5042,9 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         "independent_primary_configuration_family_pairs_below_7_5pct": primary_anchor_pairs,
         "contextual_configuration_family_pairs_below_7_5pct": contextual_anchor_pairs,
         "anchor_coverage_status": anchor_coverage_status,
+        "first_order_full_site_co2_ledger_rows": len(first_order_co2_rows),
+        "full_site_coverage_share_rows": len(coverage_share_rows),
+        "parameter_range_exception_rows": len(parameter_range_exception_rows),
         "market_prices_enabled": False,
     }
     _write_json(run_directory / "run_summary.json", summary)
@@ -4318,6 +5071,9 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         "anchor_rows": anchor_rows,
         "origin_rows": origin_rows,
         "physical_boundary_rows": physical_boundary_rows,
+        "first_order_full_site_co2_rows": first_order_co2_rows,
+        "full_site_coverage_share_rows": coverage_share_rows,
+        "parameter_range_exception_rows": parameter_range_exception_rows,
         "anchor_family_rows": anchor_family_rows,
         "procurement_cost_rows": procurement_cost_configuration_rows,
         "gate3_stage_gate": gate3_stage_gate,

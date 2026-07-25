@@ -1,0 +1,38 @@
+run_id: steel_c5_tata_benchmark_v1_20260721
+output_root: data/03_Optimisation/runs/steel_c5_tata_benchmark_v1_20260721
+output_policy: minimal
+run_class: calibration_validation_benchmark
+lineage_role: child_prescreen_of_accepted_deterministic_price_response_anchor_diagnostics
+parent_run_id: steel_s2_deterministic_price_response_anchor_diagnostics_v1_20260720
+parent_run_root: data/03_Optimisation/runs/steel_s2_deterministic_price_response_anchor_diagnostics_v1_20260720
+contract_root: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract
+active_input_root: data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs
+candidate_design:
+  wag_normalized_positions: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+  vn25_efficiency_choices: [0.34, 0.345]
+  source_baseline_wag_position: 0.5
+  source_baseline_vn25_efficiency: 0.345
+  expected_candidate_count: 22
+scoring:
+  target_ids: [athan_c0_aggregate_wag_2_74, athan_c1_aggregate_wag_1_23]
+  final_product_mt_y: 6.75
+  source_target_denominator_mt_y: 6.2
+  equal_configuration_weights: true
+  source_central_penalty_weight: 0.05
+  physical_failure_penalty: 1000.0
+  boundary_violation_penalty: 1000.0
+retention:
+  maximum_candidates: 5
+  exclude_rejected: true
+  exclude_source_bounds_when_interior_candidates_exist: true
+  always_include_source_baseline: true
+  diversity_rule: baseline_then_best_each_vn25_choice_then_best_unrepresented_wag_positions
+projection:
+  c0_wag_to_power_efficiency: 0.3715
+  c0_total_generator_volume_cap_nm3_h: 900000.0
+  c1_vn25_electric_capacity_mw: 350.0
+  c1_total_generator_volume_cap_nm3_h: 900000.0
+  annual_hours: 8760.0
+  no_export: true
+  fixed_non_generator_sinks: true
+  analytical_prescreen_only: true

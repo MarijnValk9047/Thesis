@@ -1,0 +1,66 @@
+run_id: steel_c5_wag_ng_allocation_envelope_v2_20260725
+mode: c0_wag_ng_cost_optimal_allocation_envelope
+checkpoint_id: bounded_development_allocation_envelope_repair
+lineage_role: diagnostic/emulation sensitivity
+run_class: bounded deterministic DEVELOPMENT allocation-envelope repair
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_wag_ng_allocation_envelope_v2_20260725
+retention_status: local
+git_eligible: false
+execution_authorized: true
+
+experiment:
+  physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
+  mechanism_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_real_anchor_mechanism_experiment.yaml
+  mechanism_result_root: data/03_Optimisation/runs/steel_c5_real_anchor_mechanism_experiment_v1_20260723
+  scratch_root: tmp/steel_c5_wag_ng_allocation_envelope_v2_20260725_cases
+  candidate_count: 2
+  scenario_count: 2
+  endpoint_count: 2
+  primary_control_count: 4
+  endpoint_trajectory_count: 8
+  replan_count: 7
+  held_out_periods_used: false
+  annual_equivalent_label: development_week_annual_equivalent_not_empirical_annual_result
+  state_tolerance: 1.0e-6
+  reporting_tolerance_mwh_y: 1.0
+  governed_cost_tolerance_eur_per_window: 0.01
+
+  candidates:
+    - candidate_id: recovery_bg30_ng55
+    - candidate_id: recovery_bg30_ng30
+
+  scenarios:
+    - scenario_id: calm_price_insensitive
+      period_id: validation_2024-02-12
+      dataset_split: validation
+      price_field: y_pred
+      perfect_foresight_oracle: false
+    - scenario_id: volatile_negative_governed_y_pred
+      period_id: validation_2024-07-01
+      dataset_split: validation
+      price_field: y_pred
+      perfect_foresight_oracle: false
+
+  endpoints:
+    - min
+    - max
+
+  anchor:
+    metric_id: actual_WAG_only_generator_electricity
+    value_twh_y: 2.528
+    unit: TWh_e_per_year
+    definition: sum executed hourly WAG_generator_electricity_mwh scaled by 8760/executed_hours
+
+  immutable_physical_contract:
+    electricity_background_percent: 30.0
+    wag_generation_yield_overrides_by_configuration: {}
+    generator_electricity_efficiency: 0.345
+    generator_electrical_capacity_mw: 770.0
+    generator_total_fuel_volume_cap_nm3_h: 900000.0
+    export_allowed: false
+    fixed_full_site_ng_pj_y: 8.005
+    flexible_other_site_heat_service_envelope_pj_y: 3.07
+    physical_ng_bridge_changed: false
+    operating_rules_changed: false
+    route_logic_changed: false

@@ -1,0 +1,108 @@
+run_id: steel_c5_real_anchor_energy_recovery_v1_20260722
+mode: c0_real_anchor_energy_recovery_checkpoint6
+checkpoint_id: checkpoint_6_independent_test_representative_week_evaluation
+lineage_role: independent_test_only_eight_week_evaluation_of_reviewed_checkpoint4_pair
+run_class: deterministic_held_out_representative_week_evaluation
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_real_anchor_energy_recovery_v1_20260722/checkpoint6
+annualisation_label: weighted_annual_equivalent_from_representative_held_out_weeks
+execution_authorized: true
+review_status: checkpoint6_prepared_solver_not_invoked
+
+checkpoint_6:
+  physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
+  checkpoint4_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_real_anchor_energy_recovery_checkpoint4.yaml
+  checkpoint4_state: data/03_Optimisation/runs/steel_c5_real_anchor_energy_recovery_v1_20260722/checkpoint4/checkpoint_state.json
+  checkpoint3_scorecard: data/03_Optimisation/runs/steel_c5_real_anchor_energy_recovery_v1_20260722/candidate_scorecard.csv
+  historical_representative_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/representative_week_selection_contract.csv
+  target_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/calibration_validation_target_contract.csv
+  scratch_root: tmp/steel_c5_real_anchor_energy_recovery_checkpoint6_cases
+  expected_candidate_week_count: 46
+  selected_period_count: 8
+  strategy_count: 3
+  expected_rolling_case_count: 48
+  expected_model_count: 672
+  dataset_split: test
+  period_role: held_out
+  held_out_periods_used: true
+  selection_method: central_medoid_plus_dst_medoid_then_deterministic_farthest_point
+  weighting_method: nearest_selected_standardised_medoid_member_week_share_within_test_split
+  selection_target_count: 8
+  selection_feature_fields:
+    - calendar_position_fraction
+    - realised_mean_eur_per_mwh
+    - realised_volatility_eur_per_mwh
+    - negative_price_share
+    - forecast_mae_eur_per_mwh
+  duration_aware_time_weighting: period_totals_annualised_by_8760_over_exact_executed_hours_before_split_weight_aggregation
+  historical_4plus4_contract_overwrite_allowed: false
+  identical_initial_state_policy: base_config_default_initial_state_for_every_independent_candidate_period_strategy_case
+  identical_production_policy: cumulative_production_progress_then_represented_procurement_cost_then_physical_tiebreak
+  material_capacity_and_quota_policy: inherited_unchanged_from_accepted_p_af_runner
+  residual_energy_policy: reporting_only_never_dispatch_or_cost_input
+
+  candidates:
+    - candidate_id: source_driven_baseline
+      candidate_classification: source_driven_reference_baseline
+      repair_interface_active: false
+      explicit_background_twh_y: 0.0
+      explicit_background_mwh_h: 0.0
+      promotable_central_from_checkpoint6: false
+    - candidate_id: recovery_bg25
+      candidate_classification: emulation_sensitivity_only
+      repair_interface_active: true
+      explicit_background_twh_y: 0.7925
+      explicit_background_mwh_h: 90.46803652968036
+      promotable_central_from_checkpoint6: false
+
+  strategies:
+    - strategy_id: price_insensitive
+      price_field: y_pred
+      flat_price_eur_per_mwh: 80.0
+      perfect_foresight_oracle: false
+      deployment_eligible: true
+    - strategy_id: governed_y_pred
+      price_field: y_pred
+      flat_price_eur_per_mwh:
+      perfect_foresight_oracle: false
+      deployment_eligible: true
+    - strategy_id: oracle_y_true
+      price_field: y_true
+      flat_price_eur_per_mwh:
+      perfect_foresight_oracle: true
+      deployment_eligible: false
+
+  frozen_test_selection:
+    - {period_id: test_2025-09-08, split_weight: 0.130434782609}
+    - {period_id: test_2024-10-21, split_weight: 0.369565217391, execution_hours: 169, dst_status: dst_transition_week}
+    - {period_id: test_2024-12-09, split_weight: 0.021739130435}
+    - {period_id: test_2025-01-13, split_weight: 0.065217391304}
+    - {period_id: test_2024-11-04, split_weight: 0.021739130435}
+    - {period_id: test_2025-05-12, split_weight: 0.173913043478}
+    - {period_id: test_2025-01-06, split_weight: 0.152173913043}
+    - {period_id: test_2025-03-03, split_weight: 0.065217391304}
+
+  recovery_interface:
+    c0_aggregate_generator_technical_interface:
+      enabled: true
+      electricity_efficiency: 0.345
+      total_fuel_volume_cap_nm3_h: 900000.0
+      electrical_capacity_mw: 770.0
+      natural_gas_lhv_mj_per_nm3: 35.8
+      export_allowed: false
+    c0_full_site_energy_bridge:
+      enabled: true
+      inferred_low_case_full_site_ng_floor_pj_y: 8.005
+      already_represented_fixed_ng_pj_y: 0.0
+      already_represented_fixed_ng_component_id: none_identified
+      already_represented_fixed_ng_derivation: explicit_zero_no_represented_fixed_full_site_ng_component_identified
+      flexible_other_site_heat_service_envelope_pj_y: 3.07
+      normal_case_flexible_ng_validation_reference_pj_y: 1.65
+
+  claims:
+    exact_tata_twin: false
+    annual_backtest: false
+    athanasiadis_ng_thermal_substitution_validated: false
+    badarinath_bf_relationships_validated: false
+    vn25_outage_validated: false
+    recovery_bg25_promoted: false

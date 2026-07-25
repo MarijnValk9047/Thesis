@@ -1,0 +1,215 @@
+run_id: steel_c5_user_authorized_full_site_emulation_v1_20260722
+mode: user_authorized_full_site_emulation_checkpoint4
+checkpoint_id: checkpoint_4_frozen_development_week_behavioural_evaluation
+lineage_role: separate_emulation_overlay_over_immutable_source_driven_baseline
+run_class: deterministic_user_authorized_development_week_evaluation
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_user_authorized_full_site_emulation_v1_20260722
+contract_root: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract
+strict_target_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/calibration_validation_target_contract.csv
+strict_parameter_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/calibratable_parameter_contract.csv
+strict_baseline_freeze: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/baseline_freeze.json
+anchor_overlay: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/user_authorized_emulation_anchor_overlay.csv
+parameter_overlay: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/user_authorized_emulation_parameter_overlay.csv
+accepted_annual_baseline_root: data/03_Optimisation/runs/steel_s2_fixed_reference_deterministic_cost_v3_20260716
+provenance: user_authorized_goal_objective_20260722
+
+design:
+  analytical_prescreen_only: true
+  source_baseline:
+    immutable: true
+    candidate_id: source_driven_baseline
+  background_electricity_shares: [0.05, 0.15, 0.25]
+  perturbation_recipes:
+    - {recipe_id: central_no_movement, parameter_family: none, direction: central}
+    - {recipe_id: bfg_yield_low, parameter_family: BFG_yield, direction: low}
+    - {recipe_id: bfg_yield_high, parameter_family: BFG_yield, direction: high}
+    - {recipe_id: cog_yield_low, parameter_family: COG_yield, direction: low}
+    - {recipe_id: cog_yield_high, parameter_family: COG_yield, direction: high}
+    - {recipe_id: bofg_yield_low, parameter_family: BOFG_yield, direction: low}
+    - {recipe_id: bofg_yield_high, parameter_family: BOFG_yield, direction: high}
+    - {recipe_id: single_process_electricity_low, parameter_family: named_process_electricity_intensity, direction: low}
+    - {recipe_id: single_process_electricity_high, parameter_family: named_process_electricity_intensity, direction: high}
+  recipe_policy:
+    one_family_at_a_time: true
+    carrier_yields_never_co_move: true
+    named_process_selection_required: true
+    selected_process_recorded_per_candidate: true
+  structured_candidate_count: 27
+  total_design_row_count: 28
+  maximum_candidates: 30
+  maximum_retained_candidates: 5
+
+execution:
+  enabled: true
+  analytical_prescreen_enabled: false
+  solver_runs_enabled: true
+  calibration_candidates_run: true
+  unsupported_code_execution_enabled: false
+  execution_scope: frozen_development_week_rolling_evaluation_only
+  next_checkpoint_required: independent_review_before_held_out_final_evaluation
+
+prescreen:
+  c0_wag_to_power_efficiency: 0.3715
+  c1_wag_to_power_efficiency: 0.345
+  c0_generator_volume_cap_nm3_h: 900000.0
+  c1_generator_volume_cap_nm3_h: 900000.0
+  c1_generator_electric_capacity_mw: 350.0
+  c0_named_ng_generator_electricity_mwh: 0.0
+  c1_named_ng_generator_electricity_mwh: 0.0
+  named_electricity_process_selection_rule: largest_baseline_represented_process_load_per_configuration_then_name
+  score_families_kept_separate: true
+  retention_rule: source_baseline_then_lexicographic_separate_family_errors_source_deviation_bridge_size_candidate_id
+
+accounting:
+  gross_site_electricity_identity: gross_site_electricity = WAG_generator + NG_generator + gross_grid_import - gross_grid_export
+  net_grid_exchange_identity: net_grid_exchange = gross_grid_import - gross_grid_export
+  gross_site_electricity_via_net_exchange: gross_site_electricity = WAG_generator + NG_generator + net_grid_exchange
+  gross_grid_export_subtraction_count: 1
+  wag_generator_electricity_definition: gross_BFG_COG_BOFG_generator_output_only
+  ng_generator_electricity_separate: true
+  physical_co2_ledger: existing_explicit_fuel_and_oxidation
+  first_order_full_site_co2_ledger: activity_factors_plus_visible_configuration_constant
+  co2_ledgers_must_not_be_summed: true
+  ng_hourly_targets_primary: true
+  ng_annual_comparators_separate: true
+
+background_electricity:
+  five_percent_case_mwh_h_by_configuration:
+    C0_current_BF_BOF_reference: 18.0936073059
+    C1_phase1_BF_BOF_plus_DRP_EAF: 27.9109589041
+  separate_from: [residual_electricity, represented_auxiliary_electricity, linde_n2_auxiliary_load]
+  additive_to_existing_represented_auxiliaries: true
+  may_replace_residual_electricity: false
+  may_replace_represented_auxiliary_electricity: false
+  may_replace_linde_n2_auxiliary_load: false
+
+claims:
+  exact_digital_twin: false
+  tata_ijmuiden_inspired_full_site_emulation: true
+  tata_questionnaire_separate: true
+
+checkpoint_4:
+  physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
+  scratch_root: tmp/c5_user_authorized_full_site_emulation_checkpoint4_cases
+  expected_rolling_case_count: 30
+  expected_model_count: 420
+  held_out_periods_used: false
+  identical_initial_state_policy: base_config_default_initial_state_for_every_independent_candidate_scenario_case
+  identical_production_policy: cumulative_production_progress_then_represented_procurement_cost_then_physical_tiebreak
+  flat_control_mapping: price_insensitive_80_flat_low_40_flat_high_120_share_the_calm_week_and_timestamped_adapter
+  negative_price_mapping: volatile_validation_2024_07_01_has_19p642857_percent_negative_y_true_and_is_reused_for_governed_y_pred_plus_separately_labelled_y_true_oracle
+  development_periods:
+    - period_id: validation_2024-02-12
+      dataset_split: validation
+      period_role: development
+      regime_role: calm
+      frozen_forecast_start_origin_utc: '2024-02-11T07:00:00+00:00'
+      delivery_start_local_date: '2024-02-12'
+      delivery_end_local_date: '2024-02-18'
+      realised_volatility_eur_per_mwh: 11.95684516979287
+      negative_price_share_y_true: 0.0
+      pre_existing_selection_rank: 4
+      source_selection_contract: steel_c5_representative_period_v1
+    - period_id: validation_2024-07-01
+      dataset_split: validation
+      period_role: development
+      regime_role: volatile_negative
+      frozen_forecast_start_origin_utc: '2024-06-30T06:00:00+00:00'
+      delivery_start_local_date: '2024-07-01'
+      delivery_end_local_date: '2024-07-07'
+      realised_volatility_eur_per_mwh: 57.51985843043254
+      negative_price_share_y_true: 0.19642857142857142
+      pre_existing_selection_rank: 3
+      source_selection_contract: steel_c5_representative_period_v1
+  candidates:
+    - candidate_id: source_driven_baseline
+      background_share: 0.0
+      cog_yield_m3_per_t_dry_coal:
+      named_process_electricity_scale:
+    - candidate_id: bg15_central_no_movement
+      background_share: 0.15
+      cog_yield_m3_per_t_dry_coal:
+      named_process_electricity_scale:
+    - candidate_id: bg25_central_no_movement
+      background_share: 0.25
+      cog_yield_m3_per_t_dry_coal:
+      named_process_electricity_scale:
+    - candidate_id: bg25_single_process_electricity_high
+      background_share: 0.25
+      cog_yield_m3_per_t_dry_coal:
+      named_process_electricity_scale: 1.25
+      c0_selected_process: BF
+      c1_selected_process: EAF_arc
+    - candidate_id: bg25_cog_yield_high
+      background_share: 0.25
+      cog_yield_m3_per_t_dry_coal: 562.5
+      named_process_electricity_scale:
+  scenarios:
+    - scenario_id: calm_price_insensitive
+      period_id: validation_2024-02-12
+      price_field: y_pred
+      flat_price_eur_per_mwh: 80.0
+      perfect_foresight_oracle: false
+    - scenario_id: calm_flat_low
+      period_id: validation_2024-02-12
+      price_field: y_pred
+      flat_price_eur_per_mwh: 40.0
+      perfect_foresight_oracle: false
+    - scenario_id: calm_flat_high
+      period_id: validation_2024-02-12
+      price_field: y_pred
+      flat_price_eur_per_mwh: 120.0
+      perfect_foresight_oracle: false
+    - scenario_id: calm_governed_y_pred
+      period_id: validation_2024-02-12
+      price_field: y_pred
+      flat_price_eur_per_mwh:
+      perfect_foresight_oracle: false
+    - scenario_id: volatile_negative_governed_y_pred
+      period_id: validation_2024-07-01
+      price_field: y_pred
+      flat_price_eur_per_mwh:
+      perfect_foresight_oracle: false
+    - scenario_id: volatile_negative_oracle_y_true
+      period_id: validation_2024-07-01
+      price_field: y_true
+      flat_price_eur_per_mwh:
+      perfect_foresight_oracle: true
+  expected_directions:
+    - expectation_id: production_and_identity_invariance
+      scope: all_candidates_all_scenarios
+      expected_direction: exact_terminal_production_and_checkpoint2_identities_pass_with_zero_export
+      assessment_rule: all_inherited_and_reconstructed_physical_guardrails_pass
+    - expectation_id: flat_level_process_stability
+      scope: calm_flat_low_vs_calm_flat_high
+      expected_direction: identical_temporal_process_activity_because_only_flat_price_level_changes
+      assessment_rule: C1_EAF_total_difference_at_or_below_1e-4_t
+    - expectation_id: generator_price_level_response
+      scope: calm_flat_low_vs_calm_flat_high
+      expected_direction: low_price_grid_import_not_lower_and_internal_generation_not_higher_than_high_price
+      assessment_rule: compare_gross_grid_import_and_total_generator_electricity
+    - expectation_id: c0_bf_and_downstream_ordering
+      scope: price_insensitive_C0
+      expected_direction: represented_BF6_burden_gt_BF7_and_HSM_output_gt_DSP
+      assessment_rule: directional_only_exact_96pct_utilisation_structurally_unobservable
+    - expectation_id: c1_drp_eaf_flat_stability
+      scope: price_insensitive_and_flat_controls_C1
+      expected_direction: DRP_EAF_physical_totals_stable_and_HSM_output_gt_DSP
+      assessment_rule: compare_flat_profiles_with_existing_bounds
+    - expectation_id: eaf_expensive_hour_reduction
+      scope: volatile_negative_governed_y_pred_C1
+      expected_direction: mean_EAF_output_in_above_median_price_hours_below_at_or_below_mean_in_lower_price_hours
+      assessment_rule: high_price_mean_lt_low_price_mean
+    - expectation_id: dri_storage_response
+      scope: calm_vs_volatile_governed_y_pred_C1
+      expected_direction: DRI_inventory_price_correlation_stronger_in_volatile_week
+      assessment_rule: volatile_correlation_gt_calm_correlation
+    - expectation_id: c0_catchup_and_buffers
+      scope: volatile_governed_y_pred_C0
+      expected_direction: any_BF7_or_sinter_buffer_response_reported_without_inventing_oxygen_storage
+      assessment_rule: observable_change_partial_otherwise_not_observed
+    - expectation_id: oracle_cost_dominance
+      scope: volatile_negative_first_planning_window
+      expected_direction: y_true_oracle_weakly_dominates_y_pred_when_evaluated_on_y_true_from_identical_initial_state
+      assessment_rule: first_window_only_not_global_week_claim

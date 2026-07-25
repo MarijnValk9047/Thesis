@@ -26,6 +26,7 @@ from steel.rolling_production_quota import (
 )
 from steel.s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation import (
     CONFIGURATIONS,
+    _generator_electricity_reporting_split,
     _rolling_production_progress_contract,
 )
 from steel.s4_4c5p_bf_price_series_interface import (
@@ -53,6 +54,24 @@ def test_timestamped_quota_uses_actual_25_hour_execution_day() -> None:
         25.0 * 6_750_000.0 / 8760.0
     )
     assert plan.total_quota_t == pytest.approx(121.0 * 6_750_000.0 / 8760.0)
+
+
+def test_generator_reporting_separates_wag_ng_and_total_without_changing_total() -> None:
+    split = _generator_electricity_reporting_split(
+        [
+            {
+                "generator_electricity_mwh": 4.0,
+                "wag_electricity_mwh": 4.0,
+                "VN25_total_fuel_mwh": 10.0,
+                "generator_named_ng_mwh": 2.0,
+                "VN25_electricity_mwh": 4.0,
+            }
+        ]
+    )
+    assert split["NG_generator_electricity_mwh"] == pytest.approx(0.8)
+    assert split["WAG_generator_electricity_mwh"] == pytest.approx(3.2)
+    assert split["generator_internal_electricity_total_mwh"] == pytest.approx(4.0)
+    assert split["sum_identity_residual_mwh"] == pytest.approx(0.0)
 
 
 def test_timestamped_quota_rejects_incomplete_local_days() -> None:

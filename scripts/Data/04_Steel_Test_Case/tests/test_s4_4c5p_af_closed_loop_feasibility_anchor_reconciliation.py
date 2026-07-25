@@ -16,6 +16,10 @@ from steel.s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation import (
     _annual_equivalent_views,
     _annual_model_metrics,
     _annual_physical_boundary_ledger,
+    _first_order_full_site_co2_ledger,
+    _full_site_coverage_share_rows,
+    _generator_electricity_reporting_split,
+    _parameter_range_exception_report,
     _annual_origin_ledger,
     _annual_c0_downstream_origin_ledger,
     _anchor_rows,
@@ -35,6 +39,7 @@ from steel.s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation import (
     _generator_unit_interface,
     _electricity_boundary_levers,
     _c1_source_backed_energy_boundary,
+    _user_authorized_emulation_overlays,
     _config,
     _deterministic_cost_policy,
     _external_procurement_flow_coefficients,
@@ -269,7 +274,7 @@ def test_gate3_boundary_ledger_keeps_residuals_and_mode_b_out_of_dispatch() -> N
         ]
     )
     keyed = {(row["ledger_family"], row["component"]): row for row in ledger}
-    assert keyed[("electricity", "gross_minus_internal_minus_grid")]["annual_value"] == 0.0
+    assert keyed[("electricity", "gross_total_minus_internal_minus_import_plus_export")]["annual_value"] == 0.0
     assert keyed[("electricity", "full_site_anchor_minus_represented_gross")]["included_in_physical_balance"] == "false"
     assert keyed[("named_NG", "full_site_anchor_minus_named_NG")]["included_in_mode_b_co2"] == "false"
     assert keyed[("Mode_B_CO2", "represented_Mode_B_explicit_fuel")]["annual_value"] > keyed[("Mode_B_CO2", "represented_WAG_combustion_and_flare")]["annual_value"]
@@ -721,7 +726,7 @@ def test_generator_efficiency_sensitivity_requires_explicit_source_bounded_flag(
 
 
 def test_electricity_boundary_keeps_linde_n2_separate_and_eaf_secondary_named() -> None:
-    linde, eaf_secondary, dsp = _electricity_boundary_levers(
+    linde, eaf_secondary, dsp, background, background_by_configuration = _electricity_boundary_levers(
         {
             "repair_stage": "electricity",
             "represented_electricity_boundary": {
@@ -732,6 +737,8 @@ def test_electricity_boundary_keeps_linde_n2_separate_and_eaf_secondary_named() 
         }
     )
     assert linde == 45.0 and eaf_secondary == 0.031 and dsp == 0.056
+    assert background == 0.0
+    assert set(background_by_configuration.values()) == {0.0}
     with pytest.raises(Exception, match="must remain"):
         _electricity_boundary_levers(
             {
@@ -740,6 +747,165 @@ def test_electricity_boundary_keeps_linde_n2_separate_and_eaf_secondary_named() 
                     "linde_n2_auxiliary_mw": 45.0,
                     "eaf_secondary_electricity_mwh_per_t_ls": 0.04,
                 },
+            }
+        )
+
+
+def test_checkpoint2_background_and_generator_reporting_are_explicit() -> None:
+    rows = [
+        {
+            "configuration_id": "C1_phase1_BF_BOF_plus_DRP_EAF",
+            "represented_gross_electricity_before_background_mwh": 10.0,
+            "site_background_electricity_mwh": 2.0,
+            "gross_total_electricity_mwh": 12.0,
+            "WAG_generator_electricity_mwh": 2.76,
+            "NG_generator_electricity_mwh": 0.69,
+            "total_generator_electricity_mwh": 3.45,
+            "gross_grid_import_mwh": 8.55,
+            "gross_grid_export_mwh": 0.0,
+            "net_grid_exchange_mwh": 8.55,
+            "generator_named_ng_mwh": 2.0,
+        }
+    ]
+    split = _generator_electricity_reporting_split(rows)
+    assert split["WAG_generator_electricity_mwh"] == pytest.approx(2.76)
+    assert split["NG_generator_electricity_mwh"] == pytest.approx(0.69)
+    assert split["generator_internal_electricity_total_mwh"] == pytest.approx(3.45)
+    assert split["sum_identity_residual_mwh"] == pytest.approx(0.0)
+
+    ledger = _annual_physical_boundary_ledger(rows)
+    keyed = {(row["ledger_family"], row["component"]): row for row in ledger}
+    assert keyed[("electricity", "represented_gross_before_background")]["annual_value"] == 87_600.0
+    assert keyed[("electricity", "explicit_site_background_electricity")]["annual_value"] == 17_520.0
+    assert keyed[("electricity", "gross_total_electricity")]["annual_value"] == 105_120.0
+    assert keyed[("electricity", "gross_total_minus_internal_minus_import_plus_export")]["annual_value"] == pytest.approx(0.0)
+
+
+def test_checkpoint2_first_order_co2_is_separate_and_excludes_drp_capture() -> None:
+    rows = [
+        {
+            "configuration_id": "C1_phase1_BF_BOF_plus_DRP_EAF",
+            "C1_retained_BF_hot_iron_output_t_h": 100.0,
+            "C1_BOF_liquid_steel_output_t_h": 80.0,
+            "C1_retained_coke_output_t_h": 40.0,
+            "C1_retained_sinter_output_t_h": 90.0,
+            "PEFA_pellet_output_t": 20.0,
+            "C1_EAF_liquid_steel_output_t_h": 30.0,
+            "C1_DRP_DRI_output_t_h": 35.0,
+            "represented_gross_electricity_before_background_mwh": 10.0,
+            "site_background_electricity_mwh": 2.0,
+        }
+    ]
+    ledger = _first_order_full_site_co2_ledger(
+        rows,
+        constant_mt_y_by_configuration={
+            "C1_phase1_BF_BOF_plus_DRP_EAF": 1.0,
+        },
+    )
+    keyed = {row["component"]: row for row in ledger}
+    expected_hourly = 1.495 * 100 + 0.0825 * 80 + 0.20 * 40 + 0.248 * 90 + 0.105 * 20 + 0.126 * 30
+    assert keyed["selected_process_factor_subtotal"]["annual_co2_t_y"] == pytest.approx(expected_hourly * 8760)
+    assert keyed["DRP_capture_stream_CO2"]["annual_co2_t_y"] == 0.0
+    assert keyed["DRP_capture_stream_CO2"]["inclusion_status"] == "excluded_capture_stream_not_direct_CO2"
+    assert all(row["included_in_mode_b_co2"] == "false" for row in ledger)
+    assert keyed["explicit_nonnegative_constant"]["constant_share_of_total"] > 0.0
+
+    coverage = _full_site_coverage_share_rows(rows, ledger)
+    electricity = next(row for row in coverage if row["coverage_family"] == "gross_site_electricity")
+    co2 = next(row for row in coverage if row["coverage_family"] == "first_order_full_site_CO2")
+    assert electricity["physically_represented_share"] == pytest.approx(10 / 12)
+    assert electricity["explicit_bridge_share"] == pytest.approx(2 / 12)
+    assert co2["explicit_bridge_share"] > 0.0
+
+
+def test_checkpoint2_first_order_co2_forbids_negative_constant_and_overshoot() -> None:
+    rows = [{"configuration_id": "C0_current_BF_BOF_reference", "C0_BF_hot_iron_output_t": 1.0}]
+    with pytest.raises(Exception, match="non-negative"):
+        _first_order_full_site_co2_ledger(
+            rows,
+            constant_mt_y_by_configuration={"C0_current_BF_BOF_reference": -0.1},
+        )
+    with pytest.raises(Exception, match="negative constant is forbidden"):
+        _first_order_full_site_co2_ledger(
+            rows,
+            target_mt_y_by_configuration={"C0_current_BF_BOF_reference": 0.000001},
+        )
+    with pytest.raises(Exception, match="subtotal plus constant"):
+        _first_order_full_site_co2_ledger(
+            rows,
+            constant_mt_y_by_configuration={"C0_current_BF_BOF_reference": 13.24},
+        )
+
+
+def test_checkpoint2_parameter_range_exceptions_are_traceable() -> None:
+    report = _parameter_range_exception_report(
+        [
+            {
+                "parameter_id": "uae_bfg_generation_yield",
+                "candidate_value": 2200.0,
+                "selected_process": "BF6",
+            }
+        ]
+    )
+    assert report[0]["range_status"] == "within_user_authorized_relaxed_range"
+    assert report[0]["prior_range_exception_magnitude"] == 200.0
+    assert report[0]["relaxed_range_exception_magnitude"] == 0.0
+    assert report[0]["user_authorized_sensitivity"] == "true"
+    assert report[0]["selection_rule"]
+
+    accepted = _parameter_range_exception_report(
+        [{
+            "parameter_id": "uae_named_process_electricity_intensity_scaling",
+            "candidate_value": 1.1,
+            "selected_process": "HSM_rolling",
+        }]
+    )
+    assert accepted[0]["selected_process"] == "HSM_rolling"
+    accepted_coking = _parameter_range_exception_report(
+        [{
+            "parameter_id": "uae_coal_coking_input_scaling",
+            "candidate_value": 0.9,
+            "selected_process": "KGF1",
+        }]
+    )
+    assert accepted_coking[0]["selected_process"] == "KGF1"
+    for parameter_id, selected_process in (
+        ("uae_named_process_electricity_intensity_scaling", ""),
+        ("uae_named_process_electricity_intensity_scaling", "background"),
+        ("uae_coal_coking_input_scaling", ""),
+        ("uae_coal_coking_input_scaling", "all_KGF"),
+    ):
+        with pytest.raises(Exception, match="selected_process"):
+            _parameter_range_exception_report(
+                [{
+                    "parameter_id": parameter_id,
+                    "candidate_value": 1.0,
+                    "selected_process": selected_process,
+                }]
+            )
+
+
+def test_checkpoint2_configuration_specific_background_is_validated() -> None:
+    *_, scalar, by_configuration = _electricity_boundary_levers(
+        {
+            "site_background_electricity_mwh_h": 3.0,
+            "site_background_electricity_mwh_h_by_configuration": {
+                "C0_current_BF_BOF_reference": 18.0936073059,
+                "C1_phase1_BF_BOF_plus_DRP_EAF": 27.9109589041,
+            },
+        }
+    )
+    assert scalar == 3.0
+    assert by_configuration == {
+        "C0_current_BF_BOF_reference": 18.0936073059,
+        "C1_phase1_BF_BOF_plus_DRP_EAF": 27.9109589041,
+    }
+    with pytest.raises(Exception, match="non-negative"):
+        _electricity_boundary_levers(
+            {
+                "site_background_electricity_mwh_h_by_configuration": {
+                    "C0_current_BF_BOF_reference": -1.0,
+                }
             }
         )
 
@@ -961,3 +1127,53 @@ def test_origin_ledger_clamps_only_six_decimal_reporting_noise() -> None:
     by_metric = {row["metric"]: row for row in ledger}
     assert by_metric["HSM_origin_input_balance_residual"]["annualised_value"] == 0.0
     assert by_metric["site_final_product_origin_residual"]["annualised_value"] == 0.0
+
+
+def test_user_authorized_emulation_overlays_preserve_carrier_and_named_process_scope() -> None:
+    c1_energy = {
+        "drp_ng_gj_per_t_dri": 9.9,
+        "drp_electricity_mwh_per_t_dri": 1 / 12,
+        "eaf_arc_electricity_mwh_per_t_liquid_steel": 19 / 45,
+        "eaf_ng_gj_per_t_liquid_steel": 0.05,
+        "natural_gas_lhv_mj_per_nm3": 35.8,
+    }
+    yields, bf_scales, resolved_energy = _user_authorized_emulation_overlays(
+        {
+            "wag_generation_yield_overrides_by_configuration": {
+                "C0_current_BF_BOF_reference": {"COG": 562.5},
+                "C1_phase1_BF_BOF_plus_DRP_EAF": {"COG": 562.5},
+            },
+            "named_process_electricity_intensity_scales_by_configuration": {
+                "C0_current_BF_BOF_reference": {"BF": 1.25},
+                "C1_phase1_BF_BOF_plus_DRP_EAF": {"EAF_arc": 1.25},
+            },
+        },
+        c1_energy,
+    )
+    assert yields == {
+        "C0_current_BF_BOF_reference": {"COG": 562.5},
+        "C1_phase1_BF_BOF_plus_DRP_EAF": {"COG": 562.5},
+    }
+    assert bf_scales == {
+        "C0_current_BF_BOF_reference": 1.25,
+        "C1_phase1_BF_BOF_plus_DRP_EAF": 1.0,
+    }
+    assert resolved_energy is not c1_energy
+    assert resolved_energy["eaf_arc_electricity_mwh_per_t_liquid_steel"] == pytest.approx(
+        19 / 36
+    )
+    assert c1_energy["eaf_arc_electricity_mwh_per_t_liquid_steel"] == pytest.approx(
+        19 / 45
+    )
+
+
+def test_user_authorized_emulation_overlays_reject_unfrozen_processes() -> None:
+    with pytest.raises(ValueError, match="Unsupported named-process electricity"):
+        _user_authorized_emulation_overlays(
+            {
+                "named_process_electricity_intensity_scales_by_configuration": {
+                    "C0_current_BF_BOF_reference": {"HSM_rolling": 1.25}
+                }
+            },
+            None,
+        )

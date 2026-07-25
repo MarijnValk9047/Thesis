@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import math
 import re
 import time
 from dataclasses import dataclass, replace
@@ -19,6 +21,7 @@ from pyomo.environ import (
     Binary,
     ConcreteModel,
     Constraint,
+    ConstraintList,
     Expression,
     NonNegativeReals,
     Objective,
@@ -27,6 +30,7 @@ from pyomo.environ import (
     UnitInterval,
     SolverFactory,
     Var,
+    maximize,
     minimize,
     value,
 )
@@ -127,6 +131,12 @@ def _model_value_or_zero(model: ConcreteModel, component_name: str, t: int) -> f
     if not hasattr(model, component_name):
         return 0.0
     return float(value(getattr(model, component_name)[t]))
+
+
+def _costed_c0_ng_reporting_value(raw_value: float) -> float:
+    """Preserve cost-ledger precision for opt-in C0 named-NG reporting fields."""
+
+    return round(float(raw_value), 12)
 
 
 def _development_controller_flags(phase: str) -> dict[str, bool]:
@@ -256,6 +266,36 @@ class RetainedBfBofInputs:
     boiler_total_placeholder_mwh_h: float
     eta_boiler_steam: float
     retained_target_share: float
+
+
+def _apply_wag_generation_yield_overrides(
+    inputs: C0ExecutableInputs | RetainedBfBofInputs,
+    overrides: Mapping[str, float] | None,
+) -> C0ExecutableInputs | RetainedBfBofInputs:
+    """Apply an explicit carrier-yield overlay without merging WAG carriers."""
+
+    if not overrides:
+        return inputs
+    allowed = {"BFG", "COG", "BOFG"}
+    unknown = set(overrides).difference(allowed)
+    if unknown:
+        raise S44CModelBuilderError(
+            f"Unsupported WAG generation-yield override carrier(s): {sorted(unknown)}"
+        )
+    values = {carrier: float(value) for carrier, value in overrides.items()}
+    if any(value <= 0.0 for value in values.values()):
+        raise S44CModelBuilderError("Every WAG generation-yield override must be positive.")
+    replacements: dict[str, float] = {}
+    field_names = {
+        "BFG": ("bfg_nm3_per_t_hot_iron", "bfg_mwh_per_t_hot_iron"),
+        "COG": ("cog_m3_per_t_dry_coal", "cog_mwh_per_t_coke"),
+        "BOFG": ("bofg_nm3_per_t_liquid_steel", "bofg_mwh_per_t_liquid_steel"),
+    }
+    for carrier, override in values.items():
+        volume_field, energy_field = field_names[carrier]
+        replacements[volume_field] = override
+        replacements[energy_field] = _gas_mwh_per_activity(override, carrier)
+    return replace(inputs, **replacements)
 
 
 def _apply_c0_initial_inventory_overrides(
@@ -527,6 +567,7 @@ def _solve_with_optional_lexicographic_cost(
     solver: Any,
     configuration_id: str,
     deterministic_cost_policy: Mapping[str, Any] | None,
+    allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Solve physical progress, represented cost and tie-breaker in order."""
 
@@ -535,6 +576,9 @@ def _solve_with_optional_lexicographic_cost(
         "cost_objective_active": deterministic_cost_policy is not None,
         "primary_cost_objective_eur": None,
         "primary_cost_best_bound_eur": None,
+        "primary_cost_best_bound_availability": "not_solved",
+        "primary_cost_solver_status": None,
+        "primary_cost_termination_condition": None,
         "primary_cost_mip_gap": None,
         "primary_cost_runtime_seconds": 0.0,
         "production_progress_objective_active": progress_active,
@@ -622,7 +666,18 @@ def _solve_with_optional_lexicographic_cost(
         primary_result = solver.solve(model)
         metadata["primary_cost_runtime_seconds"] = time.perf_counter() - primary_start
         metadata["primary_cost_mip_gap"] = _mip_gap(primary_result)
-        if str(primary_result.solver.termination_condition).lower() not in {
+        primary_termination = str(primary_result.solver.termination_condition)
+        metadata["primary_cost_solver_status"] = str(primary_result.solver.status)
+        metadata["primary_cost_termination_condition"] = primary_termination
+        if (
+            allocation_envelope_diagnostic is not None
+            and primary_termination.lower() != "optimal"
+        ):
+            raise S44CModelBuilderError(
+                "The allocation-envelope primary procurement-cost stage must "
+                f"terminate optimal; received {primary_termination}."
+            )
+        if primary_termination.lower() not in {
             "optimal",
             "feasible",
         }:
@@ -633,11 +688,15 @@ def _solve_with_optional_lexicographic_cost(
             raise S44CModelBuilderError("Cost-objective tolerance cannot be negative.")
         metadata["primary_cost_objective_eur"] = optimum
         try:
-            metadata["primary_cost_best_bound_eur"] = float(
-                primary_result.problem.lower_bound
-            )
+            primary_best_bound = float(primary_result.problem.lower_bound)
+            if not math.isfinite(primary_best_bound):
+                raise ValueError("non-finite primary best bound")
         except (AttributeError, TypeError, ValueError):
-            metadata["primary_cost_best_bound_eur"] = optimum
+            metadata["primary_cost_best_bound_eur"] = None
+            metadata["primary_cost_best_bound_availability"] = "unavailable"
+        else:
+            metadata["primary_cost_best_bound_eur"] = primary_best_bound
+            metadata["primary_cost_best_bound_availability"] = "available"
         cost_objective.deactivate()
         model.procurement_cost_optimum_preservation = Constraint(
             expr=model.represented_procurement_cost_eur <= optimum + tolerance
@@ -670,7 +729,267 @@ def _solve_with_optional_lexicographic_cost(
             metadata["production_progress_deficit_t"] = float(
                 value(model.rolling_production_progress_deficit_t)
             )
-    return tie_result, metadata
+    if allocation_envelope_diagnostic is None:
+        return tie_result, metadata
+
+    if configuration_id != "C0_current_BF_BOF_reference":
+        raise S44CModelBuilderError(
+            "The allocation-envelope diagnostic is available for C0 only."
+        )
+    if cost_objective is None or metadata["primary_cost_objective_eur"] is None:
+        raise S44CModelBuilderError(
+            "The allocation-envelope diagnostic requires the represented procurement-cost objective."
+        )
+    if str(tie_result.solver.termination_condition).lower() != "optimal":
+        raise S44CModelBuilderError(
+            "The normal physical tie-break must be optimal before an allocation endpoint is solved."
+        )
+    endpoint = str(allocation_envelope_diagnostic.get("endpoint", ""))
+    if endpoint not in {"min", "max"}:
+        raise S44CModelBuilderError(
+            "Allocation-envelope endpoint must be exactly 'min' or 'max'."
+        )
+    execution_hours = int(
+        allocation_envelope_diagnostic.get(
+            "execution_hours",
+            getattr(model, "rolling_production_progress_execution_hours", 0),
+        )
+    )
+    state_tolerance = float(
+        allocation_envelope_diagnostic.get("state_tolerance", 1e-6)
+    )
+    if (
+        execution_hours <= 0
+        or execution_hours > len(model.TIME)
+        or state_tolerance <= 0.0
+    ):
+        raise S44CModelBuilderError(
+            "Invalid allocation-envelope execution hours or state tolerance."
+        )
+    for attribute in (
+        "wag_generator_electricity_mwh",
+        "final_product_output",
+        "coke_inventory",
+        "sinter_inventory",
+        "hot_iron_inventory",
+        "cold_slab_inventory",
+    ):
+        if not hasattr(model, attribute):
+            raise S44CModelBuilderError(
+                f"Allocation-envelope model component is missing: {attribute}"
+            )
+
+    handoff_hour = execution_hours - 1
+    normal_snapshot = {
+        "executed_final_product_t": sum(
+            float(value(model.final_product_output[t]))
+            for t in range(execution_hours)
+        ),
+        "coke_inventory_t": float(value(model.coke_inventory[handoff_hour])),
+        "sinter_inventory_t": float(value(model.sinter_inventory[handoff_hour])),
+        "hot_iron_inventory_t": float(
+            value(model.hot_iron_inventory[handoff_hour])
+        ),
+        "cold_slab_inventory_t": float(
+            value(model.cold_slab_inventory[handoff_hour])
+        ),
+    }
+    primary_cost = float(metadata["primary_cost_objective_eur"])
+    cost_tolerance = float(deterministic_cost_policy["objective_tolerance_eur"])
+    normal_cost = float(metadata["tie_break_cost_objective_eur"])
+    normal_endpoint_objective_value = sum(
+        float(value(model.wag_generator_electricity_mwh[t]))
+        for t in range(execution_hours)
+    )
+    normal_cost_minus_upper_limit = normal_cost - (
+        primary_cost + cost_tolerance
+    )
+    if normal_cost_minus_upper_limit > 1e-6:
+        raise S44CModelBuilderError(
+            "The normal tie-break incumbent is not feasible for the allocation "
+            "endpoint formulations: "
+            f"normal_cost_eur={normal_cost}, primary_cost_eur={primary_cost}, "
+            f"upper_tolerance_eur={cost_tolerance}."
+        )
+
+    def _snapshot_hash(snapshot: Mapping[str, float]) -> str:
+        normalized = {
+            key: round(float(snapshot[key]), 6) for key in sorted(snapshot)
+        }
+        return hashlib.sha256(
+            json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+
+    model.static_price_naive_objective.deactivate()
+    model.allocation_envelope_state_preservation = ConstraintList()
+    state_expressions = {
+        "executed_final_product_t": sum(
+            model.final_product_output[t] for t in range(execution_hours)
+        ),
+        "coke_inventory_t": model.coke_inventory[handoff_hour],
+        "sinter_inventory_t": model.sinter_inventory[handoff_hour],
+        "hot_iron_inventory_t": model.hot_iron_inventory[handoff_hour],
+        "cold_slab_inventory_t": model.cold_slab_inventory[handoff_hour],
+    }
+    for key, expression in state_expressions.items():
+        normal_value = normal_snapshot[key]
+        model.allocation_envelope_state_preservation.add(
+            expression >= normal_value - state_tolerance
+        )
+        model.allocation_envelope_state_preservation.add(
+            expression <= normal_value + state_tolerance
+        )
+    endpoint_expression = sum(
+        model.wag_generator_electricity_mwh[t]
+        for t in range(execution_hours)
+    )
+    model.allocation_envelope_objective = Objective(
+        expr=endpoint_expression,
+        sense=minimize if endpoint == "min" else maximize,
+    )
+    endpoint_start = time.perf_counter()
+    endpoint_result = solver.solve(model)
+    endpoint_runtime = time.perf_counter() - endpoint_start
+    endpoint_termination = str(endpoint_result.solver.termination_condition)
+    if endpoint_termination.lower() != "optimal":
+        raise S44CModelBuilderError(
+            "Allocation-envelope endpoint did not terminate optimal: "
+            f"{endpoint_termination}."
+        )
+    endpoint_snapshot = {
+        key: float(value(expression))
+        for key, expression in state_expressions.items()
+    }
+    max_state_residual = max(
+        abs(endpoint_snapshot[key] - normal_snapshot[key])
+        for key in normal_snapshot
+    )
+    endpoint_cost = float(value(model.represented_procurement_cost_eur))
+    primary_best_bound = metadata["primary_cost_best_bound_eur"]
+    best_bound_availability = metadata[
+        "primary_cost_best_bound_availability"
+    ]
+    endpoint_minus_primary_best_bound = (
+        endpoint_cost - float(primary_best_bound)
+        if primary_best_bound is not None
+        else None
+    )
+    solver_cost_feasibility_tolerance = (
+        1e-6 if "gurobi" in str(getattr(solver, "name", "")).lower() else 0.0
+    )
+    best_bound_audit_status = (
+        "pass"
+        if endpoint_minus_primary_best_bound is not None
+        and endpoint_minus_primary_best_bound >= 0.0
+        else "unavailable"
+        if best_bound_availability != "available"
+        else "fail"
+    )
+    primary_objective_audit_status = (
+        "pass"
+        if endpoint_cost
+        <= primary_cost + cost_tolerance + solver_cost_feasibility_tolerance
+        else "fail"
+    )
+    solver_state_feasibility_tolerance = (
+        1e-6 if "gurobi" in str(getattr(solver, "name", "")).lower() else 0.0
+    )
+    effective_state_tolerance = (
+        state_tolerance + solver_state_feasibility_tolerance
+    )
+    if (
+        max_state_residual > effective_state_tolerance + 1e-9
+        or endpoint_cost > primary_cost + cost_tolerance + 1e-6
+        or best_bound_audit_status != "pass"
+    ):
+        raise S44CModelBuilderError(
+            "Allocation-envelope endpoint failed state or represented-cost "
+            f"preservation: max_state_residual={max_state_residual}, "
+            f"state_tolerance={state_tolerance}, endpoint_cost_eur={endpoint_cost}, "
+            f"primary_cost_eur={primary_cost}, upper_tolerance_eur={cost_tolerance}, "
+            f"primary_best_bound_eur={primary_best_bound}, "
+            f"best_bound_availability={best_bound_availability}, "
+            f"best_bound_audit_status={best_bound_audit_status}."
+        )
+    normal_handoff_hash = _snapshot_hash(normal_snapshot)
+    raw_endpoint_handoff_hash = _snapshot_hash(endpoint_snapshot)
+    # This is a tolerance-equivalence hash, paired with both raw snapshots and
+    # their reported maximum residual.  Endpoint states that pass the governed
+    # model-unit tolerance intentionally share the normal handoff hash.
+    endpoint_handoff_hash = (
+        normal_handoff_hash
+        if max_state_residual <= effective_state_tolerance + 1e-9
+        else raw_endpoint_handoff_hash
+    )
+    metadata.update(
+        {
+            "allocation_envelope_active": True,
+            "allocation_envelope_endpoint": endpoint,
+            "allocation_envelope_execution_hours": execution_hours,
+            "allocation_envelope_objective_value_mwh": float(
+                value(endpoint_expression)
+            ),
+            "allocation_envelope_runtime_seconds": endpoint_runtime,
+            "allocation_envelope_solver_status": str(
+                endpoint_result.solver.status
+            ),
+            "allocation_envelope_termination_condition": endpoint_termination,
+            "allocation_envelope_mip_gap": _mip_gap(endpoint_result),
+            "allocation_envelope_cost_eur": endpoint_cost,
+            "allocation_envelope_cost_minus_primary_eur": endpoint_cost
+            - primary_cost,
+            "allocation_envelope_primary_cost_best_bound_eur": (
+                primary_best_bound
+            ),
+            "allocation_envelope_primary_cost_best_bound_availability": (
+                best_bound_availability
+            ),
+            "allocation_envelope_cost_minus_primary_best_bound_eur": (
+                endpoint_minus_primary_best_bound
+            ),
+            "allocation_envelope_primary_objective_audit_status": (
+                primary_objective_audit_status
+            ),
+            "allocation_envelope_best_bound_audit_status": (
+                best_bound_audit_status
+            ),
+            "allocation_envelope_upper_cost_tolerance_eur": cost_tolerance,
+            "allocation_envelope_solver_cost_feasibility_tolerance_eur": (
+                solver_cost_feasibility_tolerance
+            ),
+            "allocation_envelope_normal_cost_eur": normal_cost,
+            "allocation_envelope_normal_cost_minus_upper_limit_eur": (
+                normal_cost_minus_upper_limit
+            ),
+            "allocation_envelope_normal_incumbent_min_formulation_feasible": (
+                True
+            ),
+            "allocation_envelope_normal_incumbent_max_formulation_feasible": (
+                True
+            ),
+            "allocation_envelope_normal_objective_value_mwh": (
+                normal_endpoint_objective_value
+            ),
+            "allocation_envelope_normal_handoff_snapshot": normal_snapshot,
+            "allocation_envelope_endpoint_handoff_snapshot": endpoint_snapshot,
+            "allocation_envelope_normal_handoff_hash": normal_handoff_hash,
+            "allocation_envelope_endpoint_handoff_hash": endpoint_handoff_hash,
+            "allocation_envelope_raw_endpoint_handoff_hash": (
+                raw_endpoint_handoff_hash
+            ),
+            "allocation_envelope_max_state_residual": max_state_residual,
+            "allocation_envelope_state_tolerance": state_tolerance,
+            "allocation_envelope_solver_state_feasibility_tolerance": (
+                solver_state_feasibility_tolerance
+            ),
+            "allocation_envelope_effective_state_tolerance": (
+                effective_state_tolerance
+            ),
+        }
+    )
+    return endpoint_result, metadata
 
 
 def _horizon_hours(tables: UnifiedInputTables, horizon_hours_override: int | None = None) -> int:
@@ -1318,26 +1637,34 @@ def _add_c0_minimal_wag_layer(
     retire_legacy_boiler_placeholder: bool = False,
     development_controller_profile_weights: Mapping[str, Mapping[int, float]] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
+    site_background_electricity_mwh_h: float = 0.0,
     kgf_underfiring_activity_rule: Any | None = None,
     kgf_underfiring_activity_rule_kgf2: Any | None = None,
     hsm_carrier_precedence: Collection[str] | None = None,
     hsm_eligible_carriers: Collection[str] | None = None,
     generator_interface_cap_mode: str = "inherited_profile",
     generator_unit_interface: Mapping[str, Any] | None = None,
+    aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
+    full_site_energy_bridge: Mapping[str, float] | None = None,
     eaf_secondary_electricity_mwh_per_t_ls_override: float | None = None,
     dsp_electricity_mwh_per_t_coil_override: float | None = None,
     hsm_output_activity_rule: Any | None = None,
     dsp_output_activity_rule: Any | None = None,
     bf_hot_metal_activity_rule: Any | None = None,
+    bf_electricity_intensity_scale: float = 1.0,
 ) -> None:
     lhv_mj_per_nm3, combustion_t_per_mwh = load_governed_wag_factor_maps()
     bf_hot_stove_mwh_per_t_hm = bf_hot_stove_mwh_per_t_hot_metal()
     if linde_n2_auxiliary_electricity_mwh_h < 0.0:
         raise S44CModelBuilderError("Linde N2 auxiliary electricity must be non-negative.")
+    if site_background_electricity_mwh_h < 0.0:
+        raise S44CModelBuilderError("Site background electricity must be non-negative.")
     if eaf_secondary_electricity_mwh_per_t_ls_override is not None and eaf_secondary_electricity_mwh_per_t_ls_override < 0.0:
         raise S44CModelBuilderError("EAF secondary-electricity override must be non-negative.")
     if dsp_electricity_mwh_per_t_coil_override is not None and dsp_electricity_mwh_per_t_coil_override < 0.0:
         raise S44CModelBuilderError("DSP electricity override must be non-negative.")
+    if bf_electricity_intensity_scale <= 0.0:
+        raise S44CModelBuilderError("BF electricity-intensity scale must be positive.")
 
     # This is a diagnostic allocation *order*, not a gas-mix ratio or a
     # gas-quality model.  Every eligible carrier stays separately balanced.
@@ -1612,7 +1939,9 @@ def _add_c0_minimal_wag_layer(
         )
         model.bf_electricity_mwh = Expression(
             model.TIME,
-            rule=lambda m, t: development_profile.bf_electricity_mwh_per_t_hot_metal * bf_hot_metal_activity(m, t),
+            rule=lambda m, t: bf_electricity_intensity_scale
+            * development_profile.bf_electricity_mwh_per_t_hot_metal
+            * bf_hot_metal_activity(m, t),
         )
         model.kgf_electricity_mwh = Expression(
             model.TIME,
@@ -1715,10 +2044,90 @@ def _add_c0_minimal_wag_layer(
         )
         model.electricity_boundary_development_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
 
+    bridge = dict(full_site_energy_bridge or {})
+    if bridge:
+        required_bridge_keys = {
+            "fixed_full_site_ng_component_mwh_h",
+            "flexible_other_site_heat_service_envelope_mwh_h",
+            "normal_case_flexible_ng_validation_reference_mwh_h",
+        }
+        missing_bridge_keys = required_bridge_keys.difference(bridge)
+        if missing_bridge_keys:
+            raise S44CModelBuilderError(
+                f"Full-site energy bridge is missing: {sorted(missing_bridge_keys)}"
+            )
+        fixed_ng_mwh_h = float(bridge["fixed_full_site_ng_component_mwh_h"])
+        flexible_heat_service_mwh_h = float(
+            bridge["flexible_other_site_heat_service_envelope_mwh_h"]
+        )
+        normal_case_flexible_ng_reference_mwh_h = float(
+            bridge["normal_case_flexible_ng_validation_reference_mwh_h"]
+        )
+        if fixed_ng_mwh_h <= 0.0:
+            raise S44CModelBuilderError(
+                "The net fixed full-site NG component must remain positive when enabled."
+            )
+        if not 0.0 <= normal_case_flexible_ng_reference_mwh_h <= flexible_heat_service_mwh_h:
+            raise S44CModelBuilderError(
+                "The normal-case flexible NG reference must lie inside the flexible heat service envelope."
+            )
+        model.bfg_to_flexible_other_site_heat = Var(model.TIME, domain=NonNegativeReals)
+        model.cog_to_flexible_other_site_heat = Var(model.TIME, domain=NonNegativeReals)
+        model.bofg_to_flexible_other_site_heat = Var(model.TIME, domain=NonNegativeReals)
+        model.flexible_other_site_heat_ng_mwh = Var(model.TIME, domain=NonNegativeReals)
+        model.flexible_other_site_heat_balance = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.bfg_to_flexible_other_site_heat[t]
+            + m.cog_to_flexible_other_site_heat[t]
+            + m.bofg_to_flexible_other_site_heat[t]
+            + m.flexible_other_site_heat_ng_mwh[t]
+            == flexible_heat_service_mwh_h,
+        )
+        model.flexible_other_site_heat_ng_envelope = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.flexible_other_site_heat_ng_mwh[t]
+            <= flexible_heat_service_mwh_h,
+        )
+    else:
+        fixed_ng_mwh_h = 0.0
+        flexible_heat_service_mwh_h = 0.0
+        normal_case_flexible_ng_reference_mwh_h = 0.0
+        model.bfg_to_flexible_other_site_heat = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.cog_to_flexible_other_site_heat = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.bofg_to_flexible_other_site_heat = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.flexible_other_site_heat_ng_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+    model.full_site_fixed_ng_component_mwh = Expression(
+        model.TIME, rule=lambda _m, _t: fixed_ng_mwh_h
+    )
+    model.flexible_other_site_heat_service_envelope_mwh = Expression(
+        model.TIME, rule=lambda _m, _t: flexible_heat_service_mwh_h
+    )
+    model.normal_case_flexible_ng_validation_reference_mwh = Expression(
+        model.TIME, rule=lambda _m, _t: normal_case_flexible_ng_reference_mwh_h
+    )
+    model.full_site_energy_bridge_named_ng_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: m.full_site_fixed_ng_component_mwh[t]
+        + m.flexible_other_site_heat_ng_mwh[t],
+    )
+    model.full_site_energy_bridge_active = bool(bridge)
+    model.flexible_other_site_heat_service_envelope_mwh_h = flexible_heat_service_mwh_h
+    model.normal_case_flexible_ng_validation_reference_mwh_h = (
+        normal_case_flexible_ng_reference_mwh_h
+    )
+
     generator_active = enable_internal_wag_power or enable_generator_interface
     if generator_unit_interface is not None and not enable_generator_interface:
         raise S44CModelBuilderError(
             "A unit-specific generator boundary requires the generator controller phase."
+        )
+    if aggregate_generator_technical_interface is not None and not generator_active:
+        raise S44CModelBuilderError(
+            "An aggregate generator technical interface requires active internal generation."
+        )
+    if aggregate_generator_technical_interface is not None and generator_unit_interface is not None:
+        raise S44CModelBuilderError(
+            "Aggregate and unit-specific generator interfaces cannot be active together."
         )
     if generator_active and generator_unit_interface is not None:
         required_generator_keys = {
@@ -1841,10 +2250,56 @@ def _add_c0_minimal_wag_layer(
         model.bfg_to_vattenfall = Var(model.TIME, domain=NonNegativeReals)
         model.cog_to_vattenfall = Var(model.TIME, domain=NonNegativeReals)
         model.bofg_to_vattenfall = Var(model.TIME, domain=NonNegativeReals)
+        if aggregate_generator_technical_interface is not None:
+            required_aggregate_keys = {
+                "electricity_efficiency",
+                "total_fuel_volume_cap_nm3_h",
+                "natural_gas_lhv_mj_per_nm3",
+                "electrical_capacity_mw",
+            }
+            missing_aggregate_keys = required_aggregate_keys.difference(
+                aggregate_generator_technical_interface
+            )
+            if missing_aggregate_keys:
+                raise S44CModelBuilderError(
+                    f"Aggregate generator technical interface is missing: {sorted(missing_aggregate_keys)}"
+                )
+            aggregate_efficiency = float(
+                aggregate_generator_technical_interface["electricity_efficiency"]
+            )
+            aggregate_volume_cap_nm3_h = float(
+                aggregate_generator_technical_interface["total_fuel_volume_cap_nm3_h"]
+            )
+            aggregate_ng_lhv_mj_per_nm3 = float(
+                aggregate_generator_technical_interface["natural_gas_lhv_mj_per_nm3"]
+            )
+            aggregate_electrical_capacity_mw = float(
+                aggregate_generator_technical_interface["electrical_capacity_mw"]
+            )
+            if not 0.0 < aggregate_efficiency < 1.0:
+                raise S44CModelBuilderError(
+                    "Aggregate generator electricity efficiency must be inside (0, 1)."
+                )
+            if (
+                aggregate_volume_cap_nm3_h <= 0.0
+                or aggregate_ng_lhv_mj_per_nm3 <= 0.0
+                or aggregate_electrical_capacity_mw <= 0.0
+            ):
+                raise S44CModelBuilderError(
+                    "Aggregate generator volume cap, electrical capacity and natural-gas LHV must be positive."
+                )
+            model.ng_to_vattenfall_mwh = Var(model.TIME, domain=NonNegativeReals)
+        else:
+            aggregate_efficiency = WAG_TO_POWER_EFFICIENCY
+            aggregate_volume_cap_nm3_h = VATTENFALL_TOTAL_WAG_CAP_NM3_H
+            aggregate_ng_lhv_mj_per_nm3 = 35.8
+            aggregate_electrical_capacity_mw = 0.0
+            model.ng_to_vattenfall_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
     else:
         model.bfg_to_vattenfall = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.cog_to_vattenfall = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.bofg_to_vattenfall = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.ng_to_vattenfall_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
     model.bfg_flared = Var(model.TIME, domain=NonNegativeReals)
     model.cog_flared = Var(model.TIME, domain=NonNegativeReals)
     model.bofg_flared = Var(model.TIME, domain=NonNegativeReals)
@@ -1857,6 +2312,7 @@ def _add_c0_minimal_wag_layer(
         + m.bfg_to_hsm[t]
         + m.bfg_to_boiler[t]
         + m.bfg_to_vattenfall[t]
+        + m.bfg_to_flexible_other_site_heat[t]
         + m.bfg_flared[t],
     )
     model.cog_balance = Constraint(
@@ -1869,12 +2325,17 @@ def _add_c0_minimal_wag_layer(
         + m.cog_to_pefa_branderij[t]
         + m.cog_to_boiler[t]
         + m.cog_to_vattenfall[t]
+        + m.cog_to_flexible_other_site_heat[t]
         + m.cog_flared[t],
     )
     model.bofg_balance = Constraint(
         model.TIME,
         rule=lambda m, t: m.bofg_generated[t]
-        == m.bofg_to_hsm[t] + m.bofg_to_pefa_malerij[t] + m.bofg_to_vattenfall[t] + m.bofg_flared[t],
+        == m.bofg_to_hsm[t]
+        + m.bofg_to_pefa_malerij[t]
+        + m.bofg_to_vattenfall[t]
+        + m.bofg_to_flexible_other_site_heat[t]
+        + m.bofg_flared[t],
     )
     if not enable_boiler_scaffold and not retire_legacy_boiler_placeholder:
         model.boiler_wag_cap = Constraint(
@@ -1887,7 +2348,19 @@ def _add_c0_minimal_wag_layer(
             == inputs.boiler_total_placeholder_mwh_h,
         )
     if generator_active:
-        if generator_unit_interface is None:
+        if aggregate_generator_technical_interface is not None:
+            model.vattenfall_total_volume_cap = Constraint(
+                model.TIME,
+                rule=lambda m, t: (
+                    m.bfg_to_vattenfall[t] / (lhv_mj_per_nm3["BFG"] / MJ_PER_MWH)
+                    + m.cog_to_vattenfall[t] / (lhv_mj_per_nm3["COG"] / MJ_PER_MWH)
+                    + m.bofg_to_vattenfall[t] / (lhv_mj_per_nm3["BOFG"] / MJ_PER_MWH)
+                    + m.ng_to_vattenfall_mwh[t]
+                    / (aggregate_ng_lhv_mj_per_nm3 / MJ_PER_MWH)
+                )
+                <= aggregate_volume_cap_nm3_h,
+            )
+        elif generator_unit_interface is None:
             model.vattenfall_total_volume_cap = Constraint(
             model.TIME,
             rule=lambda m, t: (
@@ -1897,7 +2370,12 @@ def _add_c0_minimal_wag_layer(
             )
             <= VATTENFALL_TOTAL_WAG_CAP_NM3_H,
             )
-        if enable_generator_interface and generator_interface_cap_mode == "inherited_profile" and generator_unit_interface is None:
+        if (
+            enable_generator_interface
+            and generator_interface_cap_mode == "inherited_profile"
+            and generator_unit_interface is None
+            and aggregate_generator_technical_interface is None
+        ):
             model.vattenfall_fixed_interface_cap = Constraint(
                 model.TIME,
                 rule=lambda m, t: m.bfg_to_vattenfall[t] + m.cog_to_vattenfall[t] + m.bofg_to_vattenfall[t]
@@ -1907,6 +2385,29 @@ def _add_c0_minimal_wag_layer(
             model.TIME,
             rule=lambda m, t: m.bfg_to_vattenfall[t] + m.cog_to_vattenfall[t] + m.bofg_to_vattenfall[t],
         )
+        if aggregate_generator_technical_interface is not None:
+            model.aggregate_generator_volume_used_nm3_h = Expression(
+                model.TIME,
+                rule=lambda m, t: (
+                    m.bfg_to_vattenfall[t] / (lhv_mj_per_nm3["BFG"] / MJ_PER_MWH)
+                    + m.cog_to_vattenfall[t] / (lhv_mj_per_nm3["COG"] / MJ_PER_MWH)
+                    + m.bofg_to_vattenfall[t] / (lhv_mj_per_nm3["BOFG"] / MJ_PER_MWH)
+                    + m.ng_to_vattenfall_mwh[t]
+                    / (aggregate_ng_lhv_mj_per_nm3 / MJ_PER_MWH)
+                ),
+            )
+            model.aggregate_generator_volume_unused_nm3_h = Expression(
+                model.TIME,
+                rule=lambda m, t: aggregate_volume_cap_nm3_h
+                - m.aggregate_generator_volume_used_nm3_h[t],
+            )
+        else:
+            model.aggregate_generator_volume_used_nm3_h = Expression(
+                model.TIME, rule=lambda _m, _t: 0.0
+            )
+            model.aggregate_generator_volume_unused_nm3_h = Expression(
+                model.TIME, rule=lambda _m, _t: 0.0
+            )
         if generator_unit_interface is not None:
             model.generator_named_ng_mwh = Expression(
                 model.TIME, rule=lambda m, t: m.ng_to_vn25_mwh[t]
@@ -1915,45 +2416,163 @@ def _add_c0_minimal_wag_layer(
                 model.TIME,
                 rule=lambda m, t: m.vn25_total_fuel_mwh[t] + m.ij01_total_fuel_mwh[t],
             )
-            model.generator_electricity_mwh = Expression(
+            model.wag_generator_electricity_mwh = Expression(
                 model.TIME,
-                rule=lambda m, t: m.vn25_electricity_mwh[t] + m.ij01_electricity_mwh[t],
+                rule=lambda m, t: vn25_efficiency * m.vn25_wag_fuel_mwh[t]
+                + m.ij01_electricity_mwh[t],
             )
-            model.wag_electricity_mwh = Expression(
-                model.TIME, rule=lambda m, t: m.generator_electricity_mwh[t]
+            model.ng_generator_electricity_mwh = Expression(
+                model.TIME,
+                rule=lambda m, t: vn25_efficiency * m.ng_to_vn25_mwh[t],
+            )
+        elif aggregate_generator_technical_interface is not None:
+            model.generator_named_ng_mwh = Expression(
+                model.TIME, rule=lambda m, t: m.ng_to_vattenfall_mwh[t]
+            )
+            model.generator_total_fuel_mwh = Expression(
+                model.TIME,
+                rule=lambda m, t: m.vattenfall_fuel_mwh[t]
+                + m.ng_to_vattenfall_mwh[t],
+            )
+            model.wag_generator_electricity_mwh = Expression(
+                model.TIME,
+                rule=lambda m, t: aggregate_efficiency * m.vattenfall_fuel_mwh[t],
+            )
+            model.ng_generator_electricity_mwh = Expression(
+                model.TIME,
+                rule=lambda m, t: aggregate_efficiency * m.ng_to_vattenfall_mwh[t],
             )
         else:
             model.generator_named_ng_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
             model.generator_total_fuel_mwh = Expression(
                 model.TIME, rule=lambda m, t: m.vattenfall_fuel_mwh[t]
             )
-            model.generator_electricity_mwh = Expression(
+            model.wag_generator_electricity_mwh = Expression(
                 model.TIME,
                 rule=lambda m, t: WAG_TO_POWER_EFFICIENCY * m.vattenfall_fuel_mwh[t],
             )
-            model.wag_electricity_mwh = Expression(
-                model.TIME, rule=lambda m, t: m.generator_electricity_mwh[t]
+            model.ng_generator_electricity_mwh = Expression(
+                model.TIME, rule=lambda _m, _t: 0.0
             )
-        model.gross_electricity_mwh = Expression(
+        model.total_generator_electricity_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: m.wag_generator_electricity_mwh[t]
+            + m.ng_generator_electricity_mwh[t],
+        )
+        if aggregate_generator_technical_interface is not None:
+            model.aggregate_generator_electrical_capacity = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.total_generator_electricity_mwh[t]
+                <= aggregate_electrical_capacity_mw,
+            )
+        # Legacy aliases retain their historical total internal-offset meaning.
+        # True WAG-only output is exposed only by wag_generator_electricity_mwh.
+        model.generator_electricity_mwh = Expression(
+            model.TIME, rule=lambda m, t: m.total_generator_electricity_mwh[t]
+        )
+        model.wag_electricity_mwh = Expression(
+            model.TIME, rule=lambda m, t: m.total_generator_electricity_mwh[t]
+        )
+        model.represented_gross_electricity_before_background_mwh = Expression(
             model.TIME,
             rule=gross_electricity_rule or (lambda _m, _t: 0.0),
         )
-        model.no_export_from_wag_generation = Constraint(
+        model.site_background_electricity_mwh = Expression(
+            model.TIME, rule=lambda _m, _t: site_background_electricity_mwh_h
+        )
+        model.gross_total_electricity_mwh = Expression(
             model.TIME,
-            rule=lambda m, t: m.wag_electricity_mwh[t] <= m.gross_electricity_mwh[t],
+            rule=lambda m, t: m.represented_gross_electricity_before_background_mwh[t]
+            + m.site_background_electricity_mwh[t],
+        )
+        model.gross_electricity_mwh = Expression(
+            model.TIME, rule=lambda m, t: m.gross_total_electricity_mwh[t]
+        )
+        model.no_export_from_total_generation = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.total_generator_electricity_mwh[t]
+            <= m.gross_total_electricity_mwh[t],
+        )
+        model.gross_grid_import_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: m.gross_total_electricity_mwh[t]
+            - m.total_generator_electricity_mwh[t],
+        )
+        model.gross_grid_export_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.net_grid_exchange_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: m.gross_grid_import_mwh[t] - m.gross_grid_export_mwh[t],
         )
         model.net_grid_import_mwh = Expression(
+            model.TIME, rule=lambda m, t: m.net_grid_exchange_mwh[t]
+        )
+        model.gross_site_electricity_identity_residual_mwh = Expression(
             model.TIME,
-            rule=lambda m, t: m.gross_electricity_mwh[t] - m.wag_electricity_mwh[t],
+            rule=lambda m, t: m.gross_total_electricity_mwh[t]
+            - m.total_generator_electricity_mwh[t]
+            - m.gross_grid_import_mwh[t]
+            + m.gross_grid_export_mwh[t],
         )
     else:
         model.vattenfall_fuel_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.aggregate_generator_volume_used_nm3_h = Expression(
+            model.TIME, rule=lambda _m, _t: 0.0
+        )
+        model.aggregate_generator_volume_unused_nm3_h = Expression(
+            model.TIME, rule=lambda _m, _t: 0.0
+        )
         model.generator_named_ng_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.generator_total_fuel_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.wag_generator_electricity_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.ng_generator_electricity_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.total_generator_electricity_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.generator_electricity_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.wag_electricity_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
-        model.gross_electricity_mwh = Expression(model.TIME, rule=gross_electricity_rule or (lambda _m, _t: 0.0))
-        model.net_grid_import_mwh = Expression(model.TIME, rule=lambda m, t: m.gross_electricity_mwh[t])
+        model.represented_gross_electricity_before_background_mwh = Expression(
+            model.TIME, rule=gross_electricity_rule or (lambda _m, _t: 0.0)
+        )
+        model.site_background_electricity_mwh = Expression(
+            model.TIME, rule=lambda _m, _t: site_background_electricity_mwh_h
+        )
+        model.gross_total_electricity_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: m.represented_gross_electricity_before_background_mwh[t]
+            + m.site_background_electricity_mwh[t],
+        )
+        model.gross_electricity_mwh = Expression(
+            model.TIME, rule=lambda m, t: m.gross_total_electricity_mwh[t]
+        )
+        model.gross_grid_import_mwh = Expression(
+            model.TIME, rule=lambda m, t: m.gross_total_electricity_mwh[t]
+        )
+        model.gross_grid_export_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.net_grid_exchange_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: m.gross_grid_import_mwh[t] - m.gross_grid_export_mwh[t],
+        )
+        model.net_grid_import_mwh = Expression(
+            model.TIME, rule=lambda m, t: m.net_grid_exchange_mwh[t]
+        )
+        model.gross_site_electricity_identity_residual_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: m.gross_total_electricity_mwh[t]
+            - m.total_generator_electricity_mwh[t]
+            - m.gross_grid_import_mwh[t]
+            + m.gross_grid_export_mwh[t],
+        )
+    model.aggregate_generator_technical_interface_active = bool(
+        aggregate_generator_technical_interface
+    )
+    model.aggregate_generator_volume_cap_nm3_h = (
+        float(aggregate_volume_cap_nm3_h)
+        if aggregate_generator_technical_interface is not None
+        else 0.0
+    )
+    model.aggregate_generator_electrical_capacity_mw = (
+        float(aggregate_electrical_capacity_mw)
+        if aggregate_generator_technical_interface is not None
+        else 0.0
+    )
     model.wag_used = Expression(
         model.TIME,
         rule=lambda m, t: m.bfg_to_bf_hot_stove[t]
@@ -1970,7 +2589,10 @@ def _add_c0_minimal_wag_layer(
         + m.cog_to_boiler[t]
         + m.bfg_to_vattenfall[t]
         + m.cog_to_vattenfall[t]
-        + m.bofg_to_vattenfall[t],
+        + m.bofg_to_vattenfall[t]
+        + m.bfg_to_flexible_other_site_heat[t]
+        + m.cog_to_flexible_other_site_heat[t]
+        + m.bofg_to_flexible_other_site_heat[t],
     )
     model.wag_flared = Expression(
         model.TIME,
@@ -1993,6 +2615,7 @@ def _add_c0_minimal_wag_layer(
         - m.bfg_to_hsm[t]
         - m.bfg_to_boiler[t]
         - m.bfg_to_vattenfall[t]
+        - m.bfg_to_flexible_other_site_heat[t]
         - m.bfg_flared[t],
     )
     model.cog_balance_residual = Expression(
@@ -2005,6 +2628,7 @@ def _add_c0_minimal_wag_layer(
         - m.cog_to_pefa_branderij[t]
         - m.cog_to_boiler[t]
         - m.cog_to_vattenfall[t]
+        - m.cog_to_flexible_other_site_heat[t]
         - m.cog_flared[t],
     )
     model.bofg_balance_residual = Expression(
@@ -2013,6 +2637,7 @@ def _add_c0_minimal_wag_layer(
         - m.bofg_to_hsm[t]
         - m.bofg_to_pefa_malerij[t]
         - m.bofg_to_vattenfall[t]
+        - m.bofg_to_flexible_other_site_heat[t]
         - m.bofg_flared[t],
     )
     model.bfg_flare_co2_t = Expression(
@@ -2037,7 +2662,14 @@ def _add_c0_minimal_wag_layer(
     model.bfg_explicit_combustion_co2_t = Expression(
         model.TIME,
         rule=lambda m, t: combustion_t_per_mwh["BFG"]
-        * (m.bfg_to_bf_hot_stove[t] + m.bfg_to_hsm[t] + m.bfg_to_boiler[t] + m.bfg_to_vattenfall[t] + m.bfg_flared[t]),
+        * (
+            m.bfg_to_bf_hot_stove[t]
+            + m.bfg_to_hsm[t]
+            + m.bfg_to_boiler[t]
+            + m.bfg_to_vattenfall[t]
+            + m.bfg_to_flexible_other_site_heat[t]
+            + m.bfg_flared[t]
+        ),
     )
     model.cog_explicit_combustion_co2_t = Expression(
         model.TIME,
@@ -2050,13 +2682,20 @@ def _add_c0_minimal_wag_layer(
             + m.cog_to_pefa_branderij[t]
             + m.cog_to_boiler[t]
             + m.cog_to_vattenfall[t]
+            + m.cog_to_flexible_other_site_heat[t]
             + m.cog_flared[t]
         ),
     )
     model.bofg_explicit_combustion_co2_t = Expression(
         model.TIME,
         rule=lambda m, t: combustion_t_per_mwh["BOFG"]
-        * (m.bofg_to_hsm[t] + m.bofg_to_pefa_malerij[t] + m.bofg_to_vattenfall[t] + m.bofg_flared[t]),
+        * (
+            m.bofg_to_hsm[t]
+            + m.bofg_to_pefa_malerij[t]
+            + m.bofg_to_vattenfall[t]
+            + m.bofg_to_flexible_other_site_heat[t]
+            + m.bofg_flared[t]
+        ),
     )
     model.wag_explicit_combustion_co2_t = Expression(
         model.TIME,
@@ -2112,7 +2751,11 @@ def _build_c0_model(
     c0_fixed_schedule_hours_by_process: Mapping[str, Collection[int]] | None = None,
     c0_downstream_reference_routing: Mapping[str, Any] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
+    site_background_electricity_mwh_h: float = 0.0,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
+    bf_electricity_intensity_scale: float = 1.0,
+    aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
+    full_site_energy_bridge: Mapping[str, float] | None = None,
 ):
     if commitment_granularity not in {"hourly_binary", "daily_binary_hourly_throughput"}:
         raise S44CModelBuilderError(f"Unsupported commitment granularity: {commitment_granularity}")
@@ -2358,6 +3001,10 @@ def _build_c0_model(
             retire_legacy_boiler_placeholder=development_controller_activation != "none",
             development_controller_profile_weights=development_controller_profile_weights,
             linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
+            site_background_electricity_mwh_h=site_background_electricity_mwh_h,
+            bf_electricity_intensity_scale=bf_electricity_intensity_scale,
+            aggregate_generator_technical_interface=aggregate_generator_technical_interface,
+            full_site_energy_bridge=full_site_energy_bridge,
             kgf_underfiring_activity_rule=(
                 (lambda m, t: m.coke_output_kgf1[t]) if c0_coke_chain_reconciliation is not None else None
             ),
@@ -2552,6 +3199,10 @@ def _build_c0_model(
             )
             for t in model.TIME
         )
+    if full_site_energy_bridge is not None:
+        controller_tiebreaker += 1e-5 * sum(
+            model.flexible_other_site_heat_ng_mwh[t] for t in model.TIME
+        )
     day_commitment_tiebreaker = (
         1e-4 * sum(getattr(model, f"{name}_day_on")[d] for name in process_names for d in model.COMMITMENT_DAY)
         if commitment_granularity == "daily_binary_hourly_throughput"
@@ -2695,6 +3346,7 @@ def _build_c1_hybrid_model(
     c0_coke_chain_reconciliation: Mapping[str, float] | None = None,
     c1_coke_chain_reconciliation: Mapping[str, float] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
+    site_background_electricity_mwh_h: float = 0.0,
     hsm_carrier_precedence: Collection[str] | None = None,
     hsm_eligible_carriers: Collection[str] | None = None,
     generator_interface_cap_mode: str = "inherited_profile",
@@ -2703,6 +3355,7 @@ def _build_c1_hybrid_model(
     eaf_secondary_electricity_mwh_per_t_ls_override: float | None = None,
     dsp_electricity_mwh_per_t_coil_override: float | None = None,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
+    bf_electricity_intensity_scale: float = 1.0,
 ):
     if commitment_granularity not in {"hourly_binary", "daily_binary_hourly_throughput"}:
         raise S44CModelBuilderError(f"Unsupported commitment granularity: {commitment_granularity}")
@@ -3340,12 +3993,14 @@ def _build_c1_hybrid_model(
             retire_legacy_boiler_placeholder=development_controller_activation != "none",
             development_controller_profile_weights=development_controller_profile_weights,
             linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
+            site_background_electricity_mwh_h=site_background_electricity_mwh_h,
             hsm_carrier_precedence=hsm_carrier_precedence,
             hsm_eligible_carriers=hsm_eligible_carriers,
             generator_interface_cap_mode=generator_interface_cap_mode,
             generator_unit_interface=generator_unit_interface,
             eaf_secondary_electricity_mwh_per_t_ls_override=eaf_secondary_electricity_mwh_per_t_ls_override,
             dsp_electricity_mwh_per_t_coil_override=dsp_electricity_mwh_per_t_coil_override,
+            bf_electricity_intensity_scale=bf_electricity_intensity_scale,
             kgf_underfiring_activity_rule=(
                 (lambda m, t: m.coke_output[t])
                 if c1_coke_chain_reconciliation is not None
@@ -3466,6 +4121,7 @@ def _build_c1_model(
     continuous_must_run_activities: Collection[str] | None = None,
     c1_coke_chain_reconciliation: Mapping[str, float] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
+    site_background_electricity_mwh_h: float = 0.0,
     hsm_carrier_precedence: Collection[str] | None = None,
     hsm_eligible_carriers: Collection[str] | None = None,
     generator_interface_cap_mode: str = "inherited_profile",
@@ -3474,6 +4130,7 @@ def _build_c1_model(
     eaf_secondary_electricity_mwh_per_t_ls_override: float | None = None,
     dsp_electricity_mwh_per_t_coil_override: float | None = None,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
+    bf_electricity_intensity_scale: float = 1.0,
 ):
     if enable_c1_retained_bf_bof_route:
         return _build_c1_hybrid_model(
@@ -3497,6 +4154,7 @@ def _build_c1_model(
             continuous_must_run_activities=continuous_must_run_activities,
             c1_coke_chain_reconciliation=c1_coke_chain_reconciliation,
             linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
+            site_background_electricity_mwh_h=site_background_electricity_mwh_h,
             hsm_carrier_precedence=hsm_carrier_precedence,
             hsm_eligible_carriers=hsm_eligible_carriers,
             generator_interface_cap_mode=generator_interface_cap_mode,
@@ -3505,6 +4163,7 @@ def _build_c1_model(
             eaf_secondary_electricity_mwh_per_t_ls_override=eaf_secondary_electricity_mwh_per_t_ls_override,
             dsp_electricity_mwh_per_t_coil_override=dsp_electricity_mwh_per_t_coil_override,
             external_procurement_flow_coefficients=external_procurement_flow_coefficients,
+            bf_electricity_intensity_scale=bf_electricity_intensity_scale,
         )
     if development_controller_activation != "none":
         raise S44CModelBuilderError("Development WAG controllers require the retained C1 BF-BOF route.")
@@ -3736,13 +4395,22 @@ def _solve_c0_configuration(
     c0_fixed_schedule_hours_by_process: Mapping[str, Collection[int]] | None = None,
     c0_downstream_reference_routing: Mapping[str, Any] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
+    site_background_electricity_mwh_h: float = 0.0,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
     deterministic_cost_policy: Mapping[str, Any] | None = None,
+    wag_generation_yield_overrides: Mapping[str, float] | None = None,
+    bf_electricity_intensity_scale: float = 1.0,
+    aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
+    full_site_energy_bridge: Mapping[str, float] | None = None,
+    allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
     inputs = _build_c0_inputs(
         tables,
         horizon_hours_override=horizon_hours_override,
         target_multiplier=target_multiplier,
+    )
+    inputs = _apply_wag_generation_yield_overrides(
+        inputs, wag_generation_yield_overrides
     )
     inputs = _apply_c0_initial_inventory_overrides(inputs, initial_inventory_overrides)
     build_start = time.perf_counter()
@@ -3762,7 +4430,11 @@ def _solve_c0_configuration(
         c0_fixed_schedule_hours_by_process=c0_fixed_schedule_hours_by_process,
         c0_downstream_reference_routing=c0_downstream_reference_routing,
         linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
+        site_background_electricity_mwh_h=site_background_electricity_mwh_h,
         external_procurement_flow_coefficients=external_procurement_flow_coefficients,
+        bf_electricity_intensity_scale=bf_electricity_intensity_scale,
+        aggregate_generator_technical_interface=aggregate_generator_technical_interface,
+        full_site_energy_bridge=full_site_energy_bridge,
     )
     if rolling_production_progress_target_t is not None:
         _add_rolling_production_progress_tracking(
@@ -3787,6 +4459,7 @@ def _solve_c0_configuration(
             solver=solver,
             configuration_id="C0_current_BF_BOF_reference",
             deterministic_cost_policy=deterministic_cost_policy,
+            allocation_envelope_diagnostic=allocation_envelope_diagnostic,
         )
     except RuntimeError as exc:
         solve_runtime = time.perf_counter() - solve_start
@@ -3934,6 +4607,13 @@ def _solve_c0_configuration(
             if cost_metadata["primary_cost_best_bound_eur"] is not None
             else ""
         ),
+        "primary_cost_best_bound_availability": cost_metadata[
+            "primary_cost_best_bound_availability"
+        ],
+        "primary_cost_solver_status": cost_metadata["primary_cost_solver_status"],
+        "primary_cost_termination_condition": cost_metadata[
+            "primary_cost_termination_condition"
+        ],
         "primary_cost_mip_gap": cost_metadata["primary_cost_mip_gap"],
         "primary_cost_runtime_seconds": round(
             float(cost_metadata["primary_cost_runtime_seconds"]), 6
@@ -4024,6 +4704,40 @@ def _solve_c0_configuration(
         else 0.0,
         "natural_gas_nm3": 0.0,
         "natural_gas_boiler_mwh": round(sum(ng_boiler), 6),
+        "generator_named_ng_mwh": _costed_c0_ng_reporting_value(
+            sum(float(value(model.generator_named_ng_mwh[t])) for t in model.TIME)
+        )
+        if enable_minimal_wag_layer
+        else 0.0,
+        "full_site_fixed_ng_component_mwh": _costed_c0_ng_reporting_value(
+            sum(float(value(model.full_site_fixed_ng_component_mwh[t])) for t in model.TIME)
+        )
+        if enable_minimal_wag_layer
+        else 0.0,
+        "flexible_other_site_heat_ng_mwh": _costed_c0_ng_reporting_value(
+            sum(float(value(model.flexible_other_site_heat_ng_mwh[t])) for t in model.TIME)
+        )
+        if enable_minimal_wag_layer
+        else 0.0,
+        "full_site_energy_bridge_named_ng_mwh": _costed_c0_ng_reporting_value(
+            sum(float(value(model.full_site_energy_bridge_named_ng_mwh[t])) for t in model.TIME)
+        )
+        if enable_minimal_wag_layer
+        else 0.0,
+        "aggregate_generator_technical_interface_active": str(
+            enable_minimal_wag_layer
+            and model.aggregate_generator_technical_interface_active
+        ).lower(),
+        "aggregate_generator_volume_cap_nm3_h": (
+            model.aggregate_generator_volume_cap_nm3_h
+            if enable_minimal_wag_layer
+            else 0.0
+        ),
+        "aggregate_generator_electrical_capacity_mw": (
+            model.aggregate_generator_electrical_capacity_mw
+            if enable_minimal_wag_layer
+            else 0.0
+        ),
         "steam_mwh": round(sum(steam), 6),
         "oxygen_t": 0.0,
         "WAG_generated": round(sum(wag_generated), 6),
@@ -4066,6 +4780,45 @@ def _solve_c0_configuration(
         "allocation_tiebreaker": "non_economic_minimise_flare_1e-6" if enable_minimal_wag_layer else "",
         "caveat": "Solved C0 static BF-BOF development-only physical regression; WAG is balanced by carrier with process sinks, boiler placeholder, and flaring when minimal WAG layer is active.",
     }
+    if allocation_envelope_diagnostic is not None:
+        audit.update(
+            {
+                key: cost_metadata[key]
+                for key in (
+                    "allocation_envelope_active",
+                    "allocation_envelope_endpoint",
+                    "allocation_envelope_execution_hours",
+                    "allocation_envelope_objective_value_mwh",
+                    "allocation_envelope_runtime_seconds",
+                    "allocation_envelope_solver_status",
+                    "allocation_envelope_termination_condition",
+                    "allocation_envelope_mip_gap",
+                    "allocation_envelope_cost_eur",
+                    "allocation_envelope_cost_minus_primary_eur",
+                    "allocation_envelope_primary_cost_best_bound_eur",
+                    "allocation_envelope_primary_cost_best_bound_availability",
+                    "allocation_envelope_cost_minus_primary_best_bound_eur",
+                    "allocation_envelope_primary_objective_audit_status",
+                    "allocation_envelope_best_bound_audit_status",
+                    "allocation_envelope_upper_cost_tolerance_eur",
+                    "allocation_envelope_solver_cost_feasibility_tolerance_eur",
+                    "allocation_envelope_normal_cost_eur",
+                    "allocation_envelope_normal_cost_minus_upper_limit_eur",
+                    "allocation_envelope_normal_incumbent_min_formulation_feasible",
+                    "allocation_envelope_normal_incumbent_max_formulation_feasible",
+                    "allocation_envelope_normal_objective_value_mwh",
+                    "allocation_envelope_normal_handoff_snapshot",
+                    "allocation_envelope_endpoint_handoff_snapshot",
+                    "allocation_envelope_normal_handoff_hash",
+                    "allocation_envelope_endpoint_handoff_hash",
+                    "allocation_envelope_raw_endpoint_handoff_hash",
+                    "allocation_envelope_max_state_residual",
+                    "allocation_envelope_state_tolerance",
+                    "allocation_envelope_solver_state_feasibility_tolerance",
+                    "allocation_envelope_effective_state_tolerance",
+                )
+            }
+        )
     if enable_minimal_wag_layer:
         audit.update(
             {
@@ -4101,8 +4854,17 @@ def _solve_c0_configuration(
                 "COG_to_vattenfall_mwh": round(sum(float(value(model.cog_to_vattenfall[t])) for t in model.TIME), 6),
                 "BOFG_to_vattenfall_mwh": round(sum(float(value(model.bofg_to_vattenfall[t])) for t in model.TIME), 6),
                 "vattenfall_fuel_mwh": round(sum(float(value(model.vattenfall_fuel_mwh[t])) for t in model.TIME), 6),
+                "WAG_generator_electricity_mwh": round(sum(float(value(model.wag_generator_electricity_mwh[t])) for t in model.TIME), 6),
+                "NG_generator_electricity_mwh": round(sum(float(value(model.ng_generator_electricity_mwh[t])) for t in model.TIME), 6),
+                "total_generator_electricity_mwh": round(sum(float(value(model.total_generator_electricity_mwh[t])) for t in model.TIME), 6),
                 "wag_electricity_mwh": round(sum(float(value(model.wag_electricity_mwh[t])) for t in model.TIME), 6),
+                "represented_gross_electricity_before_background_mwh": round(sum(float(value(model.represented_gross_electricity_before_background_mwh[t])) for t in model.TIME), 6),
+                "site_background_electricity_mwh": round(sum(float(value(model.site_background_electricity_mwh[t])) for t in model.TIME), 6),
+                "gross_total_electricity_mwh": round(sum(float(value(model.gross_total_electricity_mwh[t])) for t in model.TIME), 6),
                 "gross_electricity_mwh": round(sum(float(value(model.gross_electricity_mwh[t])) for t in model.TIME), 6),
+                "gross_grid_import_mwh": round(sum(float(value(model.gross_grid_import_mwh[t])) for t in model.TIME), 6),
+                "gross_grid_export_mwh": round(sum(float(value(model.gross_grid_export_mwh[t])) for t in model.TIME), 6),
+                "net_grid_exchange_mwh": round(sum(float(value(model.net_grid_exchange_mwh[t])) for t in model.TIME), 6),
                 "net_grid_import_mwh": round(sum(float(value(model.net_grid_import_mwh[t])) for t in model.TIME), 6),
                 "BFG_flared_mwh": round(sum(float(value(model.bfg_flared[t])) for t in model.TIME), 6),
                 "COG_flared_mwh": round(sum(float(value(model.cog_flared[t])) for t in model.TIME), 6),
@@ -4286,7 +5048,7 @@ def _solve_c0_configuration(
                     + _model_value_or_zero(model, "electricity_boundary_development_mwh", t), 6
                 ),
                 "electricity_bucket_sum_residual_mwh": round(
-                    float(value(model.gross_electricity_mwh[t]))
+                    float(value(model.represented_gross_electricity_before_background_mwh[t]))
                     - _model_value_or_zero(model, "development_controller_electricity_mwh", t)
                     - _model_value_or_zero(model, "electricity_boundary_development_mwh", t), 9
                 ) if development_controller_activation == "full_electricity_boundary" else 0.0,
@@ -4371,10 +5133,75 @@ def _solve_c0_configuration(
                 "BOFG_to_vattenfall_mwh": round(float(value(model.bofg_to_vattenfall[t])), 6)
                 if enable_minimal_wag_layer
                 else "",
+                "NG_to_vattenfall_mwh": round(float(value(model.ng_to_vattenfall_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "aggregate_generator_volume_used_nm3_h": round(
+                    float(value(model.aggregate_generator_volume_used_nm3_h[t])), 6
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "aggregate_generator_volume_unused_nm3_h": round(
+                    float(value(model.aggregate_generator_volume_unused_nm3_h[t])), 6
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "aggregate_generator_electrical_capacity_mw": (
+                    model.aggregate_generator_electrical_capacity_mw
+                    if enable_minimal_wag_layer
+                    else ""
+                ),
+                "BFG_to_flexible_other_site_heat_mwh": round(
+                    float(value(model.bfg_to_flexible_other_site_heat[t])), 6
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "COG_to_flexible_other_site_heat_mwh": round(
+                    float(value(model.cog_to_flexible_other_site_heat[t])), 6
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "BOFG_to_flexible_other_site_heat_mwh": round(
+                    float(value(model.bofg_to_flexible_other_site_heat[t])), 6
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "flexible_other_site_heat_ng_mwh": _costed_c0_ng_reporting_value(
+                    float(value(model.flexible_other_site_heat_ng_mwh[t]))
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "full_site_fixed_ng_component_mwh": _costed_c0_ng_reporting_value(
+                    float(value(model.full_site_fixed_ng_component_mwh[t]))
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "full_site_energy_bridge_named_ng_mwh": _costed_c0_ng_reporting_value(
+                    float(value(model.full_site_energy_bridge_named_ng_mwh[t]))
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "flexible_other_site_heat_service_envelope_mwh": round(
+                    float(value(model.flexible_other_site_heat_service_envelope_mwh[t])), 6
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "normal_case_flexible_ng_validation_reference_mwh": round(
+                    float(
+                        value(
+                            model.normal_case_flexible_ng_validation_reference_mwh[t]
+                        )
+                    ),
+                    6,
+                )
+                if enable_minimal_wag_layer
+                else "",
                 "vattenfall_fuel_mwh": round(float(value(model.vattenfall_fuel_mwh[t])), 6)
                 if enable_minimal_wag_layer
                 else "",
-                "generator_named_ng_mwh": round(float(value(model.generator_named_ng_mwh[t])), 6)
+                "generator_named_ng_mwh": _costed_c0_ng_reporting_value(
+                    float(value(model.generator_named_ng_mwh[t]))
+                )
                 if enable_minimal_wag_layer
                 else "",
                 "generator_total_fuel_mwh": round(float(value(model.generator_total_fuel_mwh[t])), 6)
@@ -4383,11 +5210,45 @@ def _solve_c0_configuration(
                 "generator_electricity_mwh": round(float(value(model.generator_electricity_mwh[t])), 6)
                 if enable_minimal_wag_layer
                 else "",
+                "WAG_generator_electricity_mwh": round(float(value(model.wag_generator_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "NG_generator_electricity_mwh": round(float(value(model.ng_generator_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "total_generator_electricity_mwh": round(float(value(model.total_generator_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
                 "generator_unit_interface_active": 0.0,
+                "aggregate_generator_technical_interface_active": 1.0
+                if enable_minimal_wag_layer
+                and model.aggregate_generator_technical_interface_active
+                else 0.0,
                 "wag_electricity_mwh": round(float(value(model.wag_electricity_mwh[t])), 6)
                 if enable_minimal_wag_layer
                 else "",
+                "represented_gross_electricity_before_background_mwh": round(float(value(model.represented_gross_electricity_before_background_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "site_background_electricity_mwh": round(float(value(model.site_background_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "gross_total_electricity_mwh": round(float(value(model.gross_total_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
                 "gross_electricity_mwh": round(float(value(model.gross_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "gross_grid_import_mwh": round(float(value(model.gross_grid_import_mwh[t])), 12)
+                if enable_minimal_wag_layer
+                else "",
+                "gross_grid_export_mwh": round(float(value(model.gross_grid_export_mwh[t])), 12)
+                if enable_minimal_wag_layer
+                else "",
+                "net_grid_exchange_mwh": round(float(value(model.net_grid_exchange_mwh[t])), 12)
+                if enable_minimal_wag_layer
+                else "",
+                "gross_site_electricity_identity_residual_mwh": round(float(value(model.gross_site_electricity_identity_residual_mwh[t])), 12)
                 if enable_minimal_wag_layer
                 else "",
                 "net_grid_import_mwh": round(float(value(model.net_grid_import_mwh[t])), 12)
@@ -4498,10 +5359,13 @@ def _solve_c1_configuration(
     generator_unit_interface: Mapping[str, Any] | None = None,
     c1_energy_boundary: Mapping[str, float] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
+    site_background_electricity_mwh_h: float = 0.0,
     eaf_secondary_electricity_mwh_per_t_ls_override: float | None = None,
     dsp_electricity_mwh_per_t_coil_override: float | None = None,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
     deterministic_cost_policy: Mapping[str, Any] | None = None,
+    wag_generation_yield_overrides: Mapping[str, float] | None = None,
+    bf_electricity_intensity_scale: float = 1.0,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
     inputs = _build_c1_inputs(
         tables,
@@ -4509,6 +5373,13 @@ def _solve_c1_configuration(
         target_multiplier=target_multiplier,
         include_retained_bf_bof=enable_c1_retained_bf_bof_route,
     )
+    if inputs.retained_bf_bof is not None:
+        inputs = replace(
+            inputs,
+            retained_bf_bof=_apply_wag_generation_yield_overrides(
+                inputs.retained_bf_bof, wag_generation_yield_overrides
+            ),
+        )
     inputs = _apply_c1_initial_inventory_overrides(inputs, initial_inventory_overrides)
     build_start = time.perf_counter()
     model = _build_c1_model(
@@ -4536,9 +5407,11 @@ def _solve_c1_configuration(
         generator_unit_interface=generator_unit_interface,
         c1_energy_boundary=c1_energy_boundary,
         linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
+        site_background_electricity_mwh_h=site_background_electricity_mwh_h,
         eaf_secondary_electricity_mwh_per_t_ls_override=eaf_secondary_electricity_mwh_per_t_ls_override,
         dsp_electricity_mwh_per_t_coil_override=dsp_electricity_mwh_per_t_coil_override,
         external_procurement_flow_coefficients=external_procurement_flow_coefficients,
+        bf_electricity_intensity_scale=bf_electricity_intensity_scale,
     )
     if rolling_production_progress_target_t is not None:
         _add_rolling_production_progress_tracking(
@@ -4784,6 +5657,13 @@ def _solve_c1_configuration(
             if cost_metadata["primary_cost_best_bound_eur"] is not None
             else ""
         ),
+        "primary_cost_best_bound_availability": cost_metadata[
+            "primary_cost_best_bound_availability"
+        ],
+        "primary_cost_solver_status": cost_metadata["primary_cost_solver_status"],
+        "primary_cost_termination_condition": cost_metadata[
+            "primary_cost_termination_condition"
+        ],
         "primary_cost_mip_gap": cost_metadata["primary_cost_mip_gap"],
         "primary_cost_runtime_seconds": round(
             float(cost_metadata["primary_cost_runtime_seconds"]), 6
@@ -5009,13 +5889,40 @@ def _solve_c1_configuration(
         "vattenfall_fuel_mwh": round(sum(float(value(model.vattenfall_fuel_mwh[t])) for t in model.TIME), 6)
         if enable_minimal_wag_layer
         else 0.0,
+        "WAG_generator_electricity_mwh": round(sum(float(value(model.wag_generator_electricity_mwh[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "NG_generator_electricity_mwh": round(sum(float(value(model.ng_generator_electricity_mwh[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "total_generator_electricity_mwh": round(sum(float(value(model.total_generator_electricity_mwh[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
         "wag_electricity_mwh": round(sum(float(value(model.wag_electricity_mwh[t])) for t in model.TIME), 6)
         if enable_minimal_wag_layer
         else 0.0,
+        "represented_gross_electricity_before_background_mwh": round(sum(float(value(model.represented_gross_electricity_before_background_mwh[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else round(sum(float(value(model.electricity_mwh[t])) for t in model.TIME), 6),
+        "site_background_electricity_mwh": round(sum(float(value(model.site_background_electricity_mwh[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "gross_total_electricity_mwh": round(sum(float(value(model.gross_total_electricity_mwh[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else round(sum(float(value(model.electricity_mwh[t])) for t in model.TIME), 6),
         "gross_electricity_mwh": round(sum(float(value(model.gross_electricity_mwh[t])) for t in model.TIME), 6)
         if enable_minimal_wag_layer
         else round(sum(float(value(model.electricity_mwh[t])) for t in model.TIME), 6),
         "net_grid_import_mwh": round(sum(float(value(model.net_grid_import_mwh[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else round(sum(float(value(model.electricity_mwh[t])) for t in model.TIME), 6),
+        "gross_grid_import_mwh": round(sum(float(value(model.gross_grid_import_mwh[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else round(sum(float(value(model.electricity_mwh[t])) for t in model.TIME), 6),
+        "gross_grid_export_mwh": round(sum(float(value(model.gross_grid_export_mwh[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "net_grid_exchange_mwh": round(sum(float(value(model.net_grid_exchange_mwh[t])) for t in model.TIME), 6)
         if enable_minimal_wag_layer
         else round(sum(float(value(model.electricity_mwh[t])) for t in model.TIME), 6),
         "BFG_flared_mwh": round(sum(float(value(model.bfg_flared[t])) for t in model.TIME), 6)
@@ -5361,7 +6268,7 @@ def _solve_c1_configuration(
                     + _model_value_or_zero(model, "electricity_boundary_development_mwh", t), 6
                 ),
                 "electricity_bucket_sum_residual_mwh": round(
-                    float(value(model.gross_electricity_mwh[t] - model.electricity_mwh[t]))
+                    float(value(model.represented_gross_electricity_before_background_mwh[t] - model.electricity_mwh[t]))
                     - _model_value_or_zero(model, "development_controller_electricity_mwh", t)
                     - _model_value_or_zero(model, "electricity_boundary_development_mwh", t), 9
                 ) if development_controller_activation == "full_electricity_boundary" else 0.0,
@@ -5466,6 +6373,15 @@ def _solve_c1_configuration(
                 "generator_electricity_mwh": round(float(value(model.generator_electricity_mwh[t])), 6)
                 if enable_minimal_wag_layer
                 else 0.0,
+                "WAG_generator_electricity_mwh": round(float(value(model.wag_generator_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "NG_generator_electricity_mwh": round(float(value(model.ng_generator_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "total_generator_electricity_mwh": round(float(value(model.total_generator_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
                 "generator_unit_interface_active": 1.0
                 if enable_minimal_wag_layer and getattr(model, "generator_unit_interface_active", False)
                 else 0.0,
@@ -5526,9 +6442,30 @@ def _solve_c1_configuration(
                 "wag_electricity_mwh": round(float(value(model.wag_electricity_mwh[t])), 6)
                 if enable_minimal_wag_layer
                 else 0.0,
+                "represented_gross_electricity_before_background_mwh": round(float(value(model.represented_gross_electricity_before_background_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else round(float(value(model.electricity_mwh[t])), 6),
+                "site_background_electricity_mwh": round(float(value(model.site_background_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "gross_total_electricity_mwh": round(float(value(model.gross_total_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else round(float(value(model.electricity_mwh[t])), 6),
                 "gross_electricity_mwh": round(float(value(model.gross_electricity_mwh[t])), 6)
                 if enable_minimal_wag_layer
                 else round(float(value(model.electricity_mwh[t])), 6),
+                "gross_grid_import_mwh": round(float(value(model.gross_grid_import_mwh[t])), 12)
+                if enable_minimal_wag_layer
+                else round(float(value(model.electricity_mwh[t])), 6),
+                "gross_grid_export_mwh": round(float(value(model.gross_grid_export_mwh[t])), 12)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "net_grid_exchange_mwh": round(float(value(model.net_grid_exchange_mwh[t])), 12)
+                if enable_minimal_wag_layer
+                else round(float(value(model.electricity_mwh[t])), 6),
+                "gross_site_electricity_identity_residual_mwh": round(float(value(model.gross_site_electricity_identity_residual_mwh[t])), 12)
+                if enable_minimal_wag_layer
+                else 0.0,
                 "net_grid_import_mwh": round(float(value(model.net_grid_import_mwh[t])), 12)
                 if enable_minimal_wag_layer
                 else round(float(value(model.electricity_mwh[t])), 6),
@@ -5719,15 +6656,62 @@ def run_s44c_unified_physical_regression(
     generator_unit_interface: Mapping[str, Any] | None = None,
     c1_energy_boundary: Mapping[str, float] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
+    site_background_electricity_mwh_h: float = 0.0,
+    site_background_electricity_mwh_h_by_configuration: Mapping[str, float] | None = None,
     eaf_secondary_electricity_mwh_per_t_ls_override: float | None = None,
     dsp_electricity_mwh_per_t_coil_override: float | None = None,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
     deterministic_cost_policy: Mapping[str, Any] | None = None,
+    wag_generation_yield_overrides_by_configuration: Mapping[
+        str, Mapping[str, float]
+    ]
+    | None = None,
+    bf_electricity_intensity_scale_by_configuration: Mapping[str, float] | None = None,
+    c0_aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
+    c0_full_site_energy_bridge: Mapping[str, float] | None = None,
+    c0_allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     start = time.perf_counter()
     timestamp = now_utc()
     resolved_run_id = run_id or f"{MODE_ID}_{timestamp.strftime('%Y%m%d_%H%M%S')}"
     input_path = Path(input_dir)
+    if site_background_electricity_mwh_h < 0.0:
+        raise S44CModelBuilderError("Site background electricity must be non-negative.")
+    background_overrides = dict(site_background_electricity_mwh_h_by_configuration or {})
+    unknown_background_configurations = set(background_overrides).difference(CONFIGURATIONS)
+    if unknown_background_configurations:
+        raise S44CModelBuilderError(
+            "Unknown site-background configuration(s): "
+            f"{sorted(unknown_background_configurations)}."
+        )
+    resolved_site_background_by_configuration = {
+        configuration: float(
+            background_overrides.get(configuration, site_background_electricity_mwh_h)
+        )
+        for configuration in CONFIGURATIONS
+    }
+    if any(value < 0.0 for value in resolved_site_background_by_configuration.values()):
+        raise S44CModelBuilderError(
+            "Every configuration-specific site background electricity value must be non-negative."
+        )
+    wag_yield_overrides = dict(wag_generation_yield_overrides_by_configuration or {})
+    bf_electricity_scales = dict(bf_electricity_intensity_scale_by_configuration or {})
+    unknown_overlay_configurations = (
+        set(wag_yield_overrides) | set(bf_electricity_scales)
+    ).difference(CONFIGURATIONS)
+    if unknown_overlay_configurations:
+        raise S44CModelBuilderError(
+            "Unknown user-authorized overlay configuration(s): "
+            f"{sorted(unknown_overlay_configurations)}."
+        )
+    resolved_bf_electricity_scales = {
+        configuration: float(bf_electricity_scales.get(configuration, 1.0))
+        for configuration in CONFIGURATIONS
+    }
+    if any(value <= 0.0 for value in resolved_bf_electricity_scales.values()):
+        raise S44CModelBuilderError(
+            "Every BF electricity-intensity scale must be positive."
+        )
     validation_result = validate_unified_dev_inputs(input_path)
     write_validation_outputs(validation_result, input_path)
     if validation_result["failure_count"] != 0:
@@ -5817,8 +6801,20 @@ def run_s44c_unified_physical_regression(
             c0_coke_chain_reconciliation=c0_coke_chain_reconciliation,
             c0_downstream_reference_routing=c0_downstream_reference_routing,
             linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
+            site_background_electricity_mwh_h=resolved_site_background_by_configuration[
+                "C0_current_BF_BOF_reference"
+            ],
             external_procurement_flow_coefficients=external_procurement_flow_coefficients,
             deterministic_cost_policy=deterministic_cost_policy,
+            wag_generation_yield_overrides=wag_yield_overrides.get(
+                "C0_current_BF_BOF_reference"
+            ),
+            bf_electricity_intensity_scale=resolved_bf_electricity_scales[
+                "C0_current_BF_BOF_reference"
+            ],
+            aggregate_generator_technical_interface=c0_aggregate_generator_technical_interface,
+            full_site_energy_bridge=c0_full_site_energy_bridge,
+            allocation_envelope_diagnostic=c0_allocation_envelope_diagnostic,
         )
         build_audits.append(c0_audit)
         constraint_audits.extend(c0_constraints)
@@ -5922,10 +6918,19 @@ def run_s44c_unified_physical_regression(
         generator_unit_interface=generator_unit_interface,
         c1_energy_boundary=c1_energy_boundary,
         linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
+        site_background_electricity_mwh_h=resolved_site_background_by_configuration[
+            "C1_phase1_BF_BOF_plus_DRP_EAF"
+        ],
         eaf_secondary_electricity_mwh_per_t_ls_override=eaf_secondary_electricity_mwh_per_t_ls_override,
         dsp_electricity_mwh_per_t_coil_override=dsp_electricity_mwh_per_t_coil_override,
         external_procurement_flow_coefficients=external_procurement_flow_coefficients,
         deterministic_cost_policy=deterministic_cost_policy,
+        wag_generation_yield_overrides=wag_yield_overrides.get(
+            "C1_phase1_BF_BOF_plus_DRP_EAF"
+        ),
+        bf_electricity_intensity_scale=resolved_bf_electricity_scales[
+            "C1_phase1_BF_BOF_plus_DRP_EAF"
+        ],
     )
     build_audits.append(c1_audit)
     constraint_audits.extend(c1_constraints)
@@ -5957,6 +6962,25 @@ def run_s44c_unified_physical_regression(
         "c1_energy_boundary_active": c1_energy_boundary is not None,
         "c1_energy_boundary": dict(c1_energy_boundary or {}),
         "linde_n2_auxiliary_electricity_mwh_h": linde_n2_auxiliary_electricity_mwh_h,
+        "site_background_electricity_mwh_h": site_background_electricity_mwh_h,
+        "site_background_electricity_mwh_h_by_configuration": dict(
+            resolved_site_background_by_configuration
+        ),
+        "wag_generation_yield_overrides_by_configuration": wag_yield_overrides,
+        "bf_electricity_intensity_scale_by_configuration": resolved_bf_electricity_scales,
+        "c0_aggregate_generator_technical_interface": dict(
+            c0_aggregate_generator_technical_interface or {}
+        ),
+        "c0_full_site_energy_bridge": dict(c0_full_site_energy_bridge or {}),
+        **(
+            {
+                "c0_allocation_envelope_diagnostic": dict(
+                    c0_allocation_envelope_diagnostic
+                )
+            }
+            if c0_allocation_envelope_diagnostic is not None
+            else {}
+        ),
         "eaf_secondary_electricity_mwh_per_t_ls_override": eaf_secondary_electricity_mwh_per_t_ls_override,
         "dsp_electricity_mwh_per_t_coil_override": dsp_electricity_mwh_per_t_coil_override,
         "external_procurement_flow_coefficients": dict(

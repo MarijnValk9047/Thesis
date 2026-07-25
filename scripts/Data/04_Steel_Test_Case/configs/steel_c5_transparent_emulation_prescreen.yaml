@@ -1,0 +1,62 @@
+run_id: steel_c5_tata_benchmark_v1_20260721
+checkpoint_id: checkpoint_8_transparent_emulation_prescreen
+lineage_role: analytical_child_of_frozen_source_driven_baseline
+run_class: analytical_calibration_prescreen_no_solver
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_tata_benchmark_v1_20260721
+parameter_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/calibratable_parameter_contract.csv
+target_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/calibration_validation_target_contract.csv
+baseline_freeze: data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/baseline_freeze.json
+kgf_baseline_ledger: data/03_Optimisation/inputs/assets/steel/S4/s4_4c5p_e_annual_c0_c1_physical_accounting_reconciliation/c5_annual_anchor_reconciliation_matrix.csv
+pefa_baseline_activity: data/03_Optimisation/inputs/assets/steel/S4/s4_4c5n_a_pefa_pelletizing_layer/s4_4c5n_a_pefa_activity_report.csv
+modelbuilder: scripts/Data/04_Steel_Test_Case/steel/s4_4c_unified_physical_modelbuilder.py
+source_cards:
+  kgf: data/03_Optimisation/inputs/assets/steel/source_cards/Coking_Plants_Parameters.md
+  pefa: data/03_Optimisation/inputs/assets/steel/source_cards/PELLETIZING_Parameters.md
+design:
+  round_count: 1
+  maximum_rounds: 2
+  parameter_family_count: 1
+  maximum_parameter_families: 2
+  source_baseline:
+    c0_pefa_mt_y: 4.3125
+    c1_pefa_mt_y: 4.963235294118
+  overlay_candidates:
+    c0_pefa_mt_y: 4.6
+    c1_pefa_mt_y: [4.0, 4.25, 4.5, 4.75, 5.0]
+  source_ranges:
+    c0_pefa_mt_y: [4.6, 4.6]
+    c1_pefa_mt_y: [4.0, 5.0]
+  source_central:
+    c0_pefa_mt_y: 4.6
+    c1_pefa_mt_y: 5.0
+  c1_central_equals_high: true
+  annual_band_not_hourly_flexibility: true
+scoring:
+  kgf_family_weight: 1.0
+  pefa_family_weight: 1.0
+  source_central_deviation_penalty_weight: 0.05
+  direct_target_overlap_penalty_weight: 0.25
+  family_error: mean_absolute_signed_residual_share_to_source_central
+  band_violation: distance_outside_source_band_divided_by_source_central
+  soft_score_formula: weighted_KGF_error_plus_weighted_PeFa_error_plus_source_deviation_penalty_plus_direct_target_overlap_penalty
+  hard_gates_excluded_from_soft_score: true
+hard_rejection_gates:
+  - direct_calibration_target_prescription
+  - missing_pefa_consumption_linkage
+  - missing_fired_pellet_inventory_identity
+  - missing_terminal_use_reconciliation
+prohibitions:
+  held_out_dri_target_used: false
+  held_out_periods_used: false
+  solver_runs_enabled: false
+  physical_parameter_changes_enabled: false
+  residual_or_site_load_enabled: false
+  export_relaxation_enabled: false
+  wag_or_generator_parameter_changes_enabled: false
+decision:
+  retained_rolling_candidate_count: 0
+  checkpoint_9_status: not_started_no_eligible_promoted_candidate
+  checkpoint_10_status: not_applicable_no_retained_candidate
+  promotion_status: source_valid_emulation_rejected
+  source_driven_baseline_retained: true

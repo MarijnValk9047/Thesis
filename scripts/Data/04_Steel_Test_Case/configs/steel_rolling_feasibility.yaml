@@ -1,0 +1,19 @@
+run_id: steel_rolling_feasibility_smoke_v1
+planning_horizon_hours: 168
+execution_block_hours: 24
+quota_per_execution_block_t: 5905.2
+quota_denominator: final_product_proxy
+annual_reference_target_mt_y: 6.75
+source_coke_chain:
+  dry_coal_t_per_t_coke: 1.285
+  bf_coke_t_per_t_hot_metal: 0.359
+availability_policy:
+  c0: fixed_static_binary_schedule
+  c1: bottom_up_fixed_retained_route
+development_controller_activation: full
+market_prices_enabled: false
+energy_cost_objective_enabled: false
+product_revenue_enabled: false
+co2_ets_objective_enabled: false
+solver_time_limit_seconds: 120
+output_policy: minimal
