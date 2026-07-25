@@ -15,6 +15,40 @@ Work in minimal-context mode by default.
 
 For more detail on this working style, read `docs/optimisation/CODEX_MINIMAL_CONTEXT.md`.
 
+## Worktree Hygiene And Artifact Classification
+
+Keep the worktree clean as a normal completion requirement.
+
+- At task start, record the branch, HEAD, staged state, tracked modifications,
+  and visible untracked files. Stop on a required-baseline mismatch.
+- Do not mix unexplained pre-existing changes into a new task. Establish their
+  ownership and either finish the existing change set, use a separate
+  worktree, or quarantine the unrelated local artifacts first.
+- Before writing, declare the files or bounded subsystem that may change and,
+  for generated output, follow `docs/repository/CODEX_OUTPUT_CONTRACT.md`.
+- Classify every new file as one of:
+  - canonical source: code, configs, tests, stable docs, or executable
+    contracts that belong in Git;
+  - compact provenance: accepted manifests, summaries, and decision records
+    that are small and thesis-critical;
+  - generated local output: reproducible runs, dispatch tables, solver logs,
+    exports, and broad diagnostic CSV/JSON bundles that stay ignored;
+  - quarantine: ambiguous research evidence preserved under the ignored
+    `workspace_triage/` tree with its original path or a manifest;
+  - disposable scratch: caches and verified accidental files removed only by
+    exact, reviewed path.
+- Route optimisation runs to ignored governed run roots and rolling caches to
+  `tmp/`. Never create new generated outputs at repository root or under a
+  canonical input directory.
+- Never use `git add .`. Stage explicit reviewed paths and keep commits
+  methodologically coherent. Do not push unless the user requests it.
+- Before committing, run relevant tests, `python
+  scripts/dev/check_portable_paths.py`, and `git diff --check`.
+- At task end, run `git status --short --branch`. Do not leave new unexplained
+  tracked or untracked work: commit canonical work, retain generated output in
+  an ignored governed root, quarantine ambiguous evidence, or remove verified
+  scratch safely.
+
 ## Prompt Behaviour
 
 When the user asks for "een prompt", "maak hier een opdracht van", "schrijf een Codex-prompt", or similar, default to writing a compact execution prompt first instead of immediately doing broad work.

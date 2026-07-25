@@ -13,6 +13,8 @@ venv/
 # Python bytecode/cache
 __pycache__/
 *.py[cod]
+/.pytest_cache/
+/.codex_test_tmp*/
 
 # IDE and local history
 .idea/
@@ -44,11 +46,20 @@ data/02_Forecasting/01_DA_prices/archive/
 # Workspace triage and local cleanup reports
 workspace_triage/
 
+# Root-level application exports are local-only. Canonical artifacts must be
+# moved to their governed repository location before intentional staging.
+/outputs/
+
 # Hydrogen optimisation run artifacts
 scripts/Data/03_Hydrogen_Test_Case/runs/
 
 # Steel optimisation run artifacts (compact provenance may be promoted manually)
 data/03_Optimisation/runs/
+
+# Historical C5 stage scripts wrote reproducible diagnostic bundles below the
+# S4 input tree. Existing tracked inputs remain tracked; new stage bundles are
+# local generated evidence and must not enter Git by default.
+/data/03_Optimisation/inputs/assets/steel/S4/s4_4*/
 
 # Documentation export bundles
 docs/optimisation/exports/
