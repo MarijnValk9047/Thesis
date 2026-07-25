@@ -1,10 +1,10 @@
-run_id: steel_c5_wag_ng_allocation_envelope_v2_20260725
+run_id: steel_c5_wag_ng_allocation_envelope_v3_20260725
 mode: c0_wag_ng_cost_optimal_allocation_envelope
 checkpoint_id: bounded_development_allocation_envelope_repair
 lineage_role: diagnostic/emulation sensitivity
 run_class: bounded deterministic DEVELOPMENT allocation-envelope repair
 output_policy: minimal
-output_root: data/03_Optimisation/runs/steel_c5_wag_ng_allocation_envelope_v2_20260725
+output_root: data/03_Optimisation/runs/steel_c5_wag_ng_allocation_envelope_v3_20260725
 retention_status: local
 git_eligible: false
 execution_authorized: true
@@ -13,7 +13,7 @@ experiment:
   physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
   mechanism_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_real_anchor_mechanism_experiment.yaml
   mechanism_result_root: data/03_Optimisation/runs/steel_c5_real_anchor_mechanism_experiment_v1_20260723
-  scratch_root: tmp/steel_c5_wag_ng_allocation_envelope_v2_20260725_cases
+  scratch_root: tmp/steel_c5_wag_ng_allocation_envelope_v3_20260725_cases
   candidate_count: 2
   scenario_count: 2
   endpoint_count: 2

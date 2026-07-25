@@ -70,6 +70,45 @@ def test_handoff_uses_only_represented_inventory_fields() -> None:
     assert overrides["C1_phase1_BF_BOF_plus_DRP_EAF"]["dri_buffer_initial_t"] == 9.0
 
 
+def test_handoff_prefers_unrounded_controller_state() -> None:
+    overrides = _next_inventory_overrides(
+        {
+            "C0_current_BF_BOF_reference": {
+                "coke_inventory_t": "1.0",
+                "coke_inventory_t_unrounded": "1.0000004",
+                "sinter_inventory_t": "2.0",
+                "sinter_inventory_t_unrounded": "2.0000004",
+                "hot_iron_inventory_t": "3.0",
+                "hot_iron_inventory_t_unrounded": "3.0000004",
+                "cold_slab_inventory_t": "4.0",
+                "cold_slab_inventory_t_unrounded": "4.0000004",
+            },
+            "C1_phase1_BF_BOF_plus_DRP_EAF": {
+                "coke_inventory_t": "5.0",
+                "coke_inventory_t_unrounded": "5.0000004",
+                "sinter_inventory_t": "6.0",
+                "sinter_inventory_t_unrounded": "6.0000004",
+                "hot_iron_inventory_t": "7.0",
+                "hot_iron_inventory_t_unrounded": "7.0000004",
+                "cold_slab_inventory_t": "8.0",
+                "cold_slab_inventory_t_unrounded": "8.0000004",
+                "DRI_inventory_t": "9.0",
+                "DRI_inventory_t_unrounded": "9.0000004",
+            },
+        }
+    )
+    assert (
+        overrides["C0_current_BF_BOF_reference"]["coke_store_initial_t"]
+        == 1.0000004
+    )
+    assert (
+        overrides["C1_phase1_BF_BOF_plus_DRP_EAF"][
+            "dri_buffer_initial_t"
+        ]
+        == 9.0000004
+    )
+
+
 def test_anchor_register_keeps_active_target_as_denominator_warning() -> None:
     metrics = {
         "C0_current_BF_BOF_reference": defaultdict(float, {"endogenous_liquid_steel_mt_y": 2.0}),

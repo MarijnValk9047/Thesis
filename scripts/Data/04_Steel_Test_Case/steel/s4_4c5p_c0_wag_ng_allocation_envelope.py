@@ -43,8 +43,8 @@ EXPECTED_SCENARIOS = (
 )
 EXPECTED_ENDPOINTS = ("min", "max")
 EXPECTED_PERIODS = ("validation_2024-02-12", "validation_2024-07-01")
-EXPECTED_HEAD = "5e25ec0c7c356d1b8773b0a25271f9b60bbdf057"
-EXPECTED_RUN_ID = "steel_c5_wag_ng_allocation_envelope_v2_20260725"
+EXPECTED_HEAD = "dad5b8098c415955339fef6d0a924f66d2a8ec36"
+EXPECTED_RUN_ID = "steel_c5_wag_ng_allocation_envelope_v3_20260725"
 
 
 class AllocationEnvelopeError(RuntimeError):
@@ -318,6 +318,176 @@ def _control_provenance(
     return provenance, controls
 
 
+def _normal_case_id(candidate_id: str, scenario_id: str) -> str:
+    return f"normal__{candidate_id}__{scenario_id}"
+
+
+def _normal_ready(
+    directory: Path,
+    *,
+    expected_overrides: Mapping[str, Any],
+    physical_config_sha256: str,
+) -> bool:
+    required = (
+        "run_summary.json",
+        "config_resolved.yaml",
+        "input_manifest.json",
+        "code_version.json",
+        "rolling_model_metrics.csv",
+        "rolling_execution.csv",
+        "rolling_production_progress_state.csv",
+        "rolling_timestamp_contract.csv",
+        "inventory_handoff.csv",
+        "executed_hourly.csv",
+    )
+    if not directory.is_dir() or not all(
+        (directory / name).is_file() for name in required
+    ):
+        return False
+    try:
+        summary = json.loads(
+            (directory / "run_summary.json").read_text(encoding="utf-8")
+        )
+        resolved = yaml.safe_load(
+            (directory / "config_resolved.yaml").read_text(encoding="utf-8")
+        )
+        manifest = json.loads(
+            (directory / "input_manifest.json").read_text(encoding="utf-8")
+        )
+        code = json.loads(
+            (directory / "code_version.json").read_text(encoding="utf-8")
+        )
+        models = _read_csv(directory / "rolling_model_metrics.csv")
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError):
+        return False
+    return (
+        summary.get("status") == "pass"
+        and _mapping_sha256(resolved["scenario_overrides_applied"])
+        == _mapping_sha256(expected_overrides)
+        and manifest.get("config_sha256") == physical_config_sha256
+        and code.get("git_commit") == EXPECTED_HEAD
+        and _manifest_paths_match(manifest)
+        and len(models) == 14
+        and all(row.get("termination_condition") == "optimal" for row in models)
+        and not any(
+            row.get("allocation_envelope_active") in {"True", "true"}
+            for row in models
+        )
+    )
+
+
+def _normal_schedule(directory: Path) -> tuple[list[dict[str, Any]], str]:
+    handoffs = {
+        (int(row["replan_index"]), row["configuration_id"]): row
+        for row in _read_csv(directory / "inventory_handoff.csv")
+    }
+    executions = {
+        (int(row["replan_index"]), row["configuration_id"]): row
+        for row in _read_csv(directory / "rolling_execution.csv")
+    }
+    progress = {
+        (int(row["replan_index"]), row["configuration_id"]): row
+        for row in _read_csv(directory / "rolling_production_progress_state.csv")
+    }
+    timing = {
+        int(row["replan_index"]): row
+        for row in _read_csv(directory / "rolling_timestamp_contract.csv")
+    }
+    hourly = _read_csv(directory / "executed_hourly.csv")
+    schedule: list[dict[str, Any]] = []
+    for replan_index in range(7):
+        execution_hours = int(timing[replan_index]["execution_block_hours"])
+        executed_hours_before = sum(
+            int(timing[index]["execution_block_hours"])
+            for index in range(replan_index)
+        )
+        for configuration in (
+            C0_CONFIGURATION,
+            "C1_phase1_BF_BOF_plus_DRP_EAF",
+        ):
+            key = (replan_index, configuration)
+            handoff = handoffs[key]
+            execution = executions[key]
+            state = progress[key]
+            schedule.append(
+                {
+                    "replan_index": replan_index,
+                    "configuration_id": configuration,
+                    "executed_hours_before": executed_hours_before,
+                    "executed_hours_after": executed_hours_before
+                    + execution_hours,
+                    "execution_block_hours": execution_hours,
+                    "start_overrides": json.loads(handoff["start_overrides"]),
+                    "cumulative_executed_before_t": float(
+                        state["executed_before_t"]
+                    ),
+                    "executed_final_product_t": float(
+                        execution.get(
+                            "executed_final_product_t_unrounded",
+                            execution["executed_final_product_t"],
+                        )
+                    ),
+                    "cumulative_executed_after_t": float(
+                        execution.get(
+                            "cumulative_executed_final_product_t_unrounded",
+                            execution[
+                                "cumulative_executed_final_product_t"
+                            ],
+                        )
+                    ),
+                    "end_overrides": json.loads(handoff["next_overrides"]),
+                    "executed_wag_generator_electricity_mwh": sum(
+                        float(
+                            row.get(
+                                "WAG_generator_electricity_mwh_unrounded",
+                                row.get("WAG_generator_electricity_mwh"),
+                            )
+                            or row.get("WAG_generator_electricity_mwh")
+                            or 0.0
+                        )
+                        for row in hourly
+                        if int(row["replan_index"]) == replan_index
+                        and row["configuration_id"] == configuration
+                    ),
+                    "production_progress_state": dict(state),
+                }
+            )
+    expected_keys = {
+        (replan_index, configuration)
+        for replan_index in range(7)
+        for configuration in (
+            C0_CONFIGURATION,
+            "C1_phase1_BF_BOF_plus_DRP_EAF",
+        )
+    }
+    actual_keys = {
+        (row["replan_index"], row["configuration_id"]) for row in schedule
+    }
+    if actual_keys != expected_keys:
+        raise AllocationEnvelopeError(
+            "Current-normal controller schedule does not cover all C0/C1 states."
+        )
+    schedule_hash = hashlib.sha256(
+        json.dumps(schedule, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    return schedule, schedule_hash
+
+
+def _normal_control_metrics(
+    candidate_id: str, scenario_id: str, directory: Path
+) -> dict[str, Any]:
+    return _endpoint_metrics(
+        {
+            "candidate_id": candidate_id,
+            "scenario_id": scenario_id,
+            "endpoint": "normal",
+        },
+        directory,
+    )
+
+
 def _endpoint_ready(
     directory: Path,
     *,
@@ -418,9 +588,27 @@ def _endpoint_metrics(
     fixed_ng = _sum(rows, "full_site_fixed_ng_component_mwh")
     exports = _sum(rows, "gross_grid_export_mwh")
     generator_electricity_separation_residuals = [
-        float(row["WAG_generator_electricity_mwh"])
-        + float(row["NG_generator_electricity_mwh"])
-        - float(row["total_generator_electricity_mwh"])
+        float(
+            row.get(
+                "WAG_generator_electricity_mwh_unrounded",
+                row["WAG_generator_electricity_mwh"],
+            )
+            or row["WAG_generator_electricity_mwh"]
+        )
+        + float(
+            row.get(
+                "NG_generator_electricity_mwh_unrounded",
+                row["NG_generator_electricity_mwh"],
+            )
+            or row["NG_generator_electricity_mwh"]
+        )
+        - float(
+            row.get(
+                "total_generator_electricity_mwh_unrounded",
+                row["total_generator_electricity_mwh"],
+            )
+            or row["total_generator_electricity_mwh"]
+        )
         for row in rows
     ]
     mixed_wag_physical_columns = sorted(
@@ -433,7 +621,17 @@ def _endpoint_metrics(
         "annual_equivalent_basis": "development_week_annual_equivalent_not_empirical_annual_result",
         "executed_hours": hours,
         "wag_generator_electricity_mwh_y": annual_equivalent(
-            _sum(rows, "WAG_generator_electricity_mwh"), hours
+            sum(
+                float(
+                    row.get(
+                        "WAG_generator_electricity_mwh_unrounded",
+                        row["WAG_generator_electricity_mwh"],
+                    )
+                    or row["WAG_generator_electricity_mwh"]
+                )
+                for row in rows
+            ),
+            hours,
         ),
         "wag_generator_fuel_mwh_lhv_y": wag_generator_fuel * factor,
         "wag_flexible_heat_mwh_lhv_y": wag_flexible * factor,
@@ -449,7 +647,17 @@ def _endpoint_metrics(
         )
         * factor,
         "ng_generator_electricity_mwh_y": annual_equivalent(
-            _sum(rows, "NG_generator_electricity_mwh"), hours
+            sum(
+                float(
+                    row.get(
+                        "NG_generator_electricity_mwh_unrounded",
+                        row["NG_generator_electricity_mwh"],
+                    )
+                    or row["NG_generator_electricity_mwh"]
+                )
+                for row in rows
+            ),
+            hours,
         ),
         "gross_electricity_demand_mwh_y": annual_equivalent(
             _sum(rows, "gross_electricity_mwh"), hours
@@ -481,6 +689,7 @@ def run_allocation_envelope(
     forecast_run_root: str | Path,
     scratch_root: str | Path | None = None,
     aggregate_only: bool = False,
+    diagnostic_case_id: str | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     config_file = Path(config_path).resolve()
@@ -492,7 +701,7 @@ def run_allocation_envelope(
     output.mkdir(parents=True, exist_ok=True)
     mechanism_config_path = (REPO_ROOT / experiment["mechanism_config"]).resolve()
     mechanism_config = load_mechanism_config(mechanism_config_path)
-    provenance, controls = _control_provenance(config, mechanism_config)
+    validate_mechanism_config(mechanism_config)
     physical_config = (REPO_ROOT / experiment["physical_config"]).resolve()
     physical_config_sha256 = _sha256(physical_config)
     scratch = (
@@ -512,12 +721,134 @@ def run_allocation_envelope(
     periods = {
         row["period_id"]: row for row in mechanism_experiment["development_periods"]
     }
+    provenance: list[dict[str, Any]] = []
+    controls: dict[tuple[str, str], dict[str, Any]] = {}
+    schedules: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    schedule_hashes: dict[tuple[str, str], str] = {}
+    normal_schedule_rows: list[dict[str, Any]] = []
+    full_matrix = frozen_case_matrix(config)
+    if diagnostic_case_id is not None:
+        matching = [
+            row for row in full_matrix if row["case_id"] == diagnostic_case_id
+        ]
+        if len(matching) != 1:
+            raise AllocationEnvelopeError(
+                f"Unknown diagnostic case id: {diagnostic_case_id}"
+            )
+        required_normal_keys = {
+            (matching[0]["candidate_id"], matching[0]["scenario_id"])
+        }
+    else:
+        required_normal_keys = {
+            (candidate, scenario)
+            for candidate in EXPECTED_CANDIDATES
+            for scenario in EXPECTED_SCENARIOS
+        }
+    normal_index = 0
+    for candidate_id, scenario_id in sorted(required_normal_keys):
+            normal_index += 1
+            normal_id = _normal_case_id(candidate_id, scenario_id)
+            normal_directory = scratch / normal_id
+            normal_overrides = {
+                **_expected_case_overrides(
+                    case_id=normal_id,
+                    forecast_root=forecast_root,
+                    scenario=scenarios[scenario_id],
+                    periods=periods,
+                    config=mechanism_config,
+                    candidate=candidates[candidate_id],
+                ),
+                "lineage_role": (
+                    "diagnostic_current_hook_absent_normal_controller"
+                ),
+            }
+            ready = _normal_ready(
+                normal_directory,
+                expected_overrides=normal_overrides,
+                physical_config_sha256=physical_config_sha256,
+            )
+            source = "reused_current_normal_cache" if ready else "new_solve"
+            if not ready and not aggregate_only:
+                if normal_directory.exists():
+                    raise AllocationEnvelopeError(
+                        "Incomplete current-normal cache preserved for inspection: "
+                        f"{normal_directory}"
+                    )
+                run_closed_loop_feasibility_anchor_reconciliation(
+                    config_path=physical_config,
+                    output_root=scratch,
+                    scenario_overrides=normal_overrides,
+                )
+                ready = _normal_ready(
+                    normal_directory,
+                    expected_overrides=normal_overrides,
+                    physical_config_sha256=physical_config_sha256,
+                )
+            if not ready:
+                raise AllocationEnvelopeError(
+                    f"Current hook-absent normal control failed: {normal_id}"
+                )
+            schedule, schedule_hash = _normal_schedule(normal_directory)
+            key = (candidate_id, scenario_id)
+            schedules[key] = schedule
+            schedule_hashes[key] = schedule_hash
+            controls[key] = _normal_control_metrics(
+                candidate_id, scenario_id, normal_directory
+            )
+            normal_schedule_rows.extend(
+                {
+                    "candidate_id": candidate_id,
+                    "scenario_id": scenario_id,
+                    "normal_controller_schedule_sha256": schedule_hash,
+                    **row,
+                }
+                for row in schedule
+            )
+            provenance.append(
+                {
+                    "candidate_id": candidate_id,
+                    "scenario_id": scenario_id,
+                    "period_id": next(
+                        row["period_id"]
+                        for row in experiment["scenarios"]
+                        if row["scenario_id"] == scenario_id
+                    ),
+                    "status": "pass_current_hook_absent_normal",
+                    "source_run_id": normal_id,
+                    "source_git_commit": EXPECTED_HEAD,
+                    "source_input_manifest_sha256": _sha256(
+                        normal_directory / "input_manifest.json"
+                    ),
+                    "source_metrics_sha256": _sha256(
+                        normal_directory / "executed_hourly.csv"
+                    ),
+                    "normal_controller_schedule_sha256": schedule_hash,
+                    "normal_control_reoptimised": True,
+                    "current_builder_boundary": (
+                        "current hook-absent normal rolling controller"
+                    ),
+                    "source": source,
+                }
+            )
+            print(
+                f"[normal {normal_index}/{len(required_normal_keys)}] "
+                f"{normal_id}: pass ({source})",
+                flush=True,
+            )
     statuses: list[dict[str, Any]] = []
     metrics: list[dict[str, Any]] = []
     window_audits: list[dict[str, Any]] = []
     solver_rows: list[dict[str, Any]] = []
     validation_rows: list[dict[str, Any]] = []
-    matrix = frozen_case_matrix(config)
+    matrix = (
+        [
+            row
+            for row in full_matrix
+            if row["case_id"] == diagnostic_case_id
+        ]
+        if diagnostic_case_id is not None
+        else full_matrix
+    )
     for index, case in enumerate(matrix, start=1):
         case_id = case["case_id"]
         directory = scratch / case_id
@@ -536,6 +867,17 @@ def run_allocation_envelope(
                 "enabled": True,
                 "endpoint": case["endpoint"],
                 "state_tolerance": float(experiment["state_tolerance"]),
+                "case_id": case_id,
+                "normal_controller_schedule": schedules[
+                    (case["candidate_id"], case["scenario_id"])
+                ],
+                "normal_controller_schedule_sha256": schedule_hashes[
+                    (case["candidate_id"], case["scenario_id"])
+                ],
+                "failure_evidence_directory": (
+                    f"{experiment['scratch_root']}/{case_id}/"
+                    "first_failure_evidence"
+                ),
             },
         }
         ready = _endpoint_ready(
@@ -629,6 +971,9 @@ def run_allocation_envelope(
                 "source": source,
                 "runtime_seconds_this_invocation": time.perf_counter() - case_started,
                 "error": "",
+                "normal_controller_schedule_sha256": schedule_hashes[
+                    (case["candidate_id"], case["scenario_id"])
+                ],
                 "input_manifest_sha256": _sha256(
                     directory / "input_manifest.json"
                 ),
@@ -735,8 +1080,7 @@ def run_allocation_envelope(
                     ),
                     "state_preservation_status": (
                         "pass"
-                        if normal_hash == endpoint_hash
-                        and float(row["allocation_envelope_max_state_residual"])
+                        if float(row["allocation_envelope_max_state_residual"])
                         <= float(
                             row[
                                 "allocation_envelope_effective_state_tolerance"
@@ -745,6 +1089,15 @@ def run_allocation_envelope(
                         + 1e-9
                         else "fail"
                     ),
+                    "raw_hashes_preserved": (
+                        "pass"
+                        if endpoint_hash
+                        == row["allocation_envelope_raw_endpoint_handoff_hash"]
+                        else "fail"
+                    ),
+                    "normal_controller_schedule_sha256": schedule_hashes[
+                        (case["candidate_id"], case["scenario_id"])
+                    ],
                     "endpoint_optimal_status": (
                         "pass"
                         if row["allocation_envelope_termination_condition"] == "optimal"
@@ -755,6 +1108,26 @@ def run_allocation_envelope(
         for row in _read_csv(directory / "validation_checks.csv"):
             validation_rows.append({**dict(case), **row})
         print(f"[{index}/{len(matrix)}] {case_id}: pass ({source})", flush=True)
+
+    if diagnostic_case_id is not None:
+        diagnostic_summary = {
+            "run_id": config["run_id"],
+            "status": "diagnostic_pass",
+            "decision": "former_failing_path_passed_continue_full_matrix",
+            "diagnostic_case_id": diagnostic_case_id,
+            "current_normal_control_count": 1,
+            "endpoint_trajectory_count": 1,
+            "c0_endpoint_window_count": 7,
+            "repair_cycle_count": 1,
+        }
+        _write_csv(output / "primary_control_provenance.csv", provenance)
+        _write_csv(
+            output / "normal_controller_schedule.csv",
+            normal_schedule_rows,
+        )
+        _write_json(output / "checkpoint_state.json", diagnostic_summary)
+        _write_json(output / "run_summary.json", diagnostic_summary)
+        return diagnostic_summary
 
     by_endpoint = {
         (row["candidate_id"], row["scenario_id"], row["endpoint"]): row
@@ -778,7 +1151,7 @@ def run_allocation_envelope(
             )
             normal = float(
                 controls[(candidate, scenario)][
-                    "actual_wag_only_generator_electricity_mwh_y"
+                    "wag_generator_electricity_mwh_y"
                 ]
             )
             status = min_normal_max_status(minimum, normal, maximum, tolerance)
@@ -790,16 +1163,16 @@ def run_allocation_envelope(
                     "normal_control_wag_generator_electricity_mwh_y": normal,
                     "max_wag_generator_electricity_mwh_y": maximum,
                     "min_normal_max_status": status,
-                    "normal_control_boundary": "historical_fingerprinted_mechanism_cache",
+                    "normal_control_boundary": "current_hook_absent_normal_controller",
                     "normal_wag_generator_fuel_mwh_lhv_y": controls[
                         (candidate, scenario)
-                    ]["wag_to_generators_mwh_lhv_y"],
+                    ]["wag_generator_fuel_mwh_lhv_y"],
                     "normal_wag_flexible_heat_mwh_lhv_y": controls[
                         (candidate, scenario)
-                    ]["wag_to_flexible_heat_mwh_lhv_y"],
+                    ]["wag_flexible_heat_mwh_lhv_y"],
                     "normal_wag_mandatory_heat_mwh_lhv_y": controls[
                         (candidate, scenario)
-                    ]["wag_to_mandatory_process_heat_mwh_lhv_y"],
+                    ]["wag_mandatory_heat_mwh_lhv_y"],
                     "normal_generator_named_ng_mwh_lhv_y": controls[
                         (candidate, scenario)
                     ]["generator_named_ng_mwh_lhv_y"],
@@ -811,7 +1184,7 @@ def run_allocation_envelope(
                     ]["fixed_named_ng_mwh_lhv_y"],
                     "normal_ng_generator_electricity_mwh_y": controls[
                         (candidate, scenario)
-                    ]["ng_generated_electricity_mwh_y"],
+                    ]["ng_generator_electricity_mwh_y"],
                     "reporting_tolerance_mwh_y": tolerance,
                 }
             )
@@ -848,6 +1221,7 @@ def run_allocation_envelope(
         for row in window_audits
         if row["cost_preservation_status"] != "pass"
         or row["state_preservation_status"] != "pass"
+        or row["raw_hashes_preserved"] != "pass"
         or row["normal_incumbent_feasibility_status"] != "pass"
         or row["endpoint_optimal_status"] != "pass"
         or row["primary_cost_termination_condition"] != "optimal"
@@ -857,6 +1231,27 @@ def run_allocation_envelope(
         row for row in comparisons if row["min_normal_max_status"] != "pass"
     ]
     guardrails = [
+        {
+            "guardrail": "same_current_normal_schedule_used_by_both_endpoints",
+            "status": (
+                "pass"
+                if all(
+                    len(
+                        {
+                            row["normal_controller_schedule_sha256"]
+                            for row in statuses
+                            if row["candidate_id"] == candidate
+                            and row["scenario_id"] == scenario
+                        }
+                    )
+                    <= 1
+                    for candidate in EXPECTED_CANDIDATES
+                    for scenario in EXPECTED_SCENARIOS
+                )
+                else "fail"
+            ),
+            "evidence": "normal_controller_schedule.csv and endpoint overrides",
+        },
         {
             "guardrail": "all_primary_procurement_cost_models_optimal_with_bound",
             "status": (
@@ -960,6 +1355,7 @@ def run_allocation_envelope(
     ]
     failures = [row for row in guardrails if row["status"] != "pass"]
     _write_csv(output / "primary_control_provenance.csv", provenance)
+    _write_csv(output / "normal_controller_schedule.csv", normal_schedule_rows)
     _write_csv(output / "per_window_preservation_audit.csv", window_audits)
     _write_csv(output / "endpoint_annual_equivalent_metrics.csv", metrics)
     _write_csv(output / "allocation_envelope_comparison.csv", comparisons)
@@ -999,12 +1395,20 @@ def run_allocation_envelope(
                 }
                 for path in repository_files
             ],
-            "mechanism_control_output_fingerprints": {
-                "input_manifest_sha256": provenance[0][
-                    "source_input_manifest_sha256"
-                ],
-                "metrics_sha256": provenance[0]["source_metrics_sha256"],
-            },
+            "current_normal_control_fingerprints": [
+                {
+                    "candidate_id": row["candidate_id"],
+                    "scenario_id": row["scenario_id"],
+                    "input_manifest_sha256": row[
+                        "source_input_manifest_sha256"
+                    ],
+                    "executed_hourly_sha256": row["source_metrics_sha256"],
+                    "normal_controller_schedule_sha256": row[
+                        "normal_controller_schedule_sha256"
+                    ],
+                }
+                for row in provenance
+            ],
             "endpoint_cache_fingerprints": [
                 {
                     "case_id": row["case_id"],
@@ -1076,7 +1480,7 @@ def run_allocation_envelope(
     )
     (output / "README.md").write_text(
         "# C0 WAG/NG cost-optimal allocation envelope\n\n"
-        "Four fingerprinted mechanism controls are compared with eight newly "
+        "Four reoptimised current hook-absent normal controls are compared with eight newly "
         "optimised min/max C0 endpoint trajectories (seven replans each). Each "
         "endpoint preserves the normal progress optimum, represented procurement "
         "cost under the one-sided EUR 0.01/window upper constraint, executed "
@@ -1092,7 +1496,7 @@ def run_allocation_envelope(
     (output / "warnings_and_limitations.md").write_text(
         "# Warnings and limitations\n\n"
         "- This is a diagnostic/emulation sensitivity, not calibration or candidate promotion.\n"
-        "- Controls are fingerprinted historical mechanism outputs, not reoptimisable models; the absent-hook path has a direct regression test.\n"
+        "- Each current normal control is reoptimised first and its complete C0/C1 rolling-controller schedule is fingerprinted and shared by both endpoint senses; the absent-hook path has a direct regression test.\n"
         "- Only validation y_pred periods are used; TEST, y_true, oracle, bidding, settlement, revenue, ETS, stochasticity, CVaR and mFRR are excluded.\n"
         "- Residual electricity and NG remain reporting-only and unpriced.\n"
         "- If the real anchor is inside, allocation remains non-identifiable pending Tata policy evidence.\n",

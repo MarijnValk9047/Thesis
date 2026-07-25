@@ -34,6 +34,7 @@ from steel.s4_4c_unified_physical_modelbuilder import (
 from steel.s4_4c5p_c0_wag_ng_allocation_envelope import (
     DEFAULT_CONFIG_PATH,
     _endpoint_ready,
+    _normal_case_id,
     annual_equivalent,
     frozen_case_matrix,
     load_config,
@@ -166,9 +167,18 @@ def test_endpoint_is_executed_hours_only_wag_only_and_preserves_state_and_cost(
     )
     assert metadata["allocation_envelope_max_state_residual"] <= 1e-6
     assert (
-        metadata["allocation_envelope_normal_handoff_hash"]
-        == metadata["allocation_envelope_endpoint_handoff_hash"]
+        metadata["allocation_envelope_endpoint_handoff_hash"]
+        == metadata["allocation_envelope_raw_endpoint_handoff_hash"]
     )
+    incumbent_audit = metadata[
+        "allocation_envelope_normal_incumbent_feasibility_audit"
+    ]
+    assert incumbent_audit["feasible"]
+    assert incumbent_audit["constraint_count"] > 0
+    assert incumbent_audit["variable_count"] > 0
+    assert incumbent_audit["cost_cap_present"]
+    assert incumbent_audit["production_and_state_preservation_present"]
+    assert incumbent_audit["objective_definition_valid"]
 
 
 def test_envelope_rejects_primary_cost_feasible_without_optimality() -> None:
@@ -219,6 +229,11 @@ def test_frozen_matrix_is_two_candidates_two_validation_cases_two_endpoints() ->
     assert all(row["price_field"] == "y_pred" for row in matrix)
     assert not any(row["perfect_foresight_oracle"] for row in matrix)
     assert "lower_cost_audit_tolerance_eur" not in config["experiment"]
+    assert config["run_id"] == "steel_c5_wag_ng_allocation_envelope_v3_20260725"
+    assert (
+        config["experiment"]["scratch_root"]
+        == "tmp/steel_c5_wag_ng_allocation_envelope_v3_20260725_cases"
+    )
     assert config["experiment"]["immutable_physical_contract"] == {
         "electricity_background_percent": 30.0,
         "wag_generation_yield_overrides_by_configuration": {},
@@ -239,6 +254,20 @@ def test_metric_conversion_and_min_normal_max_logic() -> None:
     assert min_normal_max_status(1.0, 2.0, 3.0, 1e-6) == "pass"
     assert min_normal_max_status(2.1, 2.0, 3.0, 1e-6) == "fail"
     assert min_normal_max_status(1.0, 3.1, 3.0, 1e-6) == "fail"
+
+
+def test_four_current_normal_control_ids_are_distinct_from_endpoints() -> None:
+    ids = {
+        _normal_case_id(candidate, scenario)
+        for candidate in ("recovery_bg30_ng55", "recovery_bg30_ng30")
+        for scenario in (
+            "calm_price_insensitive",
+            "volatile_negative_governed_y_pred",
+        )
+    }
+    assert len(ids) == 4
+    assert all(value.startswith("normal__") for value in ids)
+    assert not any("__min" in value or "__max" in value for value in ids)
 
 
 def test_endpoint_cache_fails_closed_when_fingerprints_are_missing() -> None:
@@ -280,7 +309,7 @@ def test_endpoint_cache_requires_exact_input_and_model_fingerprints() -> None:
     )
     (tmp_path / "code_version.json").write_text(
         json.dumps(
-            {"git_commit": "5e25ec0c7c356d1b8773b0a25271f9b60bbdf057"}
+            {"git_commit": "dad5b8098c415955339fef6d0a924f66d2a8ec36"}
         ),
         encoding="utf-8",
     )

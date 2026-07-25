@@ -561,6 +561,145 @@ def _apply_solver_time_limit(solver_name: str, solver: Any, seconds: float | Non
         raise S44CModelBuilderError(f"No time-limit adapter is defined for solver {solver_name}.")
 
 
+def _audit_loaded_incumbent(model: ConcreteModel, *, tolerance: float = 1e-6) -> dict[str, Any]:
+    """Audit the currently loaded incumbent against the complete active model."""
+
+    max_constraint_violation = 0.0
+    max_bound_violation = 0.0
+    max_integrality_violation = 0.0
+    constraint_count = 0
+    variable_count = 0
+    discrete_count = 0
+    undefined_value_count = 0
+    for variable in model.component_data_objects(Var, active=True):
+        variable_count += 1
+        current = variable.value
+        if current is None:
+            undefined_value_count += 1
+            continue
+        current = float(current)
+        if variable.lb is not None:
+            max_bound_violation = max(
+                max_bound_violation, float(value(variable.lb)) - current
+            )
+        if variable.ub is not None:
+            max_bound_violation = max(
+                max_bound_violation, current - float(value(variable.ub))
+            )
+        if variable.is_binary() or variable.is_integer():
+            discrete_count += 1
+            max_integrality_violation = max(
+                max_integrality_violation, abs(current - round(current))
+            )
+    for constraint in model.component_data_objects(Constraint, active=True):
+        constraint_count += 1
+        try:
+            body = float(value(constraint.body))
+        except (TypeError, ValueError):
+            undefined_value_count += 1
+            continue
+        if constraint.lower is not None:
+            max_constraint_violation = max(
+                max_constraint_violation,
+                float(value(constraint.lower)) - body,
+            )
+        if constraint.upper is not None:
+            max_constraint_violation = max(
+                max_constraint_violation,
+                body - float(value(constraint.upper)),
+            )
+    max_constraint_violation = max(0.0, max_constraint_violation)
+    max_bound_violation = max(0.0, max_bound_violation)
+    return {
+        "constraint_count": constraint_count,
+        "variable_count": variable_count,
+        "discrete_variable_count": discrete_count,
+        "undefined_value_count": undefined_value_count,
+        "max_constraint_violation": max_constraint_violation,
+        "max_variable_bound_violation": max_bound_violation,
+        "max_integrality_violation": max_integrality_violation,
+        "tolerance": tolerance,
+        "feasible": (
+            undefined_value_count == 0
+            and max_constraint_violation <= tolerance
+            and max_bound_violation <= tolerance
+            and max_integrality_violation <= tolerance
+        ),
+    }
+
+
+def _preserve_allocation_endpoint_failure(
+    model: ConcreteModel,
+    result: Any,
+    diagnostic: Mapping[str, Any],
+    *,
+    endpoint: str,
+    normal_snapshot: Mapping[str, float],
+    primary_cost: float,
+    primary_best_bound: float | None,
+) -> None:
+    """Persist the first endpoint failure without performing another solve."""
+
+    raw_directory = diagnostic.get("failure_evidence_directory")
+    if not raw_directory:
+        return
+    directory = Path(str(raw_directory)).resolve()
+    directory.mkdir(parents=True, exist_ok=True)
+    stats = collect_model_stats(model)
+    record = {
+        "case_id": diagnostic.get("case_id"),
+        "replan_index": diagnostic.get("replan_index"),
+        "solver_stage": "allocation_envelope_endpoint",
+        "endpoint": endpoint,
+        "solver_status": str(result.solver.status),
+        "termination_condition": str(result.solver.termination_condition),
+        "objective_value": (
+            float(value(model.allocation_envelope_objective))
+            if str(result.solver.termination_condition).lower()
+            in {"optimal", "feasible"}
+            else None
+        ),
+        "solver_best_bound": getattr(result.problem, "lower_bound", None),
+        "primary_cost_objective_eur": primary_cost,
+        "primary_cost_best_bound_eur": primary_best_bound,
+        "variable_count": stats.variables,
+        "binary_count": stats.binaries,
+        "constraint_count": stats.constraints,
+        "normal_snapshot": dict(normal_snapshot),
+        "diagnostic_solver_options": {
+            "DualReductions": 0,
+            "InfUnbdInfo": 1,
+        },
+        "second_solve_performed": False,
+    }
+    evidence_path = directory / "first_failure.json"
+    evidence_path.write_text(
+        json.dumps(record, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
+    model_path = directory / "first_failure_model.lp"
+    try:
+        model.write(str(model_path), io_options={"symbolic_solver_labels": True})
+        if model_path.stat().st_size > 3_000_000:
+            model_path.unlink()
+            record["compact_model_status"] = "omitted_above_3MB_budget"
+        else:
+            record["compact_model_status"] = "preserved"
+            record["compact_model_sha256"] = hashlib.sha256(
+                model_path.read_bytes()
+            ).hexdigest()
+    except Exception as exc:  # pragma: no cover - writer support is plugin-specific
+        record["compact_model_status"] = f"write_failed:{type(exc).__name__}"
+    evidence_path.write_text(
+        json.dumps(record, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
+    record_hash = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+    (directory / "first_failure.sha256").write_text(
+        f"{record_hash}  first_failure.json\n", encoding="utf-8"
+    )
+
+
 def _solve_with_optional_lexicographic_cost(
     model: ConcreteModel,
     *,
@@ -780,7 +919,7 @@ def _solve_with_optional_lexicographic_cost(
             )
 
     handoff_hour = execution_hours - 1
-    normal_snapshot = {
+    local_normal_snapshot = {
         "executed_final_product_t": sum(
             float(value(model.final_product_output[t]))
             for t in range(execution_hours)
@@ -794,12 +933,45 @@ def _solve_with_optional_lexicographic_cost(
             value(model.cold_slab_inventory[handoff_hour])
         ),
     }
+    supplied_normal_snapshot = allocation_envelope_diagnostic.get(
+        "normal_snapshot"
+    )
+    if supplied_normal_snapshot is not None:
+        if not isinstance(supplied_normal_snapshot, Mapping):
+            raise S44CModelBuilderError(
+                "Allocation-envelope normal snapshot must be a mapping."
+            )
+        normal_snapshot = {
+            key: float(supplied_normal_snapshot[key])
+            for key in local_normal_snapshot
+        }
+        max_local_normal_schedule_residual = max(
+            abs(local_normal_snapshot[key] - normal_snapshot[key])
+            for key in normal_snapshot
+        )
+        if max_local_normal_schedule_residual > state_tolerance + 1e-6:
+            raise S44CModelBuilderError(
+                "Current hook-absent normal schedule does not reproduce in the "
+                "endpoint formulation: "
+                f"max_residual={max_local_normal_schedule_residual}."
+            )
+    else:
+        normal_snapshot = dict(local_normal_snapshot)
+        max_local_normal_schedule_residual = 0.0
     primary_cost = float(metadata["primary_cost_objective_eur"])
     cost_tolerance = float(deterministic_cost_policy["objective_tolerance_eur"])
     normal_cost = float(metadata["tie_break_cost_objective_eur"])
-    normal_endpoint_objective_value = sum(
+    local_normal_endpoint_objective_value = sum(
         float(value(model.wag_generator_electricity_mwh[t]))
         for t in range(execution_hours)
+    )
+    normal_endpoint_objective_value = float(
+        supplied_normal_snapshot.get(
+            "wag_generator_electricity_mwh",
+            local_normal_endpoint_objective_value,
+        )
+        if supplied_normal_snapshot is not None
+        else local_normal_endpoint_objective_value
     )
     normal_cost_minus_upper_limit = normal_cost - (
         primary_cost + cost_tolerance
@@ -849,11 +1021,66 @@ def _solve_with_optional_lexicographic_cost(
         expr=endpoint_expression,
         sense=minimize if endpoint == "min" else maximize,
     )
+    normal_incumbent_audit = _audit_loaded_incumbent(
+        model, tolerance=state_tolerance + 1e-6
+    )
+    objective_definition_valid = (
+        model.allocation_envelope_objective.expr is endpoint_expression
+        and model.allocation_envelope_objective.sense
+        == (minimize if endpoint == "min" else maximize)
+        and execution_hours
+        == int(allocation_envelope_diagnostic["execution_hours"])
+    )
+    normal_incumbent_audit["cost_cap_present"] = hasattr(
+        model, "procurement_cost_optimum_preservation"
+    )
+    normal_incumbent_audit["production_and_state_preservation_present"] = (
+        len(model.allocation_envelope_state_preservation)
+        == 2 * len(state_expressions)
+    )
+    normal_incumbent_audit["objective_definition_valid"] = (
+        objective_definition_valid
+    )
+    normal_incumbent_audit["feasible"] = bool(
+        normal_incumbent_audit["feasible"]
+        and normal_incumbent_audit["cost_cap_present"]
+        and normal_incumbent_audit["production_and_state_preservation_present"]
+        and objective_definition_valid
+    )
+    if not normal_incumbent_audit["feasible"]:
+        raise S44CModelBuilderError(
+            "The complete saved-normal incumbent feasibility audit failed: "
+            f"{normal_incumbent_audit}."
+        )
+    solver_name = str(getattr(solver, "name", "")).lower()
+    if "gurobi" in solver_name:
+        solver.options["DualReductions"] = 0
+        solver.options["InfUnbdInfo"] = 1
+        failure_directory = allocation_envelope_diagnostic.get(
+            "failure_evidence_directory"
+        )
+        if failure_directory:
+            Path(str(failure_directory)).resolve().mkdir(
+                parents=True, exist_ok=True
+            )
+            solver.options["LogFile"] = str(
+                Path(str(failure_directory)).resolve()
+                / "endpoint_solver.log"
+            )
     endpoint_start = time.perf_counter()
     endpoint_result = solver.solve(model)
     endpoint_runtime = time.perf_counter() - endpoint_start
     endpoint_termination = str(endpoint_result.solver.termination_condition)
     if endpoint_termination.lower() != "optimal":
+        _preserve_allocation_endpoint_failure(
+            model,
+            endpoint_result,
+            allocation_envelope_diagnostic,
+            endpoint=endpoint,
+            normal_snapshot=normal_snapshot,
+            primary_cost=primary_cost,
+            primary_best_bound=metadata["primary_cost_best_bound_eur"],
+        )
         raise S44CModelBuilderError(
             "Allocation-envelope endpoint did not terminate optimal: "
             f"{endpoint_termination}."
@@ -915,14 +1142,7 @@ def _solve_with_optional_lexicographic_cost(
         )
     normal_handoff_hash = _snapshot_hash(normal_snapshot)
     raw_endpoint_handoff_hash = _snapshot_hash(endpoint_snapshot)
-    # This is a tolerance-equivalence hash, paired with both raw snapshots and
-    # their reported maximum residual.  Endpoint states that pass the governed
-    # model-unit tolerance intentionally share the normal handoff hash.
-    endpoint_handoff_hash = (
-        normal_handoff_hash
-        if max_state_residual <= effective_state_tolerance + 1e-9
-        else raw_endpoint_handoff_hash
-    )
+    endpoint_handoff_hash = raw_endpoint_handoff_hash
     metadata.update(
         {
             "allocation_envelope_active": True,
@@ -964,10 +1184,13 @@ def _solve_with_optional_lexicographic_cost(
                 normal_cost_minus_upper_limit
             ),
             "allocation_envelope_normal_incumbent_min_formulation_feasible": (
-                True
+                bool(normal_incumbent_audit["feasible"])
             ),
             "allocation_envelope_normal_incumbent_max_formulation_feasible": (
-                True
+                bool(normal_incumbent_audit["feasible"])
+            ),
+            "allocation_envelope_normal_incumbent_feasibility_audit": (
+                normal_incumbent_audit
             ),
             "allocation_envelope_normal_objective_value_mwh": (
                 normal_endpoint_objective_value
@@ -978,6 +1201,12 @@ def _solve_with_optional_lexicographic_cost(
             "allocation_envelope_endpoint_handoff_hash": endpoint_handoff_hash,
             "allocation_envelope_raw_endpoint_handoff_hash": (
                 raw_endpoint_handoff_hash
+            ),
+            "allocation_envelope_local_normal_handoff_snapshot": (
+                local_normal_snapshot
+            ),
+            "allocation_envelope_max_local_normal_schedule_residual": (
+                max_local_normal_schedule_residual
             ),
             "allocation_envelope_max_state_residual": max_state_residual,
             "allocation_envelope_state_tolerance": state_tolerance,
@@ -4467,12 +4696,22 @@ def _solve_c0_configuration(
         diagnostic_status = "exception_no_solution_loaded"
         diagnostic_termination = "infeasible_or_no_accepted_solution"
         diagnostic_caveat = str(exc)
-        try:
-            diagnostic_result = solver.solve(model, load_solutions=False)
-            diagnostic_status = str(diagnostic_result.solver.status)
-            diagnostic_termination = str(diagnostic_result.solver.termination_condition)
-        except Exception as diagnostic_exc:  # pragma: no cover - solver-plugin-specific fallback
-            diagnostic_caveat = f"{exc}; diagnostic solve also failed: {diagnostic_exc}"
+        if allocation_envelope_diagnostic is None:
+            try:
+                diagnostic_result = solver.solve(model, load_solutions=False)
+                diagnostic_status = str(diagnostic_result.solver.status)
+                diagnostic_termination = str(
+                    diagnostic_result.solver.termination_condition
+                )
+            except Exception as diagnostic_exc:  # pragma: no cover - solver-plugin-specific fallback
+                diagnostic_caveat = (
+                    f"{exc}; diagnostic solve also failed: {diagnostic_exc}"
+                )
+        else:
+            diagnostic_caveat = (
+                f"{exc}; allocation-envelope failure evidence was preserved "
+                "without a second solve"
+            )
         return {
             "configuration_id": "C0_current_BF_BOF_reference",
             "build_status": "solver_failed",
@@ -4806,12 +5045,15 @@ def _solve_c0_configuration(
                     "allocation_envelope_normal_cost_minus_upper_limit_eur",
                     "allocation_envelope_normal_incumbent_min_formulation_feasible",
                     "allocation_envelope_normal_incumbent_max_formulation_feasible",
+                    "allocation_envelope_normal_incumbent_feasibility_audit",
                     "allocation_envelope_normal_objective_value_mwh",
                     "allocation_envelope_normal_handoff_snapshot",
                     "allocation_envelope_endpoint_handoff_snapshot",
                     "allocation_envelope_normal_handoff_hash",
                     "allocation_envelope_endpoint_handoff_hash",
                     "allocation_envelope_raw_endpoint_handoff_hash",
+                    "allocation_envelope_local_normal_handoff_snapshot",
+                    "allocation_envelope_max_local_normal_schedule_residual",
                     "allocation_envelope_max_state_residual",
                     "allocation_envelope_state_tolerance",
                     "allocation_envelope_solver_state_feasibility_tolerance",
@@ -5024,10 +5266,23 @@ def _solve_c0_configuration(
                 "C1_DRP_activity_t_pellets_h": "",
                 "C1_EAF_activity_t_DRI_h": "",
                 "final_product_output_t": round(float(value(model.final_product_output[t])), 6),
+                "final_product_output_t_unrounded": float(
+                    value(model.final_product_output[t])
+                ),
                 "coke_inventory_t": round(float(value(model.coke_inventory[t])), 6),
+                "coke_inventory_t_unrounded": float(value(model.coke_inventory[t])),
                 "sinter_inventory_t": round(float(value(model.sinter_inventory[t])), 6),
+                "sinter_inventory_t_unrounded": float(
+                    value(model.sinter_inventory[t])
+                ),
                 "hot_iron_inventory_t": round(float(value(model.hot_iron_inventory[t])), 6),
+                "hot_iron_inventory_t_unrounded": float(
+                    value(model.hot_iron_inventory[t])
+                ),
                 "cold_slab_inventory_t": round(float(value(model.cold_slab_inventory[t])), 6),
+                "cold_slab_inventory_t_unrounded": float(
+                    value(model.cold_slab_inventory[t])
+                ),
                 "DRI_inventory_t": "",
                 "base_process_electricity_mwh": 0.0,
                 "DRP_electricity_mwh": 0.0,
@@ -5213,10 +5468,25 @@ def _solve_c0_configuration(
                 "WAG_generator_electricity_mwh": round(float(value(model.wag_generator_electricity_mwh[t])), 6)
                 if enable_minimal_wag_layer
                 else "",
+                "WAG_generator_electricity_mwh_unrounded": float(
+                    value(model.wag_generator_electricity_mwh[t])
+                )
+                if enable_minimal_wag_layer
+                else "",
                 "NG_generator_electricity_mwh": round(float(value(model.ng_generator_electricity_mwh[t])), 6)
                 if enable_minimal_wag_layer
                 else "",
+                "NG_generator_electricity_mwh_unrounded": float(
+                    value(model.ng_generator_electricity_mwh[t])
+                )
+                if enable_minimal_wag_layer
+                else "",
                 "total_generator_electricity_mwh": round(float(value(model.total_generator_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "total_generator_electricity_mwh_unrounded": float(
+                    value(model.total_generator_electricity_mwh[t])
+                )
                 if enable_minimal_wag_layer
                 else "",
                 "generator_unit_interface_active": 0.0,
@@ -6230,19 +6500,41 @@ def _solve_c1_configuration(
                 if hybrid_route_active and hasattr(model, "eaf_scrap_supply_t")
                 else round(float(value(model.scrap_t[t])), 6),
                 "final_product_output_t": round(float(value(model.final_product_output[t])), 6),
+                "final_product_output_t_unrounded": float(
+                    value(model.final_product_output[t])
+                ),
                 "coke_inventory_t": round(float(value(model.coke_inventory[t])), 6)
+                if hybrid_route_active
+                else "",
+                "coke_inventory_t_unrounded": float(value(model.coke_inventory[t]))
                 if hybrid_route_active
                 else "",
                 "sinter_inventory_t": round(float(value(model.sinter_inventory[t])), 6)
                 if hybrid_route_active
                 else "",
+                "sinter_inventory_t_unrounded": float(
+                    value(model.sinter_inventory[t])
+                )
+                if hybrid_route_active
+                else "",
                 "hot_iron_inventory_t": round(float(value(model.hot_iron_inventory[t])), 6)
+                if hybrid_route_active
+                else "",
+                "hot_iron_inventory_t_unrounded": float(
+                    value(model.hot_iron_inventory[t])
+                )
                 if hybrid_route_active
                 else "",
                 "cold_slab_inventory_t": round(float(value(model.cold_slab_inventory[t])), 6)
                 if hybrid_route_active
                 else "",
+                "cold_slab_inventory_t_unrounded": float(
+                    value(model.cold_slab_inventory[t])
+                )
+                if hybrid_route_active
+                else "",
                 "DRI_inventory_t": round(float(value(model.dri_inventory[t])), 6),
+                "DRI_inventory_t_unrounded": float(value(model.dri_inventory[t])),
                 "base_process_electricity_mwh": round(float(value(model.electricity_mwh[t])), 6),
                 "development_controller_electricity_mwh": round(
                     float(value(model.development_controller_electricity_mwh[t])), 6
@@ -6376,10 +6668,25 @@ def _solve_c1_configuration(
                 "WAG_generator_electricity_mwh": round(float(value(model.wag_generator_electricity_mwh[t])), 6)
                 if enable_minimal_wag_layer
                 else 0.0,
+                "WAG_generator_electricity_mwh_unrounded": float(
+                    value(model.wag_generator_electricity_mwh[t])
+                )
+                if enable_minimal_wag_layer
+                else 0.0,
                 "NG_generator_electricity_mwh": round(float(value(model.ng_generator_electricity_mwh[t])), 6)
                 if enable_minimal_wag_layer
                 else 0.0,
+                "NG_generator_electricity_mwh_unrounded": float(
+                    value(model.ng_generator_electricity_mwh[t])
+                )
+                if enable_minimal_wag_layer
+                else 0.0,
                 "total_generator_electricity_mwh": round(float(value(model.total_generator_electricity_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "total_generator_electricity_mwh_unrounded": float(
+                    value(model.total_generator_electricity_mwh[t])
+                )
                 if enable_minimal_wag_layer
                 else 0.0,
                 "generator_unit_interface_active": 1.0

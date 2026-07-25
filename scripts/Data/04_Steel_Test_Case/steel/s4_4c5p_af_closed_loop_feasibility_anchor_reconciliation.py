@@ -1800,9 +1800,19 @@ def _next_inventory_overrides(endpoints: Mapping[str, Mapping[str, Any]]) -> dic
     }
     output: dict[str, dict[str, float]] = {}
     for configuration, endpoint in endpoints.items():
-        values = {target: _float(endpoint.get(source)) for target, source in fields.items()}
+        values = {
+            target: _float(
+                endpoint.get(f"{source}_unrounded", endpoint.get(source))
+            )
+            for target, source in fields.items()
+        }
         if configuration == "C1_phase1_BF_BOF_plus_DRP_EAF":
-            values["dri_buffer_initial_t"] = _float(endpoint.get("DRI_inventory_t"))
+            values["dri_buffer_initial_t"] = _float(
+                endpoint.get(
+                    "DRI_inventory_t_unrounded",
+                    endpoint.get("DRI_inventory_t"),
+                )
+            )
         output[configuration] = values
     return output
 
@@ -1826,7 +1836,15 @@ def _execution_rows(
             row for row in report["hourly_rows"]
             if row.get("configuration_id") == configuration and int(row.get("hour_index", -1)) < execution_hours
         ]
-        produced = sum(_float(row.get("final_product_output_t")) for row in block)
+        produced = sum(
+            _float(
+                row.get(
+                    "final_product_output_t_unrounded",
+                    row.get("final_product_output_t"),
+                )
+            )
+            for row in block
+        )
         cumulative = float(cumulative_before.get(configuration, 0.0)) + produced
         progress = dict((production_progress_state or {}).get(configuration, {}))
         required = float(
@@ -1868,7 +1886,9 @@ def _execution_rows(
                 "configuration_id": configuration,
                 "execution_hours": execution_hours,
                 "executed_final_product_t": round(produced, 6),
+                "executed_final_product_t_unrounded": produced,
                 "cumulative_executed_final_product_t": round(cumulative, 6),
+                "cumulative_executed_final_product_t_unrounded": cumulative,
                 "cumulative_required_final_product_t": round(required, 6),
                 "cumulative_quota_residual_t": round(cumulative - required, 6),
                 "quota_status": "pass" if cumulative >= required - TOLERANCE_T else "fail",
@@ -3634,6 +3654,7 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         and config.get("forecast_price_override_eur_per_mwh") in {None, ""}
     )
     raw_allocation_envelope = config.get("c0_allocation_envelope_diagnostic")
+    normal_schedule_by_key: dict[tuple[int, str], Mapping[str, Any]] = {}
     if raw_allocation_envelope is not None:
         if (
             not isinstance(raw_allocation_envelope, Mapping)
@@ -3647,7 +3668,65 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             raise ClosedLoopFeasibilityError(
                 "C0 allocation-envelope state tolerance must remain 1e-6 model units."
             )
+        raw_schedule = raw_allocation_envelope.get("normal_controller_schedule")
+        schedule_hash = str(
+            raw_allocation_envelope.get("normal_controller_schedule_sha256", "")
+        )
+        if not isinstance(raw_schedule, list) or len(raw_schedule) != (
+            int(config["replan_count"]) * len(CONFIGURATIONS)
+        ):
+            raise ClosedLoopFeasibilityError(
+                "Allocation endpoints require the complete current-normal C0/C1 "
+                "controller schedule."
+            )
+        calculated_schedule_hash = hashlib.sha256(
+            json.dumps(
+                raw_schedule, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest()
+        if calculated_schedule_hash != schedule_hash:
+            raise ClosedLoopFeasibilityError(
+                "Current-normal controller schedule fingerprint mismatch."
+            )
+        normal_schedule_by_key = {
+            (int(row["replan_index"]), str(row["configuration_id"])): row
+            for row in raw_schedule
+        }
+        if len(normal_schedule_by_key) != len(raw_schedule):
+            raise ClosedLoopFeasibilityError(
+                "Current-normal controller schedule contains duplicate keys."
+            )
     for replan_index in range(int(config["replan_count"])):
+        if normal_schedule_by_key:
+            schedule_rows = {
+                configuration: normal_schedule_by_key[
+                    (replan_index, configuration)
+                ]
+                for configuration in CONFIGURATIONS
+            }
+            offsets = {
+                int(row["executed_hours_before"]) for row in schedule_rows.values()
+            }
+            if len(offsets) != 1:
+                raise ClosedLoopFeasibilityError(
+                    "Normal controller schedule has inconsistent execution offsets."
+                )
+            executed_hours_so_far = offsets.pop()
+            overrides = {
+                configuration: {
+                    str(key): float(value)
+                    for key, value in dict(
+                        schedule_rows[configuration]["start_overrides"]
+                    ).items()
+                }
+                for configuration in CONFIGURATIONS
+            }
+            cumulative = {
+                configuration: float(
+                    schedule_rows[configuration]["cumulative_executed_before_t"]
+                )
+                for configuration in CONFIGURATIONS
+            }
         plan = rolling_plans[replan_index]
         target_multiplier = _model_target_multiplier(config, plan)
         (
@@ -3846,6 +3925,39 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 {
                     **dict(raw_allocation_envelope),
                     "execution_hours": plan.execution_block_hours,
+                    "replan_index": replan_index,
+                    "normal_snapshot": {
+                        "executed_final_product_t": float(
+                            normal_schedule_by_key[
+                                (replan_index, C0_CONFIGURATION)
+                            ]["executed_final_product_t"]
+                        ),
+                        "coke_inventory_t": float(
+                            normal_schedule_by_key[
+                                (replan_index, C0_CONFIGURATION)
+                            ]["end_overrides"]["coke_store_initial_t"]
+                        ),
+                        "sinter_inventory_t": float(
+                            normal_schedule_by_key[
+                                (replan_index, C0_CONFIGURATION)
+                            ]["end_overrides"]["sinter_store_initial_t"]
+                        ),
+                        "hot_iron_inventory_t": float(
+                            normal_schedule_by_key[
+                                (replan_index, C0_CONFIGURATION)
+                            ]["end_overrides"]["hot_iron_store_initial_t"]
+                        ),
+                        "cold_slab_inventory_t": float(
+                            normal_schedule_by_key[
+                                (replan_index, C0_CONFIGURATION)
+                            ]["end_overrides"]["cold_slab_store_initial_t"]
+                        ),
+                        "wag_generator_electricity_mwh": float(
+                            normal_schedule_by_key[
+                                (replan_index, C0_CONFIGURATION)
+                            ]["executed_wag_generator_electricity_mwh"]
+                        ),
+                    },
                 }
                 if raw_allocation_envelope is not None
                 else None
@@ -3988,7 +4100,17 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                     }
                 )
         for row in current_rows:
-            cumulative[row["configuration_id"]] = float(row["cumulative_executed_final_product_t"])
+            if normal_schedule_by_key:
+                scheduled = normal_schedule_by_key[
+                    (replan_index, row["configuration_id"])
+                ]
+                cumulative[row["configuration_id"]] = float(
+                    scheduled["cumulative_executed_after_t"]
+                )
+            else:
+                cumulative[row["configuration_id"]] = float(
+                    row["cumulative_executed_final_product_t"]
+                )
             state = progress_contract["state_by_configuration"][
                 row["configuration_id"]
             ]
@@ -4042,8 +4164,26 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 "build_status": next(a["build_status"] for a in report["configuration_build_audit"] if a["configuration_id"] == row["configuration_id"]),
             })
         execution_rows.extend(current_rows)
-        overrides = next_overrides
-        executed_hours_so_far += plan.execution_block_hours
+        if normal_schedule_by_key:
+            overrides = {
+                configuration: {
+                    str(key): float(value)
+                    for key, value in dict(
+                        normal_schedule_by_key[
+                            (replan_index, configuration)
+                        ]["end_overrides"]
+                    ).items()
+                }
+                for configuration in CONFIGURATIONS
+            }
+            executed_hours_so_far = int(
+                normal_schedule_by_key[
+                    (replan_index, C0_CONFIGURATION)
+                ]["executed_hours_after"]
+            )
+        else:
+            overrides = next_overrides
+            executed_hours_so_far += plan.execution_block_hours
 
     if first_report is None:
         raise ClosedLoopFeasibilityError("No rolling plan was solved.")
