@@ -1,0 +1,13 @@
+check_id,command_or_check,status,passed,failed,skipped,notes,log_path_if_saved
+repo_state,git branch/status before rerun,pass,,,,feature/steel-next-layer; targeted status clean before rerun,
+pytest_seq_c5f_to_c5k,python -m pytest C5f-C5k slice,pass,45,0,0,sequential rerun; final status,logs/pytest_seq_c5f_to_c5k.log
+pytest_seq_c5l_to_c5m_f,python -m pytest C5l-C5m_f slice,pass,107,0,0,includes extra C5l/HSM-WBW regression,logs/pytest_seq_c5l_to_c5m_f.log
+pytest_seq_c5n_to_c5p_anchor,python -m pytest C5n-C5p_a plus anchor diagnostics,pass,55,0,0,includes required C5p_a and anchor tests,logs/pytest_seq_c5n_to_c5p_anchor.log
+run_c5p_a,python scripts/Data/04_Steel_Test_Case/run_s4_4c5p_a_linde_asu_oxygen_accounting.py,pass,,,,pass_development_linde_asu_oxygen_accounting,logs/run_c5p_a.log
+run_anchor_route_denominator,python -m scripts.Data.04_Steel_Test_Case.steel.s4_4c5_anchor_route_denominator_diagnostics,pass,,,,pass_diagnostic_only,logs/run_anchor_route_denominator.log
+validate_s2_input_governance,python scripts/Data/04_Steel_Test_Case/validate_s2_input_governance.py,pass,,,,candidate-review mode; approved_input_total_rows=0; no thesis-grade executable rows,logs/validate_s2_input_governance.log
+check_portable_paths,python scripts/dev/check_portable_paths.py,pass,,,,portable path and secret check passed,logs/check_portable_paths.log
+git_diff_check,git diff --check,pass,,,,no whitespace errors; line-ending warnings for existing S4 CSVs,logs/git_diff_check.log
+pytest_parallel_attempt,parallel pytest chunks,superseded_invalid,,,,shared artifact writers raced; sequential reruns are governing,logs/pytest_c5f_to_c5k.log; logs/pytest_c5l_to_c5m_f.log; logs/pytest_c5n_to_c5p_anchor.log
+parse_c5p_anchor,CSV/JSON parse sanity for C5p_a and anchor artifacts,pass,,,,C5p_a: 12 csv/3 json; anchor diagnostics: 5 csv/0 json,
+parse_post_recovery_outputs,CSV parse sanity for post-recovery comparison artifacts,pass,,,,4 generated comparison CSVs parsed after write,

@@ -1,0 +1,263 @@
+{
+  "freeze_id": "c5_tata_benchmark_source_driven_baseline_v3_checkpoint8",
+  "checkpoint": 8,
+  "baseline_status": "immutable",
+  "candidate_policy": "checkpoint-8 analytical screen complete: source-driven baseline only; the transparent PeFa overlay is rejected before execution and KGF/PeFa remain may_move=false because no clean source-backed executable degree of freedom exists",
+  "accepted_lineage": "steel_s2_deterministic_price_response_anchor_diagnostics_v1_20260720",
+  "active_config": "scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml",
+  "active_input_directory": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs",
+  "identifiability": {
+    "effective_degrees_of_freedom": 0,
+    "calibration_observations": 0,
+    "observation_ids": [],
+    "qualified_but_unlinked_calibration_observations": 5,
+    "qualified_but_unlinked_observation_ids": [
+      "mer_c0_kgf1_coke_1_0",
+      "mer_c0_kgf2_coke_0_8",
+      "mer_c1_kgf1_coke_1_0",
+      "mer_c0_pefa_output_4_6",
+      "mer_c1_pefa_output_4_0_5_0"
+    ],
+    "independent_quantitative_validation": {
+      "family_count": 0,
+      "target_ids": [],
+      "reclassified_target_id": "mer_c1_dri_output_2_8",
+      "reclassified_role": "scenario_definition_consistency_check",
+      "overlap_evidence": "active hdri_t_per_t_liquid_steel=0.8484848485 equals MER 2.8/3.3 and is used in EAF material coupling plus DRI inventory",
+      "interpretation": "the 2.7286 Mt/y comparison is route-consistency reporting context only and cannot independently validate the source baseline"
+    },
+    "groups": {
+      "kgf_annual_output": {
+        "type": "qualified_calibration_family_frozen_no_executable_parameter",
+        "members": [
+          "c0_kgf1_annual_coke_output",
+          "c0_kgf2_annual_coke_output",
+          "c1_kgf1_annual_coke_output"
+        ],
+        "observation_ids": [
+          "mer_c0_kgf1_coke_1_0",
+          "mer_c0_kgf2_coke_0_8",
+          "mer_c1_kgf1_coke_1_0"
+        ],
+        "rule": "MER supplies exact annual outcomes but no movable KGF operating range or independent annual-output controller; changing protected minima, conversions, quotas or capacities is forbidden",
+        "executable_degree_of_freedom": false
+      },
+      "pefa_annual_output": {
+        "type": "qualified_calibration_family_rejected_before_execution",
+        "members": [
+          "c0_pefa_annual_fired_pellet_output",
+          "c1_pefa_annual_fired_pellet_output"
+        ],
+        "observation_ids": [
+          "mer_c0_pefa_output_4_6",
+          "mer_c1_pefa_output_4_0_5_0"
+        ],
+        "source_ranges_mt_y": {
+          "C0": [
+            4.6,
+            4.6
+          ],
+          "C1": [
+            4.0,
+            5.0
+          ]
+        },
+        "source_central_mt_y": {
+          "C0": 4.6,
+          "C1": 5.0
+        },
+        "baseline_mt_y": {
+          "C0": 4.3125,
+          "C1": 4.963235294118
+        },
+        "rule": "the annual band is not hourly flexibility; direct prescription would fit the target while PeFa output has no BF/DRP consumption, fired-pellet inventory or terminal-use identity",
+        "executable_degree_of_freedom": false
+      },
+      "wag_generation_range_position": {
+        "type": "audit_frozen_source_range_context",
+        "members": [
+          "bfg_generation_nm3_per_t_hot_metal",
+          "cog_generation_m3_per_t_dry_coal",
+          "bofg_generation_nm3_per_t_liquid_steel"
+        ],
+        "rule": "no movement because checkpoint-3B KGF/PeFa output targets do not identify WAG-generation coefficients",
+        "independent_coefficient_fitting_allowed": false
+      },
+      "vn25_efficiency_choice": {
+        "type": "audit_frozen_source_range_context",
+        "members": [
+          "vn25_electricity_efficiency"
+        ],
+        "allowed_values": [
+          0.34,
+          0.345
+        ],
+        "rule": "0.345 remains active; 0.34 is sensitivity context only and cannot be selected for calibration; 0.35 remains non-executable"
+      }
+    },
+    "checkpoint_8_analytical_screen": {
+      "round_count": 1,
+      "parameter_family_count": 1,
+      "source_baseline_comparator_count": 1,
+      "overlay_candidate_count": 5,
+      "retained_rolling_candidate_count": 0,
+      "candidate_c1_pefa_mt_y": [
+        4.0,
+        4.25,
+        4.5,
+        4.75,
+        5.0
+      ],
+      "candidate_c0_pefa_mt_y": 4.6,
+      "rejection_codes": [
+        "direct_calibration_target_prescription",
+        "missing_pefa_consumption_linkage",
+        "missing_fired_pellet_inventory_identity",
+        "missing_terminal_use_reconciliation"
+      ],
+      "held_out_targets_used": false,
+      "held_out_periods_used": false,
+      "solver_runs_performed": false,
+      "decision": "source_valid_emulation_rejected"
+    }
+  },
+  "files": [
+    {
+      "path": "scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml",
+      "sha256": "cf07e3e40a790f2b04923644db9332c8b7c50a2d23528b4216e4c06b8e233590",
+      "bytes": 3093,
+      "role": "active_source_driven_config"
+    },
+    {
+      "path": "scripts/Data/04_Steel_Test_Case/steel/s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation.py",
+      "sha256": "42d4515b27c280c8191dab4b681ad5ba6fe4f5ec47f1f62961d8c562b5c4503f",
+      "bytes": 233863,
+      "role": "active_rolling_orchestration_and_accounting"
+    },
+    {
+      "path": "scripts/Data/04_Steel_Test_Case/steel/s4_4c_unified_physical_modelbuilder.py",
+      "sha256": "80ff6ca1344476b3c863db800fb16ec4ade47d0ba6f87ecf64bf07cba0b52424",
+      "bytes": 305294,
+      "role": "active_unified_physical_builder"
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/c5_component_ontology/c5_generator_operating_mode_contract.csv",
+      "sha256": "36b7cf30f7f8a6daf98adfd8267d5f0949a6ebad9485345fdc33cc39ea2e4fbc",
+      "bytes": 1791,
+      "role": "generator_mode_governance"
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/c5_tata_benchmark_target_contract/calibration_validation_target_contract.csv",
+      "sha256": "55b828d4fe59915ffb00d86b44158aec4121f77e8f9848218c63f6d1f4cf795e",
+      "bytes": 75096,
+      "role": "checkpoint_8_overlap_reconciled_target_contract"
+    }
+  ],
+  "active_input_files": [
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/buffers_and_stores.csv",
+      "sha256": "0b375f89cf16ee9be015e2b2ef9eb01dfa43d00cf67f216bcca92f53adeb36e0",
+      "bytes": 11214
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/configuration_assets.csv",
+      "sha256": "4b3093a1e3c41568ebae0f840f9241a9df59b757a1fcf96c382ee8f37c968f64",
+      "bytes": 32088
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/external_supply_costs.csv",
+      "sha256": "835c3b1c02ce2d99facd2c54cd4fd7ac8ed166bb3d70503e1dcffa87f414b92c",
+      "bytes": 4435
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/market_price_inputs.csv",
+      "sha256": "4267ba2cec5252ceb7aa77ed6368c8430fe8b404fd608ecb708d3a663988d9d7",
+      "bytes": 1051
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/policy_modes.csv",
+      "sha256": "b64e8fd0adca1aea840091c0eed9bcb555a46062431f975970ac41c52d718df3",
+      "bytes": 2235
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/process_emission_factors.csv",
+      "sha256": "36ee262444e93055f6d82f4884365fa8621a15a925eea29b15c54c5ba7b201d3",
+      "bytes": 2094
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/process_energy_intensities.csv",
+      "sha256": "1518d9c59e41f95bfe658c7ceca78384dc23cb807404a336eb2967dcd1b81995",
+      "bytes": 4616
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/process_io_coefficients.csv",
+      "sha256": "ef13858f3522169fb6fe9bd6767c39d7a56107f08df2b8c8311bc36b69234194",
+      "bytes": 15624
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/process_units.csv",
+      "sha256": "7375c836a881e8c7447ecee7177baf14e621604b7c5cd7bfa284fb675cba827c",
+      "bytes": 12885
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/production_targets.csv",
+      "sha256": "cfb207be268cfe7d807ae0e4a4544268e4ff242d61fde3eb33a5b0c3bdfacd36",
+      "bytes": 1605
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/s4_4b_input_validation_report.csv",
+      "sha256": "90291524d60cba14d68d6cc6f4420a61e599ab62fc3ad87e6f2db7404dafc738",
+      "bytes": 2623
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/s4_4b_input_validation_report.json",
+      "sha256": "9296fa5c826a3d38ff3a9c764b9dd92ef4f3a892d3b4f86a6554036cad83bd60",
+      "bytes": 6743
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/s4_4b_stage_gate.csv",
+      "sha256": "687a27070ac84d0e85cf53668f99ea4ee9e11cb1070511a0d4eec012bf38afc9",
+      "bytes": 415
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/s4_4b_stage_gate.json",
+      "sha256": "9d4cbebdc1059a442b13a49386ec1289717fc4b9ae95d921a453e543f0a76969",
+      "bytes": 513
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/s4_4b_unified_dev_inputs_manifest.csv",
+      "sha256": "1f985b0025591127543d22da36c10b1991d86f0f76efc13458052e8c010e9ddb",
+      "bytes": 4726
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/solver_and_horizon_config.csv",
+      "sha256": "bd85695d600470a67f89398b8e37c8d8cd73c48a96e8c35bba29059aa09d0a27",
+      "bytes": 1891
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/utility_conversion_assets.csv",
+      "sha256": "e2cd1fced9656b21adeb1621a8c18ba9842ca5c90e7c185e10567c4ebee76f50",
+      "bytes": 2693
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/utility_demands.csv",
+      "sha256": "28491f022370535b527afcd4ef231918a5370b825c336575aa3a463278859e31",
+      "bytes": 3643
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/validation_anchors.csv",
+      "sha256": "f08817c1713b558977976f69868214182451d83a4760498905d05b2cd69c3c8b",
+      "bytes": 6849
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/wag_generation_coefficients.csv",
+      "sha256": "2a09b8f42ee9e617f4498ed27c67309eea8ca4984b60ebf6ec46abdebb7a02c6",
+      "bytes": 5037
+    },
+    {
+      "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/wag_sink_eligibility.csv",
+      "sha256": "4d1d56234af24b8b377dbc58c594fe1380e7be398b1e77a6cf656e67f359c2bc",
+      "bytes": 20900
+    }
+  ]
+}

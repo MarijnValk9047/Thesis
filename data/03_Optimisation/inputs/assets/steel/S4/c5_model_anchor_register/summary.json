@@ -1,0 +1,91 @@
+{
+  "anchor_count": 53,
+  "by_anchor_category": {
+    "active_model_target_anchors": 1,
+    "blocked_or_deferred_anchor_context": 2,
+    "co2_site_or_process_candidate_anchors": 5,
+    "electricity_gross_use_anchors": 9,
+    "final_product_downstream_proxy_anchors": 7,
+    "grid_import_net_electricity_exposure_anchors": 2,
+    "natural_gas_full_site_or_component_use_anchors": 6,
+    "onsite_generation_wag_electricity_anchors": 3,
+    "oxygen_and_utility_sanity_anchors": 4,
+    "process_level_co2_candidate_anchors": 3,
+    "production_and_denominator_anchors": 2,
+    "wag_generation_and_availability_anchors": 9
+  },
+  "by_category": {
+    "active_model_target_anchors": 1,
+    "blocked_or_deferred_anchor_context": 2,
+    "co2_site_or_process_candidate_anchors": 5,
+    "electricity_gross_use_anchors": 9,
+    "final_product_downstream_proxy_anchors": 7,
+    "grid_import_net_electricity_exposure_anchors": 2,
+    "natural_gas_full_site_or_component_use_anchors": 6,
+    "onsite_generation_wag_electricity_anchors": 3,
+    "oxygen_and_utility_sanity_anchors": 4,
+    "process_level_co2_candidate_anchors": 3,
+    "production_and_denominator_anchors": 2,
+    "wag_generation_and_availability_anchors": 9
+  },
+  "by_evidence_tier": {
+    "Tier A": 12,
+    "Tier B": 9,
+    "Tier C": 3,
+    "Tier E": 2,
+    "Tier F": 16,
+    "Tier X": 1,
+    "internal_diagnostic": 10
+  },
+  "by_model_use_status": {
+    "blocked": 2,
+    "reporting_only": 15,
+    "residual_kpi": 7,
+    "sensitivity_scoring": 11,
+    "validation_only": 18
+  },
+  "by_source_trust_rank": {
+    "Rank 1": 29,
+    "Rank 3": 8,
+    "Rank 4": 1,
+    "Rank 5": 3,
+    "Rank X": 1,
+    "internal_c5_diagnostic": 11
+  },
+  "created_on": "2026-07-11",
+  "go_no_go": {
+    "c0_full_site_ng_residual_reporting": "GO_DIAGNOSTIC_ONLY_WITH_PARTIAL_PROVENANCE_PRIMARY_SCORING_NO_GO",
+    "candidate_migration_to_executable_dev_inputs": "NO_GO",
+    "canonical_anchor_register_for_validation_reporting": "GO_WITH_CAVEATS",
+    "da_readiness": "NO_GO",
+    "economics_readiness": "NO_GO",
+    "full_sensitivity_runner_implementation": "NO_GO_DESIGN_NEXT",
+    "process_level_co2_implementation": "NO_GO",
+    "residual_electricity_kpi_reporting": "GO_DIAGNOSTIC_ONLY",
+    "residual_ng_kpi_reporting": "GO_DIAGNOSTIC_ONLY",
+    "site_level_co2_anchor_reporting": "GO_AS_VALIDATION_REPORTING_WITH_PARTIAL_PROVENANCE_PRIMARY_SCORING_NO_GO",
+    "wag_explicit_point_of_oxidation_co2_subtotal": "GO_DIAGNOSTIC_ONLY_PARTIAL",
+    "explicit_modelled_ng_co2": "GO_DIAGNOSTIC_ONLY",
+    "consolidated_wag_fuel_or_site_co2": "NO_GO"
+  },
+  "inherited_official_mer_candidate_anchors_reclassified_open_partial": 8,
+  "last_reviewed_stage": "C5p_at",
+  "main_open_issues": [
+    "Official full-site electricity grid-import natural-gas Scope-1 CO2 and WAG carrier anchors still need exact public locators before primary scoring.",
+    "Athanasiadis Table 8 and Table 9 values are retained as user-supplied model-precedent seeds; denominator and NG basis remain unresolved.",
+    "C0 full-site NG residual reporting is diagnostic-only with partial provenance; it is not an executable C0 process input.",
+    "Model-wide explicit-fuel CO2 is available for represented WAG and named NG consumers; aggregate process counters, capture streams, residual NG, residual electricity and Scope 2 remain excluded.",
+    "C1 generator WAG is compared to the derived 10.6 PJ/y carrier subtotal plus flare; the 14.6 PJ/y MER total remains non-comparable because it includes 4.1 PJ/y named VN25 NG without an hourly driver."
+  ],
+  "markdown_path": "docs/optimisation/steel/S4/C5_MODEL_ANCHOR_REGISTER_AND_EVIDENCE_HIERARCHY.md",
+  "register_path": "data/03_Optimisation/inputs/assets/steel/S4/c5_model_anchor_register/c5_model_anchor_evidence_register.csv",
+  "schema_path": "data/03_Optimisation/inputs/assets/steel/S4/c5_model_anchor_register/c5_model_anchor_evidence_register_schema.csv",
+  "still_blocked_missing_anchors": 1,
+  "unresolved_issues": [
+    "Exact MER/Tata raw locator confirmation still required before primary scoring for inherited official anchors.",
+    "Athanasiadis denominator and NG basis remain unresolved because raw PDF inspection was intentionally disallowed.",
+    "Residual NG/electricity anchors remain reporting KPI objects, not executable plant inputs.",
+    "Explicit WAG and named-NG CO2 remain a partial validation/reporting ledger; they must not be combined with aggregate process counters or promoted to ETS/site-total accounting."
+  ],
+  "user_supplied_athanasiadis_seed_rows": 8
+}

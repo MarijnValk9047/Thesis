@@ -1,0 +1,19 @@
+configuration,metric,unit,model_value,raw_anchor_value,gap,interpretation,can_be_used_for_eur_per_t_now,risk_if_used,recommendation
+C0_current_BF_BOF_reference,liquid_steel_target,t/y,6750000.0,7200000.0,-450000,Internal technical production target.,no,Ignores downstream yield/imported slab effects.,"Use for route consistency, not EUR/t final product."
+C0_current_BF_BOF_reference,BOF_liquid_steel,t/y,6750000.0,7200000.0,-450000,Route liquid steel output.,no,Intermediate route metric.,Keep as technical diagnostic.
+C0_current_BF_BOF_reference,EAF_liquid_steel,t/y,0.0,0.0,0,Route liquid steel output.,no,Intermediate route metric.,Keep as technical diagnostic.
+C0_current_BF_BOF_reference,DSP_output,t/y,1350000.0,1500000.0,-150000,Downstream final-product component.,maybe,"Current active value is 1.35 Mt/y, not raw anchor.",Candidate denominator component if final-product proxy is chosen.
+C0_current_BF_BOF_reference,HSM_WBW_output,t/y,4909090.90891,5400000.0,-490909.09109,Downstream final-product component.,maybe,Reflects C5 slab input and imported slab conventions.,Candidate denominator component if final-product proxy is chosen.
+C0_current_BF_BOF_reference,final_product_proxy_HSM_plus_DSP,t/y,6259090.90891,6900000.0,-640909.09109,Current C5 downstream final-product proxy.,not_yet,Best current denominator candidate but policy not frozen.,Freeze before economics.
+C0_current_BF_BOF_reference,imported_slab_to_HSM,t/y,0.0,0.0,0,Imported slab supports HSM output in C1.,no,Affects final-product numerator and route comparability.,Report separately in denominator policy.
+C0_current_BF_BOF_reference,HSM_internal_loss_or_scrap,t/y,490909.0925700003,,,HSM yield/loss diagnostic.,no,Not a sold-product denominator.,Use for material accounting only.
+C0_current_BF_BOF_reference,DSP_internal_scrap_loss,t/y,67500.0,,,DSP yield/loss diagnostic.,no,Reporting-only and not closed to scrap pool.,Use for future scrap loop.
+C1_phase1_BF_BOF_plus_DRP_EAF,liquid_steel_target,t/y,6750000.0,6800000.0,-50000,Internal technical production target.,no,Ignores downstream yield/imported slab effects.,"Use for route consistency, not EUR/t final product."
+C1_phase1_BF_BOF_plus_DRP_EAF,BOF_liquid_steel,t/y,3400000.0,3400000.0,0,Route liquid steel output.,no,Intermediate route metric.,Keep as technical diagnostic.
+C1_phase1_BF_BOF_plus_DRP_EAF,EAF_liquid_steel,t/y,3350000.0,3300000.0,50000,Route liquid steel output.,no,Intermediate route metric.,Keep as technical diagnostic.
+C1_phase1_BF_BOF_plus_DRP_EAF,DSP_output,t/y,1350000.0,1500000.0,-150000,Downstream final-product component.,maybe,"Current active value is 1.35 Mt/y, not raw anchor.",Candidate denominator component if final-product proxy is chosen.
+C1_phase1_BF_BOF_plus_DRP_EAF,HSM_WBW_output,t/y,5450534.76175,5500000.0,-49465.23825,Downstream final-product component.,maybe,Reflects C5 slab input and imported slab conventions.,Candidate denominator component if final-product proxy is chosen.
+C1_phase1_BF_BOF_plus_DRP_EAF,final_product_proxy_HSM_plus_DSP,t/y,6800534.76175,7000000.0,-199465.23825,Current C5 downstream final-product proxy.,not_yet,Best current denominator candidate but policy not frozen.,Freeze before economics.
+C1_phase1_BF_BOF_plus_DRP_EAF,imported_slab_to_HSM,t/y,595588.239,600000.0,-4411.761,Imported slab supports HSM output in C1.,no,Affects final-product numerator and route comparability.,Report separately in denominator policy.
+C1_phase1_BF_BOF_plus_DRP_EAF,HSM_internal_loss_or_scrap,t/y,545053.4703350002,,,HSM yield/loss diagnostic.,no,Not a sold-product denominator.,Use for material accounting only.
+C1_phase1_BF_BOF_plus_DRP_EAF,DSP_internal_scrap_loss,t/y,67500.0,,,DSP yield/loss diagnostic.,no,Reporting-only and not closed to scrap pool.,Use for future scrap loop.
