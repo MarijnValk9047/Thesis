@@ -28,6 +28,7 @@ from steel.s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation import (
     _file_fingerprints,
     _input_manifest,
     _model_target_multiplier,
+    _planning_horizon_cost_preservation_validation,
     _rolling_production_progress_contract,
     _mode_comparison_rows,
     _next_inventory_overrides,
@@ -43,10 +44,12 @@ from steel.s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation import (
     _config,
     _deterministic_cost_policy,
     _external_procurement_flow_coefficients,
+    _governed_cost_ledger_validation,
     _procurement_cost_ledger,
     _procurement_cost_summaries,
     _validate_required_solver_family,
 )
+from steel.validation_tolerance_policy import hourly_money_identity_record
 from steel.s4_4c_component_ontology import (
     FUTURE_DETERMINISTIC_COST_RESULT_FIELDS,
     load_future_cost_boundary_contract,
@@ -68,6 +71,25 @@ def test_handoff_uses_only_represented_inventory_fields() -> None:
     )
     assert overrides["C0_current_BF_BOF_reference"]["cold_slab_store_initial_t"] == 4.0
     assert overrides["C1_phase1_BF_BOF_plus_DRP_EAF"]["dri_buffer_initial_t"] == 9.0
+
+
+def test_planning_horizon_cost_preservation_uses_aggregate_tolerance() -> None:
+    primary = 27_073_308.555103
+    accepted = _planning_horizon_cost_preservation_validation(
+        primary_cost_eur=primary,
+        tie_break_cost_eur=27_073_308.565104,
+        endpoint_cost_eur=27_073_308.565102998,
+    )
+    assert accepted["status"] == "pass"
+    assert accepted["tie_break"]["raw_residual"] == pytest.approx(0.010001)
+    aggregate_tolerance = accepted["tie_break"]["allowed_tolerance"]
+    rejected = _planning_horizon_cost_preservation_validation(
+        primary_cost_eur=primary,
+        tie_break_cost_eur=primary + aggregate_tolerance + 1e-6,
+        endpoint_cost_eur=primary,
+    )
+    assert rejected["status"] == "fail"
+    assert hourly_money_identity_record("hour[0]", 0.010001)["status"] == "fail"
 
 
 def test_handoff_prefers_unrounded_controller_state() -> None:
@@ -412,6 +434,18 @@ def test_procurement_cost_ledger_reconciles_component_route_and_configuration() 
             for attribute in flow["physical_quantity_attribute"].split(";"):
                 row[attribute] = 1.0
     ledger = _procurement_cost_ledger([row], policy, run_id="test")
+    validation = _governed_cost_ledger_validation(config, ledger)
+    assert validation["status"] == "pass"
+    mutated = [dict(item) for item in ledger]
+    natural_gas_row = next(
+        item for item in mutated if item["price_id"] == "natural_gas_ttf_proxy"
+    )
+    natural_gas_row["price_eur_per_unit"] = (
+        float(natural_gas_row["price_eur_per_unit"]) + 1.0
+    )
+    mutated_validation = _governed_cost_ledger_validation(config, mutated)
+    assert mutated_validation["status"] == "fail"
+    assert mutated_validation["price_input_fingerprints_valid"] is False
     summaries, components, routes = _procurement_cost_summaries(ledger, [row])
     assert ledger
     assert summaries[0]["executed_final_product_t"] == 10.0

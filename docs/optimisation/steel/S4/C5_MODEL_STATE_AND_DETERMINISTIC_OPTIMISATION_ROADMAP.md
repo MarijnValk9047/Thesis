@@ -2,7 +2,7 @@
 
 ## Decision in one sentence
 
-Current gate: `phase1_full_site_boundary_and_anchor_hierarchy_frozen_phase2_go`. The repaired bounded DEVELOPMENT allocation-envelope run `steel_c5_wag_ng_allocation_envelope_v6_20260726` passes 4/4 hook-absent normals, 8/8 trajectories and 56/56 endpoint windows with all cost, state, physical, bound and evidence guardrails. The 2.528-TWh/y real WAG-only anchor is above the certified represented-cost-optimal maximum in all four frozen cases. This is a boundary/result finding, not calibration or candidate promotion. The accepted Phase-1 overlay now governs the full-site boundary and anchor hierarchy; strict source-ranked contracts, WAG yields, physical parameters and held-out results remain unchanged. Phase 2 may proceed only within this frozen hierarchy. Bidding, settlement, revenue, ETS, stochasticity, CVaR and mFRR remain unauthorised.
+Current gate: `phase2_athanasiadis_sale_sensitivity_complete_phase3_bounded_robustness_go`. Phase 2 is complete and independently reviewed PASS. The Athanasiadis sale sensitivity is retained only as a bounded diagnostic/emulation sensitivity, and no candidate was promoted. Phase 3 bounded robustness work is GO under separate authorization. No whole-period economic-uplift claim is permitted until terminal-inventory equivalence is established or a defensible terminal-value bridge is accepted. Bidding, settlement, ETS, stochasticity, CVaR and mFRR remain unauthorised.
 
 The fixed-reference deterministic procurement-cost path, pre-DAM
 operational-hardening validation, bounded VN25 development response and
@@ -817,6 +817,52 @@ are 2.229431, 1.935251, 2.230099 and 2.056505 TWh/y, all below 2.528 TWh/y.
 No candidate is promoted. Phase 2 is GO only as the next bounded improvement
 step under these frozen classifications; it is not permission for calibration,
 candidate search, export, price, route-share or physical-parameter changes.
+
+#### Phase-2 validation-tolerance contract
+
+Phase 2 uses the centralized
+`steel_unit_purpose_validation_tolerance/v2_20260727` contract. This changes
+validation acceptance and evidence only; it does not loosen a Gurobi
+feasibility tolerance, modify a physical equation, change an objective or
+alter the frozen Phase-1 inputs. Cumulative production, deadline, carried and
+terminal-state comparisons allow at most 1 t. Frozen price inputs are compared
+by exact fingerprints. Hourly money identities allow EUR 0.01, while a
+trajectory/year cost reconciliation independently allows
+`max(EUR 1, 1e-8 * comparison scale)`. Electricity and material balances keep
+their small unit-specific tolerances, and binaries remain strict.
+
+The six registered per-trajectory electricity guardrails keep an exact
+governed tolerance of `1e-6 MWh_e`. Their threshold comparison may separately
+accept no more than 256 binary64 ULPs at the comparison scale (with scale floor
+one) as non-accumulating roundoff. The raw residual, governed tolerance,
+positive excess, ULP allowance/method, normalized residual and status are all
+machine evidence. This is not a doubled tolerance, a solver-feasibility change,
+or an hourly/trajectory accumulation rule; `1e-6 + 1e-9 MWh_e` remains a fail,
+and an unknown threshold purpose fails closed.
+
+Tolerance is never accumulated across hours, constraints or replans. The C0
+sale-containment validation solves an isolated clone, fixes shared incumbent
+variables at full precision and export at zero, and may add only registered,
+bounded production/deadline/terminal validation slacks. The exact executed-
+block terminal quota equality `rolling_production_terminal_quota_equality` and
+the explicit in-horizon cumulative deadline equality
+`rolling_production_future_terminal_quota_equality` are registered in that
+cumulative production class. These are two literal registrations, not a name
+pattern, and do not cover any balance, capacity or economic row. Every active row is
+reported with raw residual, allowed tolerance, used relaxation, normalized
+residual and pass/fail; an unknown family fails closed. The original model must
+retain an identical fingerprint and repeated validations must not accumulate
+components or relaxations. New S4/C5 runners must import the contract; the
+hashed pre-existing runner inventory is an explicit legacy exemption, not a
+precedent for new hard-coded comparisons.
+
+The one authorized full-matrix source attempt may not be rerun or rewritten.
+Its narrowly authorized posthoc guardrail re-audit is a zero-solve,
+identity-scoped diagnostic: it binds the source summary, guardrails, case and
+solver tables, implementation, config and authorization metadata by hash;
+retains the original source status as failed; and may supersede only guardrail
+interpretation in a new local attempt. It does not change physical/economic
+results, promote a candidate or make a held-out, settlement or market claim.
 
 This reopening does not authorize an exact digital-twin claim or combine the
 physical fuel/oxidation CO2 ledger with the first-order full-site ledger. The

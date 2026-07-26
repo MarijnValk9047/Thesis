@@ -605,6 +605,54 @@ maximum is below 2.528 TWh/y in all four frozen cases. This is a boundary/result
 finding, not a calibration objective or candidate-selection result; no
 candidate is promoted.
 
+### 4Q. Validation tolerances are unit- and purpose-aware
+
+The canonical steel validation contract is
+`steel_unit_purpose_validation_tolerance/v2_20260727`. It supersedes blanket
+validation tolerances for the active Phase-2 path without changing solver
+formulation, physical constraints, frozen inputs or governed results.
+
+- cumulative production, deadlines, carried state and terminal state: 1 t;
+- frozen prices and other immutable input identities: exact fingerprints;
+- hourly money identities: EUR 0.01;
+- trajectory/year cost reconciliation: `max(EUR 1, 1e-8 * scale)`;
+- electricity and material balances: their small unit-specific tolerances;
+- binary and structural identities: strict.
+
+For the six registered per-trajectory electricity guardrails, the governed
+tolerance remains exactly `1e-6 MWh_e`. Threshold comparison may additionally
+recognise at most 256 binary64 ULPs at the comparison scale (never less than
+one) as non-accumulating comparison roundoff. This allowance is separate from
+the governed tolerance and from the solver feasibility tolerance; raw residual,
+positive excess, ULP allowance and method remain explicit evidence. Unknown
+threshold purposes fail closed, and an excess of `1e-9 MWh_e` remains a fail.
+
+Acceptance tolerances do not accumulate. Validation-only relaxation is allowed
+only for registered production/deadline/terminal constraint families and must
+be bounded by the family tolerance. Unknown active families fail closed. The
+executed-block `rolling_production_terminal_quota_equality` and explicit
+in-horizon cumulative-deadline
+`rolling_production_future_terminal_quota_equality` are the two literal
+families in this exact-quota class; no name pattern is used, and physical
+balances, capacities and economic rows remain outside this registration. The
+C0 sale containment oracle works on an isolated clone, fixes the shared
+incumbent at full precision and export at zero, records every active constraint
+row, verifies the original-model fingerprint is unchanged, and rejects repeated
+validation that accumulates components. Human-readable rounding is presentation
+only and may not drive machine pass/fail evidence.
+
+The active Phase-2 runner is policy-enforced. The fingerprinted inventory of
+older S4/C5 runners is explicitly legacy-exempt; any new runner must import the
+canonical contract or be deliberately reviewed into that inventory. This
+decision does not authorize a governed Gurobi rerun or rewriting prior evidence.
+
+The completed Phase-2 full-matrix source attempt remains immutable even when a
+later policy corrects only its guardrail interpretation. A posthoc re-audit must
+be no-solve, bind the source artifacts by hash, preserve the original failed
+status, write a new identity-scoped local attempt, and describe supersession as
+guardrail interpretation only. It cannot promote a candidate or create a new
+physical, economic, market or held-out-data claim.
+
 ## Benchmark Decisions
 
 ### 5. Perfect foresight is oracle only

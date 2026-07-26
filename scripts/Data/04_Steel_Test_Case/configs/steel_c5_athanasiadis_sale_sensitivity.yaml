@@ -1,0 +1,68 @@
+run_id: steel_c5_athanasiadis_sale_sensitivity_v1_20260726
+mode: c0_athanasiadis_electricity_sale_sensitivity
+checkpoint_id: bounded_phase2_electricity_sale_sensitivity
+lineage_role: diagnostic/emulation sensitivity
+run_class: bounded deterministic DEVELOPMENT diagnostic
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_athanasiadis_sale_sensitivity_v1_20260726
+retention_status: local
+git_eligible: false
+prevalidation_execution_authorized: true
+full_matrix_execution_authorized: true
+full_matrix_post_review_token_sha256: 0b6cbf5feb712535d6130fafb211b5f5d914d69ccaba6b88aeeada88455bb50c
+
+experiment:
+  physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
+  mechanism_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_real_anchor_mechanism_experiment.yaml
+  scratch_root: tmp/steel_c5_athanasiadis_sale_sensitivity_v1_cases
+  expected_parent_head: f2c4126b216707b132ca9bab43291b345e49b939
+  trajectory_count: 8
+  replan_count: 7
+  solver_model_count: 112
+  held_out_periods_used: false
+  annual_equivalent_label: development_week_annual_equivalent_not_empirical_annual_result
+  execution_hours_only_accounting: true
+  validation_tolerance_policy:
+    policy_id: steel_unit_purpose_validation_tolerance
+    policy_version: v2_20260727
+    policy_fingerprint_sha256: 56b91f71ed9f4ac6268f0d6089a80e1c00a5b5712d60bdb8885fb8e4f20e63d3
+
+  candidates:
+    - candidate_id: recovery_bg30_ng55
+    - candidate_id: recovery_bg30_ng30
+
+  scenarios:
+    - scenario_id: calm_price_insensitive
+      period_id: validation_2024-02-12
+      dataset_split: validation
+      price_field: y_pred
+      perfect_foresight_oracle: false
+    - scenario_id: volatile_negative_governed_y_pred
+      period_id: validation_2024-07-01
+      dataset_split: validation
+      price_field: y_pred
+      perfect_foresight_oracle: false
+
+  policies:
+    - policy_id: accepted_no_export_comparator
+      sale_enabled: false
+    - policy_id: athanasiadis_sale_enabled
+      sale_enabled: true
+      price_basis: same_governed_y_pred_as_import
+      settlement_claim: false
+      export_carrier_attribution: not_invented
+
+  immutable_phase1_contract:
+    c0_background_percent: 30.0
+    generator_electricity_efficiency: 0.345
+    generator_electrical_capacity_mw: 770.0
+    generator_total_fuel_volume_cap_nm3_h: 900000.0
+    fixed_full_site_ng_pj_y: 8.005
+    flexible_other_site_heat_service_min_pj_y: 0.0
+    flexible_other_site_heat_service_max_pj_y: 3.07
+    wag_generation_yield_overrides_by_configuration: {}
+    carrier_mixing_allowed: false
+    route_logic_changed: false
+    operating_rules_changed: false
+    initial_state_changed: false
+    production_progress_contract_changed: false

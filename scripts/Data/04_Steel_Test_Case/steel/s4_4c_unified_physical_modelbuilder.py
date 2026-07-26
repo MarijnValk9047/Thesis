@@ -36,6 +36,8 @@ from pyomo.environ import (
     minimize,
     value,
 )
+from pyomo.contrib.fbbt.fbbt import compute_bounds_on_expr, fbbt
+from pyomo.core.expr.visitor import identify_variables
 
 from .model import collect_model_stats
 from .reporting import iso_utc, now_utc, repo_rel, resolve_git_commit, write_json
@@ -52,6 +54,20 @@ from .wag_development_controller_contract import (
     hsm_reheat_mwh_per_t_hrc,
     hsm_rolling_electricity_mwh_per_t_hrc,
     load_development_controller_profile,
+)
+from .validation_tolerance_policy import (
+    POLICY_FINGERPRINT as VALIDATION_TOLERANCE_POLICY_FINGERPRINT,
+    POLICY_ID as VALIDATION_TOLERANCE_POLICY_ID,
+    POLICY_VERSION as VALIDATION_TOLERANCE_POLICY_VERSION,
+    SOLVER_NUMERICAL_TOLERANCE,
+    TERMINAL_STATE_TOLERANCE_T,
+    ValidationTolerancePolicyError,
+    canonical_json_sha256,
+    constraint_family_rule,
+    constraint_registry_fingerprint,
+    policy_contract as validation_tolerance_policy_contract,
+    resolve_policy_contract,
+    validation_record,
 )
 
 
@@ -567,8 +583,20 @@ def _apply_solver_time_limit(solver_name: str, solver: Any, seconds: float | Non
         raise S44CModelBuilderError(f"No time-limit adapter is defined for solver {solver_name}.")
 
 
-def _audit_loaded_incumbent(model: ConcreteModel, *, tolerance: float = 1e-6) -> dict[str, Any]:
-    """Audit the currently loaded incumbent against the complete active model."""
+def _audit_loaded_incumbent(
+    model: ConcreteModel,
+    *,
+    tolerance: float = 1e-6,
+    structurally_inactive_exclusions: Collection[str] = (),
+) -> dict[str, Any]:
+    """Audit the loaded incumbent without hiding floating-point boundary cases.
+
+    This is an exact diagnostic over the values exposed by Pyomo: it does not
+    round residuals or add a secondary numerical margin to ``tolerance``.  A
+    fixed-incumbent solver oracle remains the authority where the raw Python
+    evaluation and the solver's row arithmetic differ at the feasibility
+    boundary.
+    """
 
     max_constraint_violation = 0.0
     max_bound_violation = 0.0
@@ -577,13 +605,42 @@ def _audit_loaded_incumbent(model: ConcreteModel, *, tolerance: float = 1e-6) ->
     variable_count = 0
     discrete_count = 0
     undefined_value_count = 0
+    undefined_names: list[str] = []
+    bound_violations: list[dict[str, Any]] = []
+    integrality_violations: list[dict[str, Any]] = []
+    constraint_violations: list[dict[str, Any]] = []
+    excluded_names = set(structurally_inactive_exclusions)
     for variable in model.component_data_objects(Var, active=True):
+        if variable.name in excluded_names:
+            continue
         variable_count += 1
         current = variable.value
         if current is None:
             undefined_value_count += 1
+            undefined_names.append(variable.name)
             continue
         current = float(current)
+        lower = None if variable.lb is None else float(value(variable.lb))
+        upper = None if variable.ub is None else float(value(variable.ub))
+        lower_violation = (
+            0.0 if lower is None else max(0.0, lower - current)
+        )
+        upper_violation = (
+            0.0 if upper is None else max(0.0, current - upper)
+        )
+        bound_violation = max(lower_violation, upper_violation)
+        if bound_violation > 0.0:
+            bound_violations.append(
+                {
+                    "name": variable.name,
+                    "value": current,
+                    "lower": lower,
+                    "upper": upper,
+                    "lower_violation": lower_violation,
+                    "upper_violation": upper_violation,
+                    "absolute_violation": bound_violation,
+                }
+            )
         if variable.lb is not None:
             max_bound_violation = max(
                 max_bound_violation, float(value(variable.lb)) - current
@@ -594,8 +651,18 @@ def _audit_loaded_incumbent(model: ConcreteModel, *, tolerance: float = 1e-6) ->
             )
         if variable.is_binary() or variable.is_integer():
             discrete_count += 1
+            integrality_violation = abs(current - round(current))
+            if integrality_violation > 0.0:
+                integrality_violations.append(
+                    {
+                        "name": variable.name,
+                        "value": current,
+                        "nearest_integer": round(current),
+                        "absolute_violation": integrality_violation,
+                    }
+                )
             max_integrality_violation = max(
-                max_integrality_violation, abs(current - round(current))
+                max_integrality_violation, integrality_violation
             )
     for constraint in model.component_data_objects(Constraint, active=True):
         constraint_count += 1
@@ -603,28 +670,111 @@ def _audit_loaded_incumbent(model: ConcreteModel, *, tolerance: float = 1e-6) ->
             body = float(value(constraint.body))
         except (TypeError, ValueError):
             undefined_value_count += 1
+            undefined_names.append(constraint.name)
             continue
-        if constraint.lower is not None:
-            max_constraint_violation = max(
-                max_constraint_violation,
-                float(value(constraint.lower)) - body,
+        lower = (
+            None
+            if constraint.lower is None
+            else float(value(constraint.lower))
+        )
+        upper = (
+            None
+            if constraint.upper is None
+            else float(value(constraint.upper))
+        )
+        lower_violation = (
+            0.0 if lower is None else max(0.0, lower - body)
+        )
+        upper_violation = (
+            0.0 if upper is None else max(0.0, body - upper)
+        )
+        constraint_violation = max(lower_violation, upper_violation)
+        if constraint_violation > 0.0:
+            constraint_violations.append(
+                {
+                    "name": constraint.name,
+                    "component_name": constraint.parent_component().name,
+                    "index": str(constraint.index()),
+                    "violated_side": (
+                        "lower"
+                        if lower_violation >= upper_violation
+                        else "upper"
+                    ),
+                    "body": body,
+                    "lower": lower,
+                    "upper": upper,
+                    "lower_violation": lower_violation,
+                    "upper_violation": upper_violation,
+                    "absolute_violation": constraint_violation,
+                    "expression": str(constraint.expr),
+                }
             )
-        if constraint.upper is not None:
-            max_constraint_violation = max(
-                max_constraint_violation,
-                body - float(value(constraint.upper)),
-            )
+        max_constraint_violation = max(
+            max_constraint_violation, constraint_violation
+        )
     max_constraint_violation = max(0.0, max_constraint_violation)
     max_bound_violation = max(0.0, max_bound_violation)
-    return {
+    def _violation_order(row: Mapping[str, Any]) -> tuple[float, str, str]:
+        return (
+            -float(row["absolute_violation"]),
+            str(row["name"]),
+            str(row.get("violated_side", "")),
+        )
+
+    constraint_violations.sort(key=_violation_order)
+    bound_violations.sort(key=_violation_order)
+    integrality_violations.sort(key=_violation_order)
+    constraint_above_tolerance = [
+        row
+        for row in constraint_violations
+        if float(row["absolute_violation"]) > tolerance
+    ]
+    exact_maximum_constraint_records = [
+        row
+        for row in constraint_violations
+        if float(row["absolute_violation"]) == max_constraint_violation
+    ]
+    constraint_diagnostic_sha256 = hashlib.sha256(
+        json.dumps(
+            constraint_violations,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    result = {
         "constraint_count": constraint_count,
         "variable_count": variable_count,
         "discrete_variable_count": discrete_count,
         "undefined_value_count": undefined_value_count,
+        "structurally_inactive_exclusion_count": len(excluded_names),
         "max_constraint_violation": max_constraint_violation,
         "max_variable_bound_violation": max_bound_violation,
         "max_integrality_violation": max_integrality_violation,
         "tolerance": tolerance,
+        "evaluation_contract": {
+            "schema_version": "steel_loaded_incumbent_exact_diagnostics_v1",
+            "arithmetic": "Python float over Pyomo value(constraint.body/bounds)",
+            "comparison": "raw_absolute_violation_lte_tolerance",
+            "rounding_or_secondary_margin": False,
+            "constraint_iteration": "active Pyomo ConstraintData declaration order",
+            "diagnostic_order": "absolute_violation_desc_name_asc_side_asc",
+        },
+        "undefined_names": sorted(undefined_names),
+        "positive_constraint_violation_count": len(constraint_violations),
+        "constraint_above_tolerance_count": len(
+            constraint_above_tolerance
+        ),
+        "constraint_violation_diagnostic_sha256": (
+            constraint_diagnostic_sha256
+        ),
+        "exact_maximum_constraint_violations": (
+            exact_maximum_constraint_records
+        ),
+        "constraints_above_tolerance": constraint_above_tolerance,
+        "top_constraint_violations": constraint_violations[:20],
+        "top_variable_bound_violations": bound_violations[:20],
+        "top_integrality_violations": integrality_violations[:20],
         "feasible": (
             undefined_value_count == 0
             and max_constraint_violation <= tolerance
@@ -632,6 +782,559 @@ def _audit_loaded_incumbent(model: ConcreteModel, *, tolerance: float = 1e-6) ->
             and max_integrality_violation <= tolerance
         ),
     }
+    return result
+
+
+def _constraint_raw_validation_row(constraint: Any) -> dict[str, Any]:
+    """Evaluate one active row at the loaded full-precision incumbent."""
+
+    body = float(value(constraint.body))
+    lower = (
+        None
+        if constraint.lower is None
+        else float(value(constraint.lower))
+    )
+    upper = (
+        None
+        if constraint.upper is None
+        else float(value(constraint.upper))
+    )
+    lower_residual = 0.0 if lower is None else max(0.0, lower - body)
+    upper_residual = 0.0 if upper is None else max(0.0, body - upper)
+    return {
+        "constraint_name": constraint.name,
+        "constraint_family": constraint.parent_component().name,
+        "constraint_index": str(constraint.index()),
+        "body": body,
+        "lower": lower,
+        "upper": upper,
+        "lower_raw_residual": lower_residual,
+        "upper_raw_residual": upper_residual,
+        "raw_residual": max(lower_residual, upper_residual),
+        "expression": str(constraint.expr),
+    }
+
+
+def _constraint_validation_definition(constraint: Any) -> dict[str, Any]:
+    """Record a row definition without requiring initialized variables."""
+
+    return {
+        "constraint_name": constraint.name,
+        "constraint_family": constraint.parent_component().name,
+        "constraint_index": str(constraint.index()),
+        "lower": None
+        if constraint.lower is None
+        else float(value(constraint.lower)),
+        "upper": None
+        if constraint.upper is None
+        else float(value(constraint.upper)),
+        "expression": str(constraint.expr),
+    }
+
+
+def _install_registered_validation_relaxations(
+    validation_model: ConcreteModel,
+) -> dict[str, Any]:
+    """Replace only registered acceptance rows by explicitly bounded slacks."""
+
+    constraints = list(
+        validation_model.component_data_objects(Constraint, active=True)
+    )
+    row_contexts: list[dict[str, Any]] = []
+    relaxation_sides: list[dict[str, Any]] = []
+    families: list[str] = []
+    for constraint in constraints:
+        raw = _constraint_raw_validation_row(constraint)
+        family = str(raw["constraint_family"])
+        try:
+            rule = constraint_family_rule(family)
+        except ValidationTolerancePolicyError as exc:
+            error = S44CModelBuilderError(str(exc))
+            error.phase2_stage = "sale_containment.validation_policy_registration"
+            raise error from exc
+        families.append(family)
+        evidence = {
+            **raw,
+            **validation_record(
+                validation_id=str(raw["constraint_name"]),
+                purpose=rule.purpose,
+                unit=rule.unit,
+                raw_residual=float(raw["raw_residual"]),
+                allowed_tolerance=rule.tolerance,
+                aggregation=rule.aggregation,
+            ),
+            "relaxation_allowed": rule.relaxation_allowed,
+            "relaxation_side_indices": [],
+        }
+        context = {
+            "constraint": constraint,
+            "rule": rule,
+            "evidence": evidence,
+        }
+        row_contexts.append(context)
+        if not rule.relaxation_allowed:
+            continue
+        constraint.deactivate()
+        for side in ("lower", "upper"):
+            bound = raw[side]
+            if bound is None:
+                continue
+            index = len(relaxation_sides)
+            required = float(raw[f"{side}_raw_residual"])
+            relaxation_sides.append(
+                {
+                    "row_context_index": len(row_contexts) - 1,
+                    "side": side,
+                    "allowed_tolerance": rule.tolerance,
+                    "required_relaxation": required,
+                    "body_expression": constraint.body,
+                    "bound": float(bound),
+                }
+            )
+            evidence["relaxation_side_indices"].append(index)
+
+    validation_model.SALE_VALIDATION_RELAXATION_SIDE = Set(
+        initialize=range(len(relaxation_sides)), ordered=True
+    )
+    allowed_by_index = {
+        index: float(side["allowed_tolerance"])
+        for index, side in enumerate(relaxation_sides)
+    }
+    initial_by_index = {
+        index: min(
+            float(side["required_relaxation"]),
+            float(side["allowed_tolerance"]),
+        )
+        for index, side in enumerate(relaxation_sides)
+    }
+    validation_model.sale_validation_relaxation = Var(
+        validation_model.SALE_VALIDATION_RELAXATION_SIDE,
+        domain=NonNegativeReals,
+        bounds=lambda _m, index: (0.0, allowed_by_index[int(index)]),
+        initialize=lambda _m, index: initial_by_index[int(index)],
+    )
+    validation_model.sale_validation_relaxed_rows = ConstraintList()
+    for index, side in enumerate(relaxation_sides):
+        slack = validation_model.sale_validation_relaxation[index]
+        if side["side"] == "lower":
+            validation_model.sale_validation_relaxed_rows.add(
+                side["body_expression"] + slack >= side["bound"]
+            )
+        else:
+            validation_model.sale_validation_relaxed_rows.add(
+                side["body_expression"] - slack <= side["bound"]
+            )
+
+    return {
+        "row_contexts": row_contexts,
+        "relaxation_sides": relaxation_sides,
+        "constraint_family_registry_sha256": (
+            constraint_registry_fingerprint(families)
+        ),
+        "active_constraint_family_count": len(set(families)),
+        "active_validation_row_count": len(row_contexts),
+        "relaxation_side_count": len(relaxation_sides),
+    }
+
+
+def _finalize_registered_validation_evidence(
+    validation_model: ConcreteModel,
+    context: Mapping[str, Any],
+) -> dict[str, Any]:
+    side_rows: list[dict[str, Any]] = []
+    for index, side_context in enumerate(context["relaxation_sides"]):
+        row_context = context["row_contexts"][
+            int(side_context["row_context_index"])
+        ]
+        row_evidence = row_context["evidence"]
+        required = float(side_context["required_relaxation"])
+        allowed = float(side_context["allowed_tolerance"])
+        raw_used = value(
+            validation_model.sale_validation_relaxation[index],
+            exception=False,
+        )
+        used = None if raw_used is None else float(raw_used)
+        finite_used = used is not None and math.isfinite(used)
+        normalized_raw = required / allowed if allowed > 0.0 else (
+            0.0 if required == 0.0 else None
+        )
+        normalized_used = (
+            used / allowed
+            if finite_used and allowed > 0.0
+            else 0.0
+            if finite_used and used == 0.0
+            else None
+        )
+        required_within_allowed = required <= allowed
+        used_within_allowed = bool(finite_used and used <= allowed)
+        used_covers_required = bool(
+            finite_used
+            and used + SOLVER_NUMERICAL_TOLERANCE >= required
+        )
+        side_rows.append(
+            {
+                "relaxation_side_index": index,
+                "side": str(side_context["side"]),
+                "constraint_name": str(row_evidence["constraint_name"]),
+                "constraint_family": str(row_evidence["constraint_family"]),
+                "constraint_index": str(row_evidence["constraint_index"]),
+                "raw_required_relaxation": required,
+                "allowed_tolerance": allowed,
+                "solved_used_relaxation": used,
+                "normalized_raw_residual": normalized_raw,
+                "normalized_used_residual": normalized_used,
+                "required_within_allowed_tolerance": required_within_allowed,
+                "used_within_allowed_tolerance": used_within_allowed,
+                "solved_used_slack_covers_required": used_covers_required,
+                "coverage_numerical_tolerance": (
+                    SOLVER_NUMERICAL_TOLERANCE
+                ),
+                "status": (
+                    "pass"
+                    if required_within_allowed
+                    and used_within_allowed
+                    and used_covers_required
+                    else "fail"
+                ),
+            }
+        )
+    side_rows.sort(
+        key=lambda row: (
+            str(row["constraint_name"]),
+            0 if row["side"] == "lower" else 1,
+            int(row["relaxation_side_index"]),
+        )
+    )
+    side_by_index = {
+        int(row["relaxation_side_index"]): row for row in side_rows
+    }
+    rows: list[dict[str, Any]] = []
+    for row_context in context["row_contexts"]:
+        evidence = dict(row_context["evidence"])
+        row_side_evidence = [
+            side_by_index[int(index)]
+            for index in evidence["relaxation_side_indices"]
+        ]
+        used_values = [
+            row["solved_used_relaxation"] for row in row_side_evidence
+        ]
+        all_used_finite = all(value is not None for value in used_values)
+        used = (
+            max((float(item) for item in used_values), default=0.0)
+            if all_used_finite
+            else None
+        )
+        evidence["used_relaxation"] = used
+        evidence["relaxation_side_status"] = (
+            "pass"
+            if all(row["status"] == "pass" for row in row_side_evidence)
+            else "fail"
+        )
+        evidence["status"] = (
+            "pass"
+            if float(evidence["raw_residual"])
+            <= float(evidence["allowed_tolerance"])
+            and evidence["relaxation_side_status"] == "pass"
+            and used is not None
+            and used <= float(evidence["allowed_tolerance"])
+            else "fail"
+        )
+        rows.append(evidence)
+    rows.sort(key=lambda row: str(row["constraint_name"]))
+    failures = [row for row in rows if row["status"] != "pass"]
+    side_failures = [row for row in side_rows if row["status"] != "pass"]
+    rows_sha256 = canonical_json_sha256(rows)
+    side_rows_sha256 = canonical_json_sha256(side_rows)
+    return {
+        "schema_version": "steel_registered_validation_rows_v2",
+        "policy": validation_tolerance_policy_contract(),
+        "constraint_family_registry_sha256": context[
+            "constraint_family_registry_sha256"
+        ],
+        "active_constraint_family_count": context[
+            "active_constraint_family_count"
+        ],
+        "active_validation_row_count": len(rows),
+        "relaxation_side_count": context["relaxation_side_count"],
+        "failed_validation_row_count": len(failures),
+        "failed_relaxation_side_count": len(side_failures),
+        "max_normalized_residual": max(
+            (float(row["normalized_residual"]) for row in rows), default=0.0
+        ),
+        "max_normalized_used_relaxation": max(
+            (
+                float(row["normalized_used_residual"])
+                for row in side_rows
+                if row["normalized_used_residual"] is not None
+            ),
+            default=0.0,
+        ),
+        "rows_sha256": rows_sha256,
+        "relaxation_sides_sha256": side_rows_sha256,
+        "evidence_manifest_sha256": canonical_json_sha256(
+            {
+                "rows_sha256": rows_sha256,
+                "relaxation_sides_sha256": side_rows_sha256,
+            }
+        ),
+        "rows": rows,
+        "relaxation_sides": side_rows,
+        "status": (
+            "pass" if not failures and not side_failures else "fail"
+        ),
+    }
+
+
+def _sale_economic_core_fingerprint(model: ConcreteModel) -> str:
+    """Fingerprint the core while ignoring activation-only overlay routing."""
+
+    payload = {
+        "variables": sorted(
+            (
+                {
+                    "name": variable.name,
+                    "domain": str(variable.domain),
+                    "lower": str(variable.lb),
+                    "upper": str(variable.ub),
+                    "fixed": bool(variable.fixed),
+                }
+                for variable in model.component_data_objects(Var, active=None)
+            ),
+            key=lambda row: row["name"],
+        ),
+        "constraints": sorted(
+            (
+                {
+                    "name": constraint.name,
+                    "body": str(constraint.body),
+                    "lower": None
+                    if constraint.lower is None
+                    else str(constraint.lower),
+                    "upper": None
+                    if constraint.upper is None
+                    else str(constraint.upper),
+                }
+                for constraint in model.component_data_objects(
+                    Constraint, active=None
+                )
+                if constraint.parent_component().name
+                != "sale_economic_validation_overlay_rows"
+            ),
+            key=lambda row: row["name"],
+        ),
+        "objectives": sorted(
+            (
+                {
+                    "name": objective.name,
+                    "expression": str(objective.expr),
+                    "sense": str(objective.sense),
+                }
+                for objective in model.component_data_objects(
+                    Objective, active=None
+                )
+            ),
+            key=lambda row: row["name"],
+        ),
+    }
+    return canonical_json_sha256(payload)
+
+
+def _install_sale_economic_validation_overlay(
+    model: ConcreteModel,
+) -> dict[str, Any]:
+    """Expand only registered acceptance rows without decision slacks."""
+
+    constraints = list(model.component_data_objects(Constraint, active=True))
+    resolved: list[tuple[Any, Any, dict[str, Any]]] = []
+    families: list[str] = []
+    for constraint in constraints:
+        raw = _constraint_validation_definition(constraint)
+        family = str(raw["constraint_family"])
+        try:
+            rule = constraint_family_rule(family)
+        except ValidationTolerancePolicyError as exc:
+            error = S44CModelBuilderError(str(exc))
+            error.phase2_stage = "sale_economic.validation_policy_registration"
+            raise error from exc
+        resolved.append((constraint, rule, raw))
+        families.append(family)
+
+    core_before = _sale_economic_core_fingerprint(model)
+    model.sale_economic_validation_overlay_rows = ConstraintList()
+    row_contexts: list[dict[str, Any]] = []
+    for constraint, rule, raw in resolved:
+        if not rule.relaxation_allowed:
+            continue
+        original_lower = raw["lower"]
+        original_upper = raw["upper"]
+        overlay_lower = (
+            None
+            if original_lower is None
+            else float(original_lower) - float(rule.tolerance)
+        )
+        overlay_upper = (
+            None
+            if original_upper is None
+            else float(original_upper) + float(rule.tolerance)
+        )
+        constraint.deactivate()
+        overlay = model.sale_economic_validation_overlay_rows.add(
+            (overlay_lower, constraint.body, overlay_upper)
+        )
+        row_contexts.append(
+            {
+                "constraint": constraint,
+                "overlay_constraint": overlay,
+                "rule": rule,
+                "pre_solve_raw": raw,
+                "overlay_lower": overlay_lower,
+                "overlay_upper": overlay_upper,
+            }
+        )
+    core_after = _sale_economic_core_fingerprint(model)
+    if core_after != core_before:
+        raise S44CModelBuilderError(
+            "Sale economic validation overlay changed the underlying core."
+        )
+    return {
+        "schema_version": "steel_sale_economic_validation_overlay_v2",
+        "row_contexts": row_contexts,
+        "constraint_family_registry_sha256": constraint_registry_fingerprint(
+            families
+        ),
+        "active_constraint_family_count": len(set(families)),
+        "registered_acceptance_row_count": len(row_contexts),
+        "underlying_core_sha256_before": core_before,
+        "underlying_core_sha256_after": core_after,
+    }
+
+
+def _finalize_sale_economic_validation_overlay(
+    model: ConcreteModel,
+    context: Mapping[str, Any],
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for item in context["row_contexts"]:
+        rule = item["rule"]
+        overlay = item["overlay_constraint"]
+        definition = _constraint_validation_definition(item["constraint"])
+        try:
+            raw = _constraint_raw_validation_row(item["constraint"])
+            overlay_raw = _constraint_raw_validation_row(overlay)
+            record = validation_record(
+                validation_id=str(raw["constraint_name"]),
+                purpose=rule.purpose,
+                unit=rule.unit,
+                raw_residual=float(raw["raw_residual"]),
+                allowed_tolerance=float(rule.tolerance),
+                aggregation=rule.aggregation,
+            )
+            governed_tolerance = float(rule.tolerance)
+            raw_residual = float(raw["raw_residual"])
+            overlay_residual = float(overlay_raw["raw_residual"])
+            excess_beyond_governed_tolerance = max(
+                0.0, raw_residual - governed_tolerance
+            )
+            solver_numerical_allowance = SOLVER_NUMERICAL_TOLERANCE
+            finite = bool(
+                math.isfinite(raw_residual)
+                and math.isfinite(governed_tolerance)
+                and math.isfinite(excess_beyond_governed_tolerance)
+                and math.isfinite(overlay_residual)
+            )
+        except (TypeError, ValueError, ValidationTolerancePolicyError):
+            raw = {
+                **definition,
+                "body": None,
+                "lower_raw_residual": None,
+                "upper_raw_residual": None,
+                "raw_residual": None,
+            }
+            overlay_raw = {"raw_residual": None}
+            governed_tolerance = float(rule.tolerance)
+            excess_beyond_governed_tolerance = None
+            solver_numerical_allowance = SOLVER_NUMERICAL_TOLERANCE
+            overlay_residual = None
+            record = {
+                "validation_id": str(definition["constraint_name"]),
+                "purpose": rule.purpose,
+                "unit": rule.unit,
+                "aggregation": rule.aggregation,
+                "raw_residual": None,
+                "allowed_tolerance": float(rule.tolerance),
+                "normalized_residual": None,
+                "status": "fail",
+            }
+            finite = False
+        rows.append(
+            {
+                **raw,
+                **record,
+                "relaxation_allowed": True,
+                "original_expression": raw["expression"],
+                "original_lower": raw["lower"],
+                "original_upper": raw["upper"],
+                "overlay_constraint_name": overlay.name,
+                "overlay_expression": str(overlay.expr),
+                "overlay_lower": item["overlay_lower"],
+                "overlay_upper": item["overlay_upper"],
+                "overlay_raw_residual": overlay_raw["raw_residual"],
+                "overlay_residual": overlay_residual,
+                "governed_tolerance": governed_tolerance,
+                "excess_beyond_governed_tolerance": (
+                    excess_beyond_governed_tolerance
+                ),
+                "solver_numerical_allowance": solver_numerical_allowance,
+                "status": (
+                    "pass"
+                    if finite
+                    and float(excess_beyond_governed_tolerance)
+                    <= solver_numerical_allowance
+                    and float(overlay_residual)
+                    <= solver_numerical_allowance
+                    else "fail"
+                ),
+            }
+        )
+    rows.sort(key=lambda row: str(row["constraint_name"]))
+    failures = [row for row in rows if row["status"] != "pass"]
+    core_unchanged = bool(
+        context["underlying_core_sha256_before"]
+        == context["underlying_core_sha256_after"]
+    )
+    result = {
+        "schema_version": context["schema_version"],
+        "status": "pass" if not failures and core_unchanged else "fail",
+        "policy": validation_tolerance_policy_contract(),
+        "constraint_family_registry_sha256": context[
+            "constraint_family_registry_sha256"
+        ],
+        "active_constraint_family_count": context[
+            "active_constraint_family_count"
+        ],
+        "registered_acceptance_row_count": len(rows),
+        "failed_validation_row_count": len(failures),
+        "underlying_core_unchanged": core_unchanged,
+        "underlying_core_sha256_before": context[
+            "underlying_core_sha256_before"
+        ],
+        "underlying_core_sha256_after_install": context[
+            "underlying_core_sha256_after"
+        ],
+        "rows_sha256": canonical_json_sha256(rows),
+        "rows": rows,
+    }
+    evidence_path = context.get("evidence_path")
+    if evidence_path is not None:
+        resolved_path = Path(evidence_path)
+        resolved_path.write_text(
+            json.dumps(result, indent=2, sort_keys=True, allow_nan=False)
+            + "\n",
+            encoding="utf-8",
+        )
+        result["evidence_path"] = _portable_repository_path(resolved_path)
+        result["evidence_sha256"] = _sha256_file(resolved_path)
+    return result
 
 
 def _sha256_file(path: Path) -> str:
@@ -651,26 +1354,355 @@ def _variable_bound(variable: Any, attribute: str) -> float | None:
     return None if raw is None else float(value(raw))
 
 
-def _active_variable_records(model: ConcreteModel) -> list[dict[str, Any]]:
+def _record_declared_variable_schema(model: ConcreteModel) -> dict[str, dict[str, Any]]:
+    """Freeze first-seen variable schema before any bound propagation mutates it."""
+
+    declared = dict(getattr(model, "declared_variable_schema_snapshot", {}))
+    for variable in model.component_data_objects(Var, active=True):
+        declared.setdefault(
+            variable.name,
+            {
+                "name": variable.name,
+                "domain": str(variable.domain),
+                "lb": _variable_bound(variable, "lb"),
+                "ub": _variable_bound(variable, "ub"),
+            },
+        )
+    model.declared_variable_schema_snapshot = declared
+    return declared
+
+
+def _active_variable_records(
+    model: ConcreteModel, *, allow_undefined: bool = False
+) -> list[dict[str, Any]]:
     records = []
     for variable in model.component_data_objects(Var, active=True):
-        if variable.value is None:
+        if variable.value is None and not allow_undefined:
             raise S44CModelBuilderError(
                 f"Normal solution contains an undefined variable: {variable.name}."
             )
-        current = float(variable.value)
+        current = None if variable.value is None else float(variable.value)
         records.append(
             {
                 "name": variable.name,
                 "value": current,
                 "fixed": bool(variable.fixed),
                 "fixed_value": current if variable.fixed else None,
+                "stale": bool(variable.stale),
                 "domain": str(variable.domain),
                 "lb": _variable_bound(variable, "lb"),
                 "ub": _variable_bound(variable, "ub"),
             }
         )
     return sorted(records, key=lambda row: row["name"])
+
+
+_CARRIED_STATE_COMPONENTS = {
+    "coke_inventory",
+    "sinter_inventory",
+    "hot_iron_inventory",
+    "cold_slab_inventory",
+    "dri_inventory",
+}
+
+_SALE_STATE_PRESERVATION_SCHEMA_VERSION = (
+    "steel_phase2_sale_state_preservation_v3"
+)
+_SALE_STATE_TARGET_SCHEMA = (
+    "executed_final_product_t",
+    "coke_inventory_t",
+    "sinter_inventory_t",
+    "hot_iron_inventory_t",
+    "cold_slab_inventory_t",
+)
+_SALE_STATE_COMPONENTS = {
+    "final_product_output",
+    "coke_inventory",
+    "sinter_inventory",
+    "hot_iron_inventory",
+    "cold_slab_inventory",
+}
+_SALE_C0_CARRIED_COMPONENTS = {
+    "coke_inventory",
+    "sinter_inventory",
+    "hot_iron_inventory",
+    "cold_slab_inventory",
+}
+_SALE_STATE_CONSTRAINT_NAMES = {
+    target_id: f"sale_state_{stem}_preservation_exact"
+    for target_id, stem in {
+        "executed_final_product_t": "executed_final_product",
+        "coke_inventory_t": "coke_inventory",
+        "sinter_inventory_t": "sinter_inventory",
+        "hot_iron_inventory_t": "hot_iron_inventory",
+        "cold_slab_inventory_t": "cold_slab_inventory",
+    }.items()
+}
+
+
+def _variable_structural_classification(model: ConcreteModel) -> dict[str, Any]:
+    """Classify variables from active model incidence without guessing values."""
+
+    declared_schema = dict(
+        getattr(model, "declared_variable_schema_snapshot", {})
+    )
+    variables = {
+        variable.name: variable
+        for variable in model.component_data_objects(Var, active=True)
+    }
+    constraint_families = {name: set() for name in variables}
+    objective_families = {name: set() for name in variables}
+    expression_families = {name: set() for name in variables}
+    for constraint in model.component_data_objects(Constraint, active=True):
+        family = constraint.parent_component().name
+        for variable in identify_variables(constraint.body, include_fixed=True):
+            if variable.name in constraint_families:
+                constraint_families[variable.name].add(family)
+    for objective in model.component_data_objects(Objective, active=True):
+        for variable in identify_variables(objective.expr, include_fixed=True):
+            if variable.name in objective_families:
+                objective_families[variable.name].add(objective.name)
+    for expression in model.component_data_objects(Expression, active=True):
+        family = expression.parent_component().name
+        for variable in identify_variables(expression.expr, include_fixed=True):
+            if variable.name in expression_families:
+                expression_families[variable.name].add(family)
+    rows: list[dict[str, Any]] = []
+    for name, variable in variables.items():
+        constraints = sorted(constraint_families[name])
+        objectives = sorted(objective_families[name])
+        expressions = sorted(expression_families[name])
+        component = variable.parent_component().name
+        roles: list[str] = []
+        if component in _CARRIED_STATE_COMPONENTS:
+            roles.append("carried_state")
+        if expressions:
+            roles.append("report_result_expression")
+        if any("balance" in family.lower() for family in constraints):
+            roles.append("balance_constraint")
+        if objectives:
+            roles.append("economic_or_tiebreak_objective")
+        solver_relevant = bool(constraints or objectives)
+        incumbent_required = bool(solver_relevant or roles)
+        excluded = not incumbent_required
+        current_domain = str(variable.domain)
+        current_lb = _variable_bound(variable, "lb")
+        current_ub = _variable_bound(variable, "ub")
+        declared = declared_schema.get(name)
+        if declared is None:
+            declared = {
+                "domain": current_domain,
+                "lb": current_lb,
+                "ub": current_ub,
+            }
+            schema_source = "current_model_state_fallback"
+        else:
+            schema_source = "pre_bound_propagation_declaration_snapshot"
+        declared_domain = str(declared["domain"])
+        declared_lb = declared.get("lb")
+        declared_ub = declared.get("ub")
+        rows.append(
+            {
+                "name": name,
+                "component": component,
+                # The legacy field names remain aliases for the stable declared
+                # schema.  Current/FBBT-derived bounds are evidence, never
+                # structural identity.
+                "domain": declared_domain,
+                "lb": declared_lb,
+                "ub": declared_ub,
+                "declared_domain": declared_domain,
+                "declared_lb": declared_lb,
+                "declared_ub": declared_ub,
+                "current_domain": current_domain,
+                "current_lb": current_lb,
+                "current_ub": current_ub,
+                "schema_source": schema_source,
+                "current_schema_differs_from_declared": bool(
+                    (current_domain, current_lb, current_ub)
+                    != (declared_domain, declared_lb, declared_ub)
+                ),
+                "fixed": bool(variable.fixed),
+                "value": None if variable.value is None else float(variable.value),
+                "stale": bool(variable.stale),
+                "active_constraint_families": constraints,
+                "active_objective_families": objectives,
+                "active_expression_families": expressions,
+                "solver_representation": (
+                    "active_constraint_or_objective"
+                    if solver_relevant
+                    else "not_in_active_solver_incidence"
+                ),
+                "governed_role_categories": sorted(roles),
+                "solver_relevant": solver_relevant,
+                "incumbent_required": incumbent_required,
+                "structurally_inactive_exclusion": excluded,
+                "classification_reason": (
+                    "required_active_solver_incidence"
+                    if solver_relevant
+                    else "required_governed_carried_report_or_result_role"
+                    if roles
+                    else "excluded_no_active_solver_or_governed_role_incidence"
+                ),
+            }
+        )
+    rows.sort(key=lambda row: row["name"])
+
+    def digest(payload: Any) -> str:
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+
+    schema_fields = (
+        "name",
+        "declared_domain",
+        "declared_lb",
+        "declared_ub",
+    )
+    incidence_fields = (
+        "name",
+        "active_constraint_families",
+        "active_objective_families",
+        "active_expression_families",
+        "solver_representation",
+        "governed_role_categories",
+        "classification_reason",
+    )
+    required = [row for row in rows if row["incumbent_required"]]
+    excluded = [row for row in rows if row["structurally_inactive_exclusion"]]
+    return {
+        "schema_version": "steel_variable_structural_classification_v2",
+        "variables": rows,
+        "required_variables": required,
+        "inactive_exclusions": excluded,
+        "complete_structure_sha256": digest(
+            [{field: row[field] for field in schema_fields} for row in rows]
+        ),
+        "solver_relevant_schema_sha256": digest(
+            [
+                {field: row[field] for field in schema_fields}
+                for row in rows
+                if row["solver_relevant"]
+            ]
+        ),
+        "inactive_exclusion_sha256": digest(
+            [
+                {
+                    key: row[key]
+                    for key in (
+                        *schema_fields,
+                        *incidence_fields,
+                        "solver_relevant",
+                        "incumbent_required",
+                        "structurally_inactive_exclusion",
+                    )
+                }
+                for row in excluded
+            ]
+        ),
+        "fixed_values_sha256": digest(
+            [
+                {
+                    "name": row["name"],
+                    "fixed": row["fixed"],
+                    "value": row["value"] if row["fixed"] else None,
+                }
+                for row in required
+            ]
+        ),
+        "active_incidence_sha256": digest(
+            [{field: row[field] for field in incidence_fields} for row in rows]
+        ),
+    }
+
+
+def _shared_variable_schema_diagnostics(
+    normal_classification: Mapping[str, Any],
+    sale_classification: Mapping[str, Any],
+    shared_names: Collection[str],
+) -> dict[str, Any]:
+    """Separate stable declaration mismatches from legitimate derived bounds."""
+
+    normal_by_name = {
+        str(row["name"]): row
+        for row in normal_classification.get("variables", ())
+    }
+    sale_by_name = {
+        str(row["name"]): row
+        for row in sale_classification.get("variables", ())
+    }
+
+    def schema(row: Mapping[str, Any], lifecycle: str) -> dict[str, Any]:
+        if lifecycle == "declared":
+            return {
+                "domain": row.get("declared_domain", row.get("domain")),
+                "lb": row.get("declared_lb", row.get("lb")),
+                "ub": row.get("declared_ub", row.get("ub")),
+            }
+        return {
+            "domain": row.get("current_domain", row.get("domain")),
+            "lb": row.get("current_lb", row.get("lb")),
+            "ub": row.get("current_ub", row.get("ub")),
+        }
+
+    declared_mismatches: list[dict[str, Any]] = []
+    derived_differences: list[dict[str, Any]] = []
+    category_names: dict[str, list[str]] = {}
+    category_schemas: dict[str, dict[str, Any]] = {}
+    for name in sorted(set(shared_names)):
+        if name not in normal_by_name or name not in sale_by_name:
+            continue
+        normal_declared = schema(normal_by_name[name], "declared")
+        sale_declared = schema(sale_by_name[name], "declared")
+        if normal_declared != sale_declared:
+            declared_mismatches.append(
+                {
+                    "name": name,
+                    "normal_declared_schema": normal_declared,
+                    "sale_declared_schema": sale_declared,
+                }
+            )
+        normal_current = schema(normal_by_name[name], "current")
+        sale_current = schema(sale_by_name[name], "current")
+        if normal_current != sale_current:
+            detail = {
+                "name": name,
+                "normal_current_schema": normal_current,
+                "sale_current_schema": sale_current,
+            }
+            derived_differences.append(detail)
+            category_schema = {
+                "normal_current_schema": normal_current,
+                "sale_current_schema": sale_current,
+            }
+            category_key = json.dumps(
+                category_schema, sort_keys=True, separators=(",", ":")
+            )
+            category_names.setdefault(category_key, []).append(name)
+            category_schemas[category_key] = category_schema
+    categories = [
+        {
+            **category_schemas[key],
+            "variable_count": len(names),
+            "variable_names": names,
+        }
+        for key, names in category_names.items()
+    ]
+    categories.sort(
+        key=lambda row: (
+            -int(row["variable_count"]),
+            json.dumps(row, sort_keys=True, separators=(",", ":")),
+        )
+    )
+    return {
+        "declared_schema_mismatches": declared_mismatches,
+        "declared_schema_mismatch_count": len(declared_mismatches),
+        "current_or_derived_bound_differences": derived_differences,
+        "current_or_derived_bound_difference_count": len(derived_differences),
+        "current_or_derived_bound_pair_categories": categories,
+    }
 
 
 def _variable_name_and_schema_hashes(
@@ -721,7 +1753,9 @@ def _variable_value_and_fixed_state_sha256(
     state = [
         {
             "name": row["name"],
-            "value": float(row["value"]),
+            "value": (
+                None if row["value"] is None else float(row["value"])
+            ),
             "fixed": bool(row["fixed"]),
             "fixed_value": (
                 float(row["fixed_value"])
@@ -739,10 +1773,12 @@ def _variable_value_and_fixed_state_sha256(
 
 
 def _model_structure_sha256(model: ConcreteModel) -> str:
-    variables = _active_variable_records(model)
-    _, variable_schema_hash, _ = _variable_name_and_schema_hashes(variables)
+    classification = _variable_structural_classification(model)
     payload = {
-        "variable_schema_sha256": variable_schema_hash,
+        "complete_structure_sha256": classification[
+            "complete_structure_sha256"
+        ],
+        "active_incidence_sha256": classification["active_incidence_sha256"],
         "active_constraint_names": sorted(
             constraint.name
             for constraint in model.component_data_objects(
@@ -813,12 +1849,80 @@ def _capture_complete_normal_solution(
     if policy.get("enabled") is not True:
         raise S44CModelBuilderError(
             "Normal-solution capture requires enabled=true."
-        )
+    )
     path = Path(str(policy["path"])).resolve()
-    records = _active_variable_records(model)
+    classification = _variable_structural_classification(model)
+    exclusion_enabled = bool(
+        policy.get("structural_inactive_exclusion_enabled", False)
+    )
+    undefined_required = [
+        row
+        for row in (
+            classification["required_variables"]
+            if exclusion_enabled
+            else classification["variables"]
+        )
+        if row["value"] is None
+    ]
+    if undefined_required:
+        failure_path = path.with_name(path.name + ".classification_failure.json")
+        failure_path.parent.mkdir(parents=True, exist_ok=True)
+        failure_path.write_text(
+            json.dumps(
+                {
+                    "status": "fail_undefined_incumbent_required",
+                    "undefined_variables": undefined_required,
+                    "classification": classification,
+                    "provenance": dict(policy.get("provenance", {})),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        error = S44CModelBuilderError(
+            "Normal solution contains undefined solver/governed-relevant "
+            f"variables: {[row['name'] for row in undefined_required]}."
+        )
+        error.phase2_stage = "normal_capture.variable_classification"
+        error.variable_classification_evidence_path = str(failure_path)
+        raise error
+    required_names = {
+        str(row["name"])
+        for row in (
+            classification["required_variables"]
+            if exclusion_enabled
+            else classification["variables"]
+        )
+    }
+    records = [
+        row
+        for row in _active_variable_records(model, allow_undefined=True)
+        if str(row["name"]) in required_names
+    ]
     name_hash, schema_hash, fixed_schema_hash = (
         _variable_name_and_schema_hashes(records)
     )
+    capture_audit = _audit_loaded_incumbent(
+        model,
+        tolerance=float(policy.get("feasibility_tolerance", 1e-6)),
+        structurally_inactive_exclusions=tuple(
+            str(row["name"])
+            for row in classification["inactive_exclusions"]
+        ),
+    )
+    if (
+        capture_audit["undefined_value_count"] != 0
+        or capture_audit["max_variable_bound_violation"]
+        > capture_audit["tolerance"]
+        or capture_audit["max_integrality_violation"]
+        > capture_audit["tolerance"]
+    ):
+        raise S44CModelBuilderError(
+            "Normal solution capture failed the exact loaded-value precheck "
+            "for undefined values, variable bounds, or integrality."
+        )
     payload = {
         "schema_version": "steel_complete_normal_solution_v2",
         "configuration_id": configuration_id,
@@ -828,7 +1932,24 @@ def _capture_complete_normal_solution(
         "variable_schema_sha256": schema_hash,
         "variable_fixed_schema_sha256": fixed_schema_hash,
         "model_structure_sha256": _model_structure_sha256(model),
+        "variable_classification": classification,
+        "complete_structure_sha256": classification["complete_structure_sha256"],
+        "solver_relevant_schema_sha256": classification[
+            "solver_relevant_schema_sha256"
+        ],
+        "inactive_exclusion_sha256": classification[
+            "inactive_exclusion_sha256"
+        ],
+        "fixed_values_sha256": classification["fixed_values_sha256"],
+        "active_incidence_sha256": classification["active_incidence_sha256"],
+        "inactive_exclusion_count": len(classification["inactive_exclusions"]),
+        "structural_inactive_exclusion_enabled": exclusion_enabled,
         "variables": records,
+        "post_solve_incumbent_audit": capture_audit,
+        "constraint_feasibility_authority": (
+            "normal_optimization_solver_termination_then_required_sale_"
+            "fixed_incumbent_pyomo_and_native_gurobi_zero_objective"
+        ),
         "solve_hierarchy": {
             "primary_cost_objective_eur": metadata.get(
                 "primary_cost_objective_eur"
@@ -878,6 +1999,21 @@ def _capture_complete_normal_solution(
         "normal_solution_variable_fixed_schema_sha256": fixed_schema_hash,
         "normal_solution_model_structure_sha256": payload[
             "model_structure_sha256"
+        ],
+        "normal_solution_complete_structure_sha256": payload[
+            "complete_structure_sha256"
+        ],
+        "normal_solution_solver_relevant_schema_sha256": payload[
+            "solver_relevant_schema_sha256"
+        ],
+        "normal_solution_inactive_exclusion_sha256": payload[
+            "inactive_exclusion_sha256"
+        ],
+        "normal_solution_active_incidence_sha256": payload[
+            "active_incidence_sha256"
+        ],
+        "normal_solution_inactive_exclusion_count": payload[
+            "inactive_exclusion_count"
         ],
     }
 
@@ -943,6 +2079,1097 @@ def _native_gurobi_zero_objective_check(
         "binary_count": int(native.NumBinVars),
         "iis_created": iis_created,
         "iis_path": str(iis_path) if iis_created else None,
+    }
+
+
+def _canonical_payload_sha256(payload: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
+def _validated_sale_state_preservation_contract(
+    contract: Mapping[str, Any],
+    *,
+    model: ConcreteModel,
+    saved_capture: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    required_keys = {
+        "schema_version",
+        "enabled",
+        "configuration_id",
+        "replan_index",
+        "execution_hours",
+        "implementation_sha256",
+    }
+    if set(contract) != required_keys:
+        raise S44CModelBuilderError(
+            "Sale state-preservation contract has missing or extra fields."
+        )
+    try:
+        implementation_sha256 = str(
+            contract["implementation_sha256"]
+        ).lower()
+        normalized = {
+            "schema_version": str(contract["schema_version"]),
+            "enabled": contract["enabled"] is True,
+            "configuration_id": str(contract["configuration_id"]),
+            "replan_index": int(contract["replan_index"]),
+            "execution_hours": int(contract["execution_hours"]),
+            "implementation_sha256": implementation_sha256,
+        }
+    except (TypeError, ValueError) as exc:
+        raise S44CModelBuilderError(
+            "Sale state-preservation contract identity is invalid."
+        ) from exc
+    if (
+        normalized["schema_version"]
+        != _SALE_STATE_PRESERVATION_SCHEMA_VERSION
+        or normalized["enabled"] is not True
+        or normalized["configuration_id"]
+        != "C0_current_BF_BOF_reference"
+        or normalized["replan_index"] < 0
+        or normalized["execution_hours"] <= 0
+        or normalized["execution_hours"] > len(model.TIME)
+        or len(implementation_sha256) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in implementation_sha256
+        )
+    ):
+        raise S44CModelBuilderError(
+            "Sale state-preservation contract identity is invalid."
+        )
+    if saved_capture is not None:
+        provenance = dict(saved_capture.get("provenance", {}))
+        try:
+            saved_replan_index = int(saved_capture.get("replan_index", -1))
+        except (TypeError, ValueError) as exc:
+            raise S44CModelBuilderError(
+                "Sale state-preservation capture identity is invalid."
+            ) from exc
+        if (
+            saved_capture.get("configuration_id")
+            != normalized["configuration_id"]
+            or saved_replan_index != normalized["replan_index"]
+            or provenance.get("implementation_sha256")
+            != implementation_sha256
+        ):
+            raise S44CModelBuilderError(
+                "Sale state-preservation capture identity does not match the "
+                "configuration, replan, or implementation contract."
+            )
+    return normalized
+
+
+def _sale_state_expressions(
+    model: ConcreteModel, *, execution_hours: int
+) -> dict[str, Any]:
+    time_by_index = {int(t): t for t in model.TIME}
+    expected_execution_indices = set(range(execution_hours))
+    if not expected_execution_indices.issubset(time_by_index):
+        raise S44CModelBuilderError(
+            "Sale state preservation execution hours are absent from model.TIME."
+        )
+    missing_components = sorted(
+        component
+        for component in _SALE_STATE_COMPONENTS
+        if not hasattr(model, component)
+    )
+    present_carried_components = {
+        component
+        for component in _CARRIED_STATE_COMPONENTS
+        if hasattr(model, component)
+    }
+    if (
+        missing_components
+        or present_carried_components != _SALE_C0_CARRIED_COMPONENTS
+    ):
+        raise S44CModelBuilderError(
+            "Sale state-preservation model component schema mismatch: "
+            f"missing={missing_components}, "
+            f"carried={sorted(present_carried_components)}."
+        )
+    handoff_index = execution_hours - 1
+    handoff_hour = time_by_index[handoff_index]
+    return {
+        "executed_final_product_t": sum(
+            model.final_product_output[time_by_index[index]]
+            for index in range(execution_hours)
+        ),
+        "coke_inventory_t": model.coke_inventory[handoff_hour],
+        "sinter_inventory_t": model.sinter_inventory[handoff_hour],
+        "hot_iron_inventory_t": model.hot_iron_inventory[handoff_hour],
+        "cold_slab_inventory_t": model.cold_slab_inventory[handoff_hour],
+    }
+
+
+def _sale_state_schema_payload() -> list[dict[str, Any]]:
+    return [
+        {
+            "target_id": target_id,
+            "model_component": (
+                "final_product_output"
+                if target_id == "executed_final_product_t"
+                else target_id.removesuffix("_t")
+            ),
+            "selection": (
+                "sum_executed_hours"
+                if target_id == "executed_final_product_t"
+                else "handoff_hour"
+            ),
+            "unit": "t",
+            "operational_constraint": "full_precision_exact_equality",
+            "final_validation": "independent_state_acceptance",
+            "allowed_tolerance_t": TERMINAL_STATE_TOLERANCE_T,
+        }
+        for target_id in _SALE_STATE_TARGET_SCHEMA
+    ]
+
+
+def _sale_state_target_bounds(
+    targets: Mapping[str, float],
+) -> dict[str, dict[str, float]]:
+    return {
+        target_id: {
+            "lower_bound_t": float(targets[target_id])
+            - TERMINAL_STATE_TOLERANCE_T,
+            "upper_bound_t": float(targets[target_id])
+            + TERMINAL_STATE_TOLERANCE_T,
+        }
+        for target_id in _SALE_STATE_TARGET_SCHEMA
+    }
+
+
+def _capture_sale_state_preservation_targets(
+    model: ConcreteModel,
+    *,
+    contract: Mapping[str, Any],
+    saved_capture: Mapping[str, Any],
+) -> dict[str, Any]:
+    normalized_contract = _validated_sale_state_preservation_contract(
+        contract, model=model, saved_capture=saved_capture
+    )
+    expressions = _sale_state_expressions(
+        model, execution_hours=int(normalized_contract["execution_hours"])
+    )
+    if tuple(expressions) != _SALE_STATE_TARGET_SCHEMA:
+        raise S44CModelBuilderError(
+            "Sale state-preservation target schema changed."
+        )
+    try:
+        targets = {
+            target_id: float(value(expressions[target_id]))
+            for target_id in _SALE_STATE_TARGET_SCHEMA
+        }
+    except (TypeError, ValueError) as exc:
+        raise S44CModelBuilderError(
+            "Sale state-preservation target is undefined or nonnumeric."
+        ) from exc
+    if not all(math.isfinite(target) for target in targets.values()):
+        raise S44CModelBuilderError(
+            "Sale state-preservation target contains a nonfinite value."
+        )
+    state_schema = _sale_state_schema_payload()
+    constraint_names = {
+        target_id: _SALE_STATE_CONSTRAINT_NAMES[target_id]
+        for target_id in _SALE_STATE_TARGET_SCHEMA
+    }
+    target_bounds = _sale_state_target_bounds(targets)
+    return {
+        "schema_version": _SALE_STATE_PRESERVATION_SCHEMA_VERSION,
+        "contract": normalized_contract,
+        "handoff_index": int(normalized_contract["execution_hours"]) - 1,
+        "target_schema": list(_SALE_STATE_TARGET_SCHEMA),
+        "state_schema": state_schema,
+        "state_schema_sha256": _canonical_payload_sha256(state_schema),
+        "targets": targets,
+        "targets_sha256": _canonical_payload_sha256(targets),
+        "target_bounds": target_bounds,
+        "target_bounds_sha256": _canonical_payload_sha256(target_bounds),
+        "constraint_names": constraint_names,
+        "constraint_names_sha256": _canonical_payload_sha256(
+            constraint_names
+        ),
+    }
+
+
+def _apply_sale_state_preservation(
+    model: ConcreteModel,
+    *,
+    containment_result: Mapping[str, Any],
+    containment_policy: Mapping[str, Any],
+    contract: Mapping[str, Any],
+    tolerance: float,
+) -> dict[str, Any]:
+    if tolerance != SOLVER_NUMERICAL_TOLERANCE:
+        raise S44CModelBuilderError(
+            "Sale state preservation requires the strict canonical solver "
+            "numerical tolerance."
+        )
+    normalized_contract = _validated_sale_state_preservation_contract(
+        contract, model=model
+    )
+    if containment_result.get("status") != "pass":
+        raise S44CModelBuilderError(
+            "Sale state preservation requires a passing containment oracle."
+        )
+    capture = containment_result.get("state_preservation_capture")
+    if not isinstance(capture, Mapping):
+        raise S44CModelBuilderError(
+            "Sale containment omitted the verified state-preservation targets."
+        )
+    if dict(capture.get("contract", {})) != normalized_contract:
+        raise S44CModelBuilderError(
+            "Sale state-preservation target contract identity mismatch."
+        )
+    expected_provenance = dict(
+        containment_policy.get("normal_solution_expected_provenance", {})
+    )
+    if (
+        dict(containment_result.get("provenance", {})) != expected_provenance
+        or expected_provenance.get("implementation_sha256")
+        != normalized_contract["implementation_sha256"]
+        or containment_result.get("saved_normal_solution_sha256")
+        != containment_policy.get("normal_solution_record_sha256")
+        or containment_result.get("fixed_state_sha256_before")
+        != containment_result.get("fixed_state_sha256_after")
+        or containment_result.get("value_state_sha256_before")
+        != containment_result.get("value_state_sha256_after")
+    ):
+        raise S44CModelBuilderError(
+            "Sale state preservation rejected capture provenance, fingerprint, "
+            "implementation identity, or oracle restoration."
+        )
+    evidence_dir = Path(str(containment_policy["oracle_directory"])).resolve()
+    containment_record_path = evidence_dir / "sale_incumbent_containment.json"
+    containment_record_sha256 = str(
+        containment_result.get("record_sha256", "")
+    )
+    if (
+        not containment_record_path.is_file()
+        or _sha256_file(containment_record_path)
+        != containment_record_sha256
+    ):
+        raise S44CModelBuilderError(
+            "Sale state preservation rejected the containment record fingerprint."
+        )
+    try:
+        containment_record = json.loads(
+            containment_record_path.read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise S44CModelBuilderError(
+            "Sale state preservation could not verify the containment record."
+        ) from exc
+    if (
+        containment_record.get("status") != "pass"
+        or containment_record.get("state_preservation_capture") != capture
+        or containment_record.get("provenance") != expected_provenance
+        or containment_record.get("saved_normal_solution_sha256")
+        != containment_policy.get("normal_solution_record_sha256")
+    ):
+        raise S44CModelBuilderError(
+            "Sale state-preservation capture is not bound to the passing "
+            "containment record."
+        )
+    target_schema = tuple(capture.get("target_schema", ()))
+    targets = dict(capture.get("targets", {}))
+    target_bounds = dict(capture.get("target_bounds", {}))
+    expected_state_schema = _sale_state_schema_payload()
+    if (
+        capture.get("schema_version")
+        != _SALE_STATE_PRESERVATION_SCHEMA_VERSION
+        or capture.get("handoff_index")
+        != normalized_contract["execution_hours"] - 1
+        or target_schema != _SALE_STATE_TARGET_SCHEMA
+        or set(targets) != set(_SALE_STATE_TARGET_SCHEMA)
+        or set(target_bounds) != set(_SALE_STATE_TARGET_SCHEMA)
+        or capture.get("state_schema") != expected_state_schema
+        or capture.get("constraint_names") != _SALE_STATE_CONSTRAINT_NAMES
+    ):
+        raise S44CModelBuilderError(
+            "Sale state-preservation target schema has missing or extra fields."
+        )
+    try:
+        targets = {
+            target_id: float(targets[target_id])
+            for target_id in _SALE_STATE_TARGET_SCHEMA
+        }
+    except (TypeError, ValueError) as exc:
+        raise S44CModelBuilderError(
+            "Sale state-preservation target is nonnumeric."
+        ) from exc
+    if (
+        not all(math.isfinite(target) for target in targets.values())
+        or target_bounds != _sale_state_target_bounds(targets)
+        or capture.get("targets_sha256")
+        != _canonical_payload_sha256(targets)
+        or capture.get("target_bounds_sha256")
+        != _canonical_payload_sha256(target_bounds)
+        or capture.get("state_schema_sha256")
+        != _canonical_payload_sha256(expected_state_schema)
+        or capture.get("constraint_names_sha256")
+        != _canonical_payload_sha256(_SALE_STATE_CONSTRAINT_NAMES)
+    ):
+        raise S44CModelBuilderError(
+            "Sale state-preservation target values or schema fingerprints are invalid."
+        )
+    expressions = _sale_state_expressions(
+        model, execution_hours=int(normalized_contract["execution_hours"])
+    )
+    for target_id, constraint_name in _SALE_STATE_CONSTRAINT_NAMES.items():
+        if hasattr(model, constraint_name):
+            raise S44CModelBuilderError(
+                "Sale state-preservation constraint already exists: "
+                f"{constraint_name}."
+            )
+        setattr(
+            model,
+            constraint_name,
+            Constraint(expr=expressions[target_id] == targets[target_id]),
+        )
+    actual_constraint_names = {
+        target_id: getattr(model, constraint_name).name
+        for target_id, constraint_name in _SALE_STATE_CONSTRAINT_NAMES.items()
+    }
+    if actual_constraint_names != _SALE_STATE_CONSTRAINT_NAMES:
+        raise S44CModelBuilderError(
+            "Sale state-preservation constraint-name schema changed."
+        )
+    evidence_path = evidence_dir / "sale_state_preservation_pre_solve.json"
+    record = {
+        "schema_version": _SALE_STATE_PRESERVATION_SCHEMA_VERSION,
+        "status": "targets_applied_pending_economic_solve",
+        "configuration_id": normalized_contract["configuration_id"],
+        "replan_index": normalized_contract["replan_index"],
+        "execution_hours": normalized_contract["execution_hours"],
+        "handoff_index": int(normalized_contract["execution_hours"]) - 1,
+        "implementation_sha256": normalized_contract[
+            "implementation_sha256"
+        ],
+        "source_capture_path": containment_result.get(
+            "saved_normal_solution_path"
+        ),
+        "source_capture_sha256": containment_result.get(
+            "saved_normal_solution_sha256"
+        ),
+        "source_capture_provenance": expected_provenance,
+        "containment_record_path": _portable_repository_path(
+            containment_record_path
+        ),
+        "containment_record_sha256": containment_record_sha256,
+        "target_schema": list(_SALE_STATE_TARGET_SCHEMA),
+        "state_schema": _sale_state_schema_payload(),
+        "state_schema_sha256": capture["state_schema_sha256"],
+        "targets": targets,
+        "targets_sha256": capture["targets_sha256"],
+        "target_bounds": target_bounds,
+        "target_bounds_sha256": capture["target_bounds_sha256"],
+        "constraint_names": actual_constraint_names,
+        "constraint_names_sha256": capture["constraint_names_sha256"],
+        "expected_values": targets,
+        "actual_values": None,
+        "signed_residuals": None,
+        "absolute_residuals": None,
+        "normalized_residuals": None,
+        "per_state_validation": None,
+        "max_residual": None,
+        "solver_numerical_tolerance": tolerance,
+        "validation_acceptance_tolerance_t": TERMINAL_STATE_TOLERANCE_T,
+        "validation_tolerance_policy": validation_tolerance_policy_contract(),
+    }
+    evidence_path.write_text(
+        json.dumps(record, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "record": record,
+        "evidence_path": evidence_path,
+        "contract": normalized_contract,
+        "targets": targets,
+        "target_bounds": target_bounds,
+    }
+
+
+def _finalize_sale_state_preservation(
+    model: ConcreteModel,
+    *,
+    context: Mapping[str, Any],
+    termination_condition: str,
+    tolerance: float,
+) -> dict[str, Any]:
+    if tolerance != TERMINAL_STATE_TOLERANCE_T:
+        raise S44CModelBuilderError(
+            "Sale terminal-state reporting requires the canonical 1.0-t "
+            "validation acceptance tolerance."
+        )
+    contract = dict(context["contract"])
+    targets = {
+        target_id: float(context["targets"][target_id])
+        for target_id in _SALE_STATE_TARGET_SCHEMA
+    }
+    expected_bounds = _sale_state_target_bounds(targets)
+    expressions = _sale_state_expressions(
+        model, execution_hours=int(contract["execution_hours"])
+    )
+    schema_failures: list[str] = []
+    record = dict(context["record"])
+    if (
+        record.get("schema_version") != _SALE_STATE_PRESERVATION_SCHEMA_VERSION
+        or tuple(record.get("target_schema", ())) != _SALE_STATE_TARGET_SCHEMA
+        or record.get("target_bounds") != expected_bounds
+        or record.get("target_bounds_sha256")
+        != _canonical_payload_sha256(expected_bounds)
+        or record.get("constraint_names") != _SALE_STATE_CONSTRAINT_NAMES
+        or record.get("constraint_names_sha256")
+        != _canonical_payload_sha256(_SALE_STATE_CONSTRAINT_NAMES)
+    ):
+        schema_failures.append("evidence_schema_mismatch")
+    expected_constraint_name_set = {
+        constraint_name for constraint_name in _SALE_STATE_CONSTRAINT_NAMES.values()
+    }
+    actual_constraint_name_set = {
+        name
+        for name in model.component_map(Constraint)
+        if name.startswith("sale_state_") and "_preservation_" in name
+    }
+    if actual_constraint_name_set != expected_constraint_name_set:
+        schema_failures.append("constraint_name_schema_mismatch")
+    for target_id, constraint_name in _SALE_STATE_CONSTRAINT_NAMES.items():
+        constraint = getattr(model, constraint_name, None)
+        try:
+            lower = float(value(constraint.lower))
+            upper = float(value(constraint.upper))
+            body_matches = str(constraint.body) == str(expressions[target_id])
+        except (AttributeError, TypeError, ValueError):
+            lower = math.nan
+            upper = math.nan
+            body_matches = False
+        if (
+            not math.isfinite(lower)
+            or not math.isfinite(upper)
+            or lower != targets[target_id]
+            or upper != targets[target_id]
+            or not body_matches
+            or constraint is None
+            or not constraint.active
+        ):
+            schema_failures.append(f"invalid_exact_target:{target_id}")
+    actual_values: dict[str, float | None] = {}
+    signed_residuals: dict[str, float | None] = {}
+    absolute_residuals: dict[str, float | None] = {}
+    normalized_residuals: dict[str, float | None] = {}
+    per_state_validation: dict[str, dict[str, Any]] = {}
+    for target_id in _SALE_STATE_TARGET_SCHEMA:
+        try:
+            actual = float(value(expressions[target_id]))
+        except (TypeError, ValueError):
+            actual = None
+        if actual is not None and not math.isfinite(actual):
+            actual = None
+        actual_values[target_id] = actual
+        signed = actual - targets[target_id] if actual is not None else None
+        signed_residuals[target_id] = signed
+        if signed is None:
+            absolute_residuals[target_id] = None
+            normalized_residuals[target_id] = None
+            per_state_validation[target_id] = {
+                "validation_id": f"sale_state_preservation[{target_id}]",
+                "purpose": "cumulative_production_or_carried_state",
+                "unit": "t",
+                "aggregation": "independent_state_no_accumulation",
+                "target_value_t": targets[target_id],
+                **expected_bounds[target_id],
+                "signed_residual_t": None,
+                "absolute_residual_t": None,
+                "allowed_tolerance_t": tolerance,
+                "normalized_residual": None,
+                "status": "fail",
+            }
+            continue
+        validation = validation_record(
+            validation_id=f"sale_state_preservation[{target_id}]",
+            purpose="cumulative_production_or_carried_state",
+            unit="t",
+            raw_residual=signed,
+            allowed_tolerance=tolerance,
+            aggregation="independent_state_no_accumulation",
+        )
+        absolute_residuals[target_id] = float(validation["raw_residual"])
+        normalized_residuals[target_id] = float(
+            validation["normalized_residual"]
+        )
+        per_state_validation[target_id] = {
+            **validation,
+            "target_value_t": targets[target_id],
+            **expected_bounds[target_id],
+            "signed_residual_t": signed,
+            "absolute_residual_t": validation["raw_residual"],
+            "allowed_tolerance_t": validation["allowed_tolerance"],
+        }
+    finite_residuals = [
+        residual
+        for residual in absolute_residuals.values()
+        if residual is not None
+    ]
+    max_residual = max(finite_residuals, default=math.inf)
+    solved = termination_condition.lower() in {"optimal", "feasible"}
+    passed = bool(
+        solved
+        and not schema_failures
+        and len(finite_residuals) == len(_SALE_STATE_TARGET_SCHEMA)
+        and all(
+            row["status"] == "pass"
+            for row in per_state_validation.values()
+        )
+    )
+    record.update(
+        {
+            "status": "pass" if passed else "fail_closed",
+            "economic_solve_termination_condition": termination_condition,
+            "schema_failure_reasons": sorted(set(schema_failures)),
+            "actual_values": actual_values,
+            "signed_residuals": signed_residuals,
+            "absolute_residuals": absolute_residuals,
+            "normalized_residuals": normalized_residuals,
+            "per_state_validation": per_state_validation,
+            "max_residual": max_residual if math.isfinite(max_residual) else None,
+        }
+    )
+    pre_solve_evidence_path = Path(context["evidence_path"])
+    record["pre_solve_evidence_path"] = _portable_repository_path(
+        pre_solve_evidence_path
+    )
+    record["pre_solve_evidence_sha256"] = _sha256_file(
+        pre_solve_evidence_path
+    )
+    evidence_path = (
+        pre_solve_evidence_path.parent
+        / "sale_state_preservation_final.json"
+    )
+    evidence_path.write_text(
+        json.dumps(record, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "status": record["status"],
+        "evidence_path": _portable_repository_path(evidence_path),
+        "evidence_sha256": _sha256_file(evidence_path),
+        "pre_solve_evidence_path": _portable_repository_path(
+            pre_solve_evidence_path
+        ),
+        "pre_solve_evidence_sha256": _sha256_file(
+            pre_solve_evidence_path
+        ),
+        "targets_sha256": record["targets_sha256"],
+        "state_schema_sha256": record["state_schema_sha256"],
+        "constraint_names_sha256": record["constraint_names_sha256"],
+        "max_residual": record["max_residual"],
+        "actual_values": actual_values,
+        "signed_residuals": signed_residuals,
+        "absolute_residuals": absolute_residuals,
+        "normalized_residuals": normalized_residuals,
+        "per_state_validation": per_state_validation,
+        "schema_failure_reasons": record["schema_failure_reasons"],
+    }
+
+
+def _sale_incumbent_containment_oracle(
+    model: ConcreteModel,
+    *,
+    solver: Any,
+    policy: Mapping[str, Any],
+    tolerance: float,
+) -> dict[str, Any]:
+    """Prove that the accepted no-export incumbent is contained in Mode C.
+
+    Every variable shared with the captured ordinary formulation is fixed at
+    its full-precision saved value.  Only the three genuinely new grid-
+    exchange variable families may be absent from the capture; export is fixed
+    to zero while import and the exclusivity binary are derived by the model.
+    """
+
+    try:
+        resolved_tolerance_policy = resolve_policy_contract(
+            policy["validation_tolerance_policy"]
+        )
+    except (KeyError, TypeError, ValidationTolerancePolicyError) as exc:
+        raise S44CModelBuilderError(
+            "Sale containment requires the canonical validation-tolerance "
+            "policy identity."
+        ) from exc
+    if tolerance != SOLVER_NUMERICAL_TOLERANCE:
+        raise S44CModelBuilderError(
+            "Sale containment solver numerical tolerance must remain strict."
+        )
+
+    record_path = Path(str(policy["normal_solution_record_path"])).resolve()
+    evidence_dir = Path(str(policy["oracle_directory"])).resolve()
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    expected_hash = str(policy["normal_solution_record_sha256"])
+    if not record_path.is_file() or _sha256_file(record_path) != expected_hash:
+        raise S44CModelBuilderError("Sale-containment normal record fingerprint mismatch.")
+    saved = _read_gzip_json(record_path)
+    if saved.get("schema_version") != "steel_complete_normal_solution_v2":
+        raise S44CModelBuilderError("Sale containment requires complete-normal schema v2.")
+    if saved.get("structural_inactive_exclusion_enabled") is not True:
+        raise S44CModelBuilderError(
+            "Sale containment requires the governed structural-classification capture mode."
+        )
+    saved_capture_audit = saved.get("post_solve_incumbent_audit")
+    if not isinstance(saved_capture_audit, Mapping):
+        raise S44CModelBuilderError(
+            "Sale containment requires the exact post-solve incumbent audit "
+            "embedded in the normal capture."
+        )
+    expected_provenance = dict(policy.get("normal_solution_expected_provenance", {}))
+    if dict(saved.get("provenance", {})) != expected_provenance:
+        raise S44CModelBuilderError("Sale-containment provenance mismatch.")
+
+    variables = {
+        variable.name: variable
+        for variable in model.component_data_objects(Var, active=True)
+    }
+    saved_rows = list(saved.get("variables", ()))
+    saved_by_name = {str(row["name"]): row for row in saved_rows}
+    sale_classification = _variable_structural_classification(model)
+    normal_classification = dict(saved.get("variable_classification", {}))
+    if (
+        normal_classification.get("schema_version")
+        != "steel_variable_structural_classification_v2"
+    ):
+        raise S44CModelBuilderError(
+            "Sale containment requires governed normal variable classification."
+        )
+    missing = sorted(set(saved_by_name).difference(variables))
+    allowed_new_prefixes = (
+        "gross_grid_import_mwh[",
+        "gross_grid_export_mwh[",
+        "grid_import_mode[",
+    )
+    sale_required_names = {
+        str(row["name"])
+        for row in sale_classification["required_variables"]
+        if not str(row["name"]).startswith(allowed_new_prefixes)
+    }
+    required_not_captured = sorted(sale_required_names.difference(saved_by_name))
+    normal_exclusions = {
+        str(row["name"]): row
+        for row in normal_classification.get("inactive_exclusions", ())
+    }
+    new_names = sorted(
+        set(variables).difference(saved_by_name).difference(normal_exclusions)
+    )
+    prohibited_new = [
+        name for name in new_names if not name.startswith(allowed_new_prefixes)
+    ]
+    sale_exclusions = {
+        str(row["name"]): row
+        for row in sale_classification["inactive_exclusions"]
+        if not str(row["name"]).startswith(allowed_new_prefixes)
+    }
+    exclusion_name_mismatch = sorted(
+        set(normal_exclusions).symmetric_difference(sale_exclusions)
+    )
+    exclusion_classification_mismatch = sorted(
+        name
+        for name in set(normal_exclusions).intersection(sale_exclusions)
+        if _shared_variable_schema_diagnostics(
+            {"variables": [normal_exclusions[name]]},
+            {"variables": [sale_exclusions[name]]},
+            [name],
+        )["declared_schema_mismatch_count"]
+        or {
+            key: normal_exclusions[name].get(key)
+            for key in (
+                "active_constraint_families",
+                "active_objective_families",
+                "active_expression_families",
+                "solver_representation",
+                "governed_role_categories",
+                "solver_relevant",
+                "incumbent_required",
+                "structurally_inactive_exclusion",
+                "classification_reason",
+            )
+        }
+        != {
+            key: sale_exclusions[name].get(key)
+            for key in (
+                "active_constraint_families",
+                "active_objective_families",
+                "active_expression_families",
+                "solver_representation",
+                "governed_role_categories",
+                "solver_relevant",
+                "incumbent_required",
+                "structurally_inactive_exclusion",
+                "classification_reason",
+            )
+        }
+    )
+    shared_schema_diagnostics = _shared_variable_schema_diagnostics(
+        normal_classification,
+        sale_classification,
+        set(saved_by_name).intersection(variables),
+    )
+    shared_schema_mismatches = [
+        str(row["name"])
+        for row in shared_schema_diagnostics["declared_schema_mismatches"]
+    ]
+    if (
+        missing
+        or prohibited_new
+        or required_not_captured
+        or exclusion_name_mismatch
+        or exclusion_classification_mismatch
+        or shared_schema_mismatches
+    ):
+        precheck_path = (
+            evidence_dir / "sale_incumbent_containment_precheck_failure.json"
+        )
+        precheck = {
+            "status": "fail_closed",
+            "failure_stage": "schema_and_structural_classification",
+            "missing_saved_variables": missing,
+            "prohibited_new_variables": prohibited_new,
+            "required_not_captured": required_not_captured,
+            "inactive_exclusion_name_mismatch": exclusion_name_mismatch,
+            "inactive_exclusion_classification_mismatch": (
+                exclusion_classification_mismatch
+            ),
+            "shared_schema_mismatches": shared_schema_mismatches,
+            "shared_declared_schema_mismatch_details": (
+                shared_schema_diagnostics["declared_schema_mismatches"]
+            ),
+            "shared_current_or_derived_bound_difference_count": (
+                shared_schema_diagnostics[
+                    "current_or_derived_bound_difference_count"
+                ]
+            ),
+            "shared_current_or_derived_bound_pair_categories": (
+                shared_schema_diagnostics[
+                    "current_or_derived_bound_pair_categories"
+                ]
+            ),
+            "normal_variable_classification": normal_classification,
+            "sale_variable_classification": sale_classification,
+            "saved_normal_solution_sha256": expected_hash,
+            "provenance": saved.get("provenance", {}),
+        }
+        precheck_path.write_text(
+            json.dumps(precheck, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        error = S44CModelBuilderError(
+            "Sale-containment schema/classification mismatch: "
+            f"missing={missing}, prohibited_new={prohibited_new}, "
+            f"required_not_captured={required_not_captured}, "
+            f"exclusion_names={exclusion_name_mismatch}, "
+            f"exclusion_classification={exclusion_classification_mismatch}, "
+            f"shared_schema={shared_schema_mismatches}."
+        )
+        error.phase2_stage = "sale_containment.schema_classification"
+        error.containment_evidence_path = str(precheck_path)
+        error.bound_audit = getattr(model, "grid_import_bound_audit", None)
+        raise error
+
+    before = _active_variable_records(model, allow_undefined=True)
+    before_name_hash, before_schema_hash, before_fixed_hash = (
+        _variable_name_and_schema_hashes(before)
+    )
+    before_value_hash = _variable_value_and_fixed_state_sha256(before)
+    before_model_structure_hash = _model_structure_sha256(model)
+    validation_model = model.clone()
+    validation_variables = {
+        variable.name: variable
+        for variable in validation_model.component_data_objects(Var, active=True)
+    }
+    fixed_status_mismatches: list[str] = []
+    active_objectives = list(
+        validation_model.component_data_objects(Objective, active=True)
+    )
+    original_options = dict(getattr(solver, "options", {}))
+    lp_path = evidence_dir / "sale_incumbent_containment.lp"
+    pyomo_log = evidence_dir / "pyomo_sale_containment.log"
+    native_log = evidence_dir / "native_sale_containment.log"
+    iis_path = evidence_dir / "sale_incumbent_containment_iis.ilp"
+    pyomo_status = "not_run"
+    pyomo_termination = "not_run"
+    native: dict[str, Any] = {"status": "not_run", "iis_created": False}
+    loaded_audit: dict[str, Any] = {"feasible": False}
+    loaded_value_precheck_pass = False
+    constraint_audit_disposition = "not_evaluated"
+    registered_validation_context: dict[str, Any] | None = None
+    registered_validation_evidence: dict[str, Any] = {
+        "status": "not_evaluated",
+        "rows": [],
+    }
+    state_preservation_capture: dict[str, Any] | None = None
+    failure: Exception | None = None
+    failure_stage = "schema_validation"
+    try:
+        failure_stage = "incumbent_fixing"
+        for name, row in saved_by_name.items():
+            variable = validation_variables[name]
+            if bool(variable.fixed) != bool(row.get("fixed")):
+                fixed_status_mismatches.append(name)
+            if variable.fixed:
+                fixed_value = float(variable.value)
+                saved_value = float(row["value"])
+                if fixed_value != saved_value:
+                    fixed_status_mismatches.append(name)
+                variable.unfix()
+            variable.set_value(float(row["value"]), skip_validation=False)
+            variable.fix(float(row["value"]))
+        if fixed_status_mismatches:
+            raise S44CModelBuilderError(
+                f"Saved/current fixed status or value mismatch: {sorted(set(fixed_status_mismatches))}."
+            )
+        for t in validation_model.TIME:
+            validation_model.gross_grid_export_mwh[t].fix(0.0)
+            required_import = float(
+                value(validation_model.gross_total_electricity_mwh[t])
+                - value(validation_model.total_generator_electricity_mwh[t])
+            )
+            if required_import < -SOLVER_NUMERICAL_TOLERANCE:
+                raise S44CModelBuilderError(
+                    "Captured no-export incumbent unexpectedly requires export at "
+                    f"hour {t}: {required_import} MWh."
+                )
+            validation_model.gross_grid_import_mwh[t].fix(
+                max(0.0, required_import)
+            )
+            validation_model.grid_import_mode[t].fix(
+                1 if required_import > SOLVER_NUMERICAL_TOLERANCE else 0
+            )
+        failure_stage = "registered_validation_model_setup"
+        for objective in active_objectives:
+            objective.deactivate()
+        loaded_audit = _audit_loaded_incumbent(
+            validation_model,
+            tolerance=SOLVER_NUMERICAL_TOLERANCE,
+            structurally_inactive_exclusions=tuple(sale_exclusions),
+        )
+        loaded_value_precheck_pass = bool(
+            loaded_audit.get("undefined_value_count") == 0
+            and float(
+                loaded_audit.get("max_variable_bound_violation", float("inf"))
+            )
+            <= SOLVER_NUMERICAL_TOLERANCE
+            and float(
+                loaded_audit.get("max_integrality_violation", float("inf"))
+            )
+            <= SOLVER_NUMERICAL_TOLERANCE
+        )
+        if not loaded_value_precheck_pass:
+            raise S44CModelBuilderError(
+                "Loaded no-export incumbent failed its exact undefined-value, "
+                "variable-bound, or integrality precheck."
+            )
+        registered_validation_context = (
+            _install_registered_validation_relaxations(validation_model)
+        )
+        validation_model.sale_incumbent_containment_objective = Objective(
+            expr=sum(
+                validation_model.sale_validation_relaxation[index]
+                / float(
+                    registered_validation_context["relaxation_sides"][
+                        int(index)
+                    ]["allowed_tolerance"]
+                )
+                for index in validation_model.SALE_VALIDATION_RELAXATION_SIDE
+            ),
+            sense=minimize,
+        )
+        validation_model.write(
+            str(lp_path), io_options={"symbolic_solver_labels": True}
+        )
+        constraint_audit_disposition = (
+            "registered_unit_purpose_validation_model_required"
+        )
+        raw_state_preservation = policy.get("state_preservation")
+        if raw_state_preservation is not None:
+            if not isinstance(raw_state_preservation, Mapping):
+                raise S44CModelBuilderError(
+                    "Sale containment state-preservation contract must be a mapping."
+                )
+            failure_stage = "state_preservation_target_capture"
+            state_preservation_capture = (
+                _capture_sale_state_preservation_targets(
+                    validation_model,
+                    # Targets come from the fixed validation clone; the
+                    # original economic model remains byte-for-byte in state.
+                    contract=raw_state_preservation,
+                    saved_capture=saved,
+                )
+            )
+        solver_name = str(getattr(solver, "name", "")).lower()
+        if "gurobi" not in solver_name:
+            raise S44CModelBuilderError("Governed sale containment requires Gurobi.")
+        solver.options["TimeLimit"] = 300.0
+        solver.options["DualReductions"] = 0
+        solver.options["InfUnbdInfo"] = 1
+        solver.options["FeasibilityTol"] = SOLVER_NUMERICAL_TOLERANCE
+        solver.options["LogFile"] = str(pyomo_log)
+        failure_stage = "pyomo_registered_validation_solve"
+        result = solver.solve(validation_model, load_solutions=True)
+        pyomo_status = str(result.solver.status)
+        pyomo_termination = str(result.solver.termination_condition)
+        failure_stage = "native_gurobi_reread"
+        native = _native_gurobi_zero_objective_check(
+            lp_path,
+            log_path=native_log,
+            iis_path=iis_path,
+            tolerance=SOLVER_NUMERICAL_TOLERANCE,
+        )
+        if registered_validation_context is not None:
+            registered_validation_evidence = (
+                _finalize_registered_validation_evidence(
+                    validation_model, registered_validation_context
+                )
+            )
+    except Exception as exc:
+        failure = exc
+    finally:
+        if hasattr(solver, "options"):
+            solver.options.clear()
+            solver.options.update(original_options)
+
+    after = _active_variable_records(model, allow_undefined=True)
+    after_name_hash, after_schema_hash, after_fixed_hash = (
+        _variable_name_and_schema_hashes(after)
+    )
+    after_value_hash = _variable_value_and_fixed_state_sha256(after)
+    after_model_structure_hash = _model_structure_sha256(model)
+    passed = bool(
+        failure is None
+        and pyomo_termination.lower() == "optimal"
+        and native.get("status") == "optimal"
+        and loaded_value_precheck_pass
+        and registered_validation_evidence.get("status") == "pass"
+        and before_name_hash == after_name_hash
+        and before_schema_hash == after_schema_hash
+        and before_fixed_hash == after_fixed_hash
+        and before_value_hash == after_value_hash
+        and before_model_structure_hash == after_model_structure_hash
+    )
+    record = {
+        "schema_version": "steel_sale_incumbent_containment_v2",
+        "status": "pass" if passed else "fail_closed",
+        "failure_stage": None if passed else failure_stage,
+        "exception": None if failure is None else f"{type(failure).__name__}: {failure}",
+        "solver_numerical_tolerance": SOLVER_NUMERICAL_TOLERANCE,
+        "validation_tolerance_policy": resolved_tolerance_policy,
+        "saved_normal_solution_path": _portable_repository_path(record_path),
+        "saved_normal_solution_sha256": expected_hash,
+        "saved_normal_variable_count": len(saved_rows),
+        "sale_variable_count": len(before),
+        "normal_complete_structure_sha256": saved.get(
+            "complete_structure_sha256"
+        ),
+        "sale_complete_structure_sha256": sale_classification[
+            "complete_structure_sha256"
+        ],
+        "normal_solver_relevant_schema_sha256": saved.get(
+            "solver_relevant_schema_sha256"
+        ),
+        "sale_solver_relevant_schema_sha256": sale_classification[
+            "solver_relevant_schema_sha256"
+        ],
+        "normal_inactive_exclusion_sha256": saved.get(
+            "inactive_exclusion_sha256"
+        ),
+        "sale_inactive_exclusion_sha256": sale_classification[
+            "inactive_exclusion_sha256"
+        ],
+        "normal_fixed_values_sha256": saved.get("fixed_values_sha256"),
+        "sale_original_fixed_values_sha256": sale_classification[
+            "fixed_values_sha256"
+        ],
+        "normal_active_incidence_sha256": saved.get(
+            "active_incidence_sha256"
+        ),
+        "sale_active_incidence_sha256": sale_classification[
+            "active_incidence_sha256"
+        ],
+        "normal_inactive_exclusion_count": len(normal_exclusions),
+        "sale_inactive_exclusion_count": len(sale_exclusions),
+        "normal_variable_classification": normal_classification,
+        "sale_variable_classification": sale_classification,
+        "shared_declared_schema_mismatch_count": (
+            shared_schema_diagnostics["declared_schema_mismatch_count"]
+        ),
+        "shared_current_or_derived_bound_difference_count": (
+            shared_schema_diagnostics[
+                "current_or_derived_bound_difference_count"
+            ]
+        ),
+        "shared_current_or_derived_bound_pair_categories": (
+            shared_schema_diagnostics[
+                "current_or_derived_bound_pair_categories"
+            ]
+        ),
+        "new_exchange_variable_names": new_names,
+        "variable_name_sha256": before_name_hash,
+        "variable_schema_sha256": before_schema_hash,
+        "variable_name_sha256_after": after_name_hash,
+        "variable_schema_sha256_after": after_schema_hash,
+        "original_model_structure_sha256_before": before_model_structure_hash,
+        "original_model_structure_sha256_after": after_model_structure_hash,
+        "original_model_fingerprint_unchanged": (
+            before_model_structure_hash == after_model_structure_hash
+            and before_name_hash == after_name_hash
+            and before_schema_hash == after_schema_hash
+            and before_fixed_hash == after_fixed_hash
+            and before_value_hash == after_value_hash
+        ),
+        "fixed_state_sha256_before": before_fixed_hash,
+        "fixed_state_sha256_after": after_fixed_hash,
+        "value_state_sha256_before": before_value_hash,
+        "value_state_sha256_after": after_value_hash,
+        "fixed_status_mismatch_count": len(set(fixed_status_mismatches)),
+        "loaded_incumbent_audit": loaded_audit,
+        "normal_capture_post_solve_incumbent_audit": saved_capture_audit,
+        "loaded_value_precheck_pass": loaded_value_precheck_pass,
+        "constraint_audit_disposition": constraint_audit_disposition,
+        "constraint_feasibility_authority": (
+            "required_pyomo_and_native_gurobi_fixed_incumbent_registered_"
+            "validation_model"
+        ),
+        "registered_validation_evidence": registered_validation_evidence,
+        "pyomo_solver_status": pyomo_status,
+        "pyomo_termination_condition": pyomo_termination,
+        "native_gurobi": native,
+        "lp_path": _portable_repository_path(lp_path) if lp_path.is_file() else None,
+        "lp_sha256": _sha256_file(lp_path) if lp_path.is_file() else None,
+        "pyomo_log_sha256": _sha256_file(pyomo_log) if pyomo_log.is_file() else None,
+        "native_log_sha256": _sha256_file(native_log) if native_log.is_file() else None,
+        "iis_path": _portable_repository_path(iis_path) if iis_path.is_file() else None,
+        "iis_sha256": _sha256_file(iis_path) if iis_path.is_file() else None,
+        "controller_state": saved.get("controller_state", {}),
+        "provenance": saved.get("provenance", {}),
+        "state_preservation_capture": state_preservation_capture,
+    }
+    record_path_out = evidence_dir / "sale_incumbent_containment.json"
+    record_path_out.write_text(
+        json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if not passed:
+        error = S44CModelBuilderError(
+            f"Sale incumbent containment failed closed during {failure_stage}: {record}."
+        )
+        error.phase2_stage = f"sale_containment.{failure_stage}"
+        error.bound_audit = getattr(model, "grid_import_bound_audit", None)
+        error.containment_evidence_path = str(record_path_out)
+        raise error
+    return {
+        **record,
+        "record_path": _portable_repository_path(record_path_out),
+        "record_sha256": _sha256_file(record_path_out),
     }
 
 
@@ -1823,6 +4050,7 @@ def _solve_with_optional_lexicographic_cost(
     solver: Any,
     configuration_id: str,
     deterministic_cost_policy: Mapping[str, Any] | None,
+    electricity_sale_sensitivity: Mapping[str, Any] | None = None,
     allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
     normal_solution_capture: Mapping[str, Any] | None = None,
 ) -> tuple[Any, dict[str, Any]]:
@@ -1832,6 +4060,8 @@ def _solve_with_optional_lexicographic_cost(
     metadata = {
         "cost_objective_active": deterministic_cost_policy is not None,
         "primary_cost_objective_eur": None,
+        "primary_import_procurement_cost_eur": None,
+        "primary_electricity_export_revenue_eur": None,
         "primary_cost_best_bound_eur": None,
         "primary_cost_best_bound_availability": "not_solved",
         "primary_cost_solver_status": None,
@@ -1853,10 +4083,114 @@ def _solve_with_optional_lexicographic_cost(
         "tie_break_cost_objective_eur": None,
         "tie_break_runtime_seconds": 0.0,
         "priced_flow_count": 0,
+        "electricity_sale_sensitivity_active": False,
+        "sale_incumbent_containment": None,
+        "sale_state_preservation": None,
+        "sale_economic_validation_overlay": None,
     }
 
     cost_objective = None
+    sale_preservation_context: dict[str, Any] | None = None
+    sale_validation_context: dict[str, Any] | None = None
+    sale_containment_policy: Mapping[str, Any] | None = None
+    sale_state_contract: Mapping[str, Any] | None = None
     flows: list[Mapping[str, Any]] = []
+    sale_enabled = bool(
+        electricity_sale_sensitivity
+        and electricity_sale_sensitivity.get("enabled") is True
+    )
+    if sale_enabled and deterministic_cost_policy is None:
+        raise S44CModelBuilderError(
+            "The electricity-sale sensitivity requires represented deterministic cost."
+        )
+    if sale_enabled:
+        if configuration_id != "C0_current_BF_BOF_reference":
+            raise S44CModelBuilderError(
+                "The electricity-sale sensitivity is available for C0 only."
+            )
+        containment = electricity_sale_sensitivity.get("incumbent_containment")
+        if not isinstance(containment, Mapping):
+            raise S44CModelBuilderError(
+                "The sale sensitivity requires a complete no-export incumbent containment contract."
+            )
+        state_preservation = electricity_sale_sensitivity.get(
+            "state_preservation"
+        )
+        if not isinstance(state_preservation, Mapping):
+            raise S44CModelBuilderError(
+                "The sale sensitivity requires the governed state-preservation contract."
+            )
+        normalized_state_preservation = (
+            _validated_sale_state_preservation_contract(
+                state_preservation, model=model
+            )
+        )
+        try:
+            resolved_runtime_tolerance_policy = resolve_policy_contract(
+                containment["validation_tolerance_policy"]
+            )
+            matching_runtime_identity = bool(
+                containment.get("state_preservation") == state_preservation
+                and int(
+                    electricity_sale_sensitivity.get("replan_index", -1)
+                )
+                == normalized_state_preservation["replan_index"]
+                and int(
+                    electricity_sale_sensitivity.get("execution_hours", -1)
+                )
+                == normalized_state_preservation["execution_hours"]
+                and resolved_runtime_tolerance_policy
+                == validation_tolerance_policy_contract()
+            )
+        except (
+            KeyError,
+            TypeError,
+            ValueError,
+            ValidationTolerancePolicyError,
+        ):
+            matching_runtime_identity = False
+        if not matching_runtime_identity:
+            raise S44CModelBuilderError(
+                "Sale state-preservation identity, horizon, or governed tolerance changed."
+            )
+        if not hasattr(model, "grid_import_bound_audit"):
+            raise S44CModelBuilderError(
+                "Sale containment requires the completed hourly FBBT bound audit."
+            )
+        if containment.get("oracle_directory"):
+            bound_evidence_dir = Path(
+                str(containment["oracle_directory"])
+            ).resolve()
+            bound_evidence_dir.mkdir(parents=True, exist_ok=True)
+            bound_audit_path = (
+                bound_evidence_dir / "grid_import_hourly_bound_audit.json"
+            )
+            bound_audit_path.write_text(
+                json.dumps(
+                    model.grid_import_bound_audit,
+                    indent=2,
+                    sort_keys=True,
+                    allow_nan=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            metadata["grid_import_bound_audit_path"] = (
+                _portable_repository_path(bound_audit_path)
+            )
+            metadata["grid_import_bound_audit_sha256"] = _sha256_file(
+                bound_audit_path
+            )
+        metadata["sale_incumbent_containment"] = (
+            _sale_incumbent_containment_oracle(
+                model,
+                solver=solver,
+                policy=containment,
+                tolerance=SOLVER_NUMERICAL_TOLERANCE,
+            )
+        )
+        sale_containment_policy = containment
+        sale_state_contract = state_preservation
     if deterministic_cost_policy is not None:
         configuration = "C0" if configuration_id.startswith("C0_") else "C1"
         flows = [
@@ -1885,7 +4219,37 @@ def _solve_with_optional_lexicographic_cost(
                 cost_terms.extend(
                     float(prices[int(t)]) * component[t] for t in model.TIME
                 )
-        model.represented_procurement_cost_eur = Expression(expr=sum(cost_terms))
+        if sale_enabled:
+            sale_prices = list(
+                electricity_sale_sensitivity.get("sale_price_eur_by_hour", ())
+            )
+            if len(sale_prices) != len(model.TIME):
+                raise S44CModelBuilderError(
+                    "The electricity-sale price horizon must match model.TIME."
+                )
+            if not getattr(model, "electricity_sale_sensitivity_active", False):
+                raise S44CModelBuilderError(
+                    "The sale objective requires the opt-in physical export boundary."
+                )
+            model.electricity_export_revenue_eur = Expression(
+                expr=sum(
+                    float(sale_prices[int(t)]) * model.gross_grid_export_mwh[t]
+                    for t in model.TIME
+                )
+            )
+            model.represented_import_procurement_cost_eur = Expression(
+                expr=sum(cost_terms)
+            )
+            model.represented_procurement_cost_eur = Expression(
+                expr=model.represented_import_procurement_cost_eur
+                - model.electricity_export_revenue_eur
+            )
+        else:
+            # Preserve the accepted absent/disabled model structure and cost
+            # definition exactly.
+            model.represented_procurement_cost_eur = Expression(
+                expr=sum(cost_terms)
+            )
         model.deterministic_procurement_cost_objective = Objective(
             expr=model.represented_procurement_cost_eur,
             sense=minimize,
@@ -1893,6 +4257,55 @@ def _solve_with_optional_lexicographic_cost(
         cost_objective = model.deterministic_procurement_cost_objective
         cost_objective.deactivate()
         metadata["priced_flow_count"] = len(flows)
+        metadata["electricity_sale_sensitivity_active"] = sale_enabled
+
+    if sale_enabled:
+        assert sale_containment_policy is not None
+        assert sale_state_contract is not None
+        sale_validation_context = _install_sale_economic_validation_overlay(
+            model
+        )
+        sale_validation_context["evidence_path"] = (
+            Path(str(sale_containment_policy["oracle_directory"])).resolve()
+            / "sale_economic_validation_overlay.json"
+        )
+        metadata["sale_economic_validation_overlay"] = {
+            "status": "installed_pending_economic_solve",
+            "schema_version": sale_validation_context["schema_version"],
+            "registered_acceptance_row_count": sale_validation_context[
+                "registered_acceptance_row_count"
+            ],
+            "underlying_core_unchanged": True,
+            "underlying_core_sha256": sale_validation_context[
+                "underlying_core_sha256_before"
+            ],
+        }
+        sale_preservation_context = _apply_sale_state_preservation(
+            model,
+            containment_result=metadata["sale_incumbent_containment"],
+            containment_policy=sale_containment_policy,
+            contract=sale_state_contract,
+            tolerance=SOLVER_NUMERICAL_TOLERANCE,
+        )
+        pending_evidence_path = Path(
+            sale_preservation_context["evidence_path"]
+        )
+        metadata["sale_state_preservation"] = {
+            "status": "targets_applied_pending_economic_solve",
+            "evidence_path": _portable_repository_path(
+                pending_evidence_path
+            ),
+            "evidence_sha256": _sha256_file(pending_evidence_path),
+            "targets_sha256": sale_preservation_context["record"][
+                "targets_sha256"
+            ],
+            "state_schema_sha256": sale_preservation_context["record"][
+                "state_schema_sha256"
+            ],
+            "constraint_names_sha256": sale_preservation_context["record"][
+                "constraint_names_sha256"
+            ],
+        }
 
     model.static_price_naive_objective.deactivate()
     if progress_active:
@@ -1906,6 +4319,23 @@ def _solve_with_optional_lexicographic_cost(
             "optimal",
             "feasible",
         }:
+            if sale_preservation_context is not None:
+                metadata["sale_state_preservation"] = (
+                    _finalize_sale_state_preservation(
+                        model,
+                        context=sale_preservation_context,
+                        termination_condition=str(
+                            progress_result.solver.termination_condition
+                        ),
+                        tolerance=TERMINAL_STATE_TOLERANCE_T,
+                    )
+                )
+            if sale_validation_context is not None:
+                metadata["sale_economic_validation_overlay"] = (
+                    _finalize_sale_economic_validation_overlay(
+                        model, sale_validation_context
+                    )
+                )
             return progress_result, metadata
         progress_optimum = float(
             value(model.rolling_production_progress_deviation_t)
@@ -1938,12 +4368,34 @@ def _solve_with_optional_lexicographic_cost(
             "optimal",
             "feasible",
         }:
+            if sale_preservation_context is not None:
+                metadata["sale_state_preservation"] = (
+                    _finalize_sale_state_preservation(
+                        model,
+                        context=sale_preservation_context,
+                        termination_condition=primary_termination,
+                        tolerance=TERMINAL_STATE_TOLERANCE_T,
+                    )
+                )
+            if sale_validation_context is not None:
+                metadata["sale_economic_validation_overlay"] = (
+                    _finalize_sale_economic_validation_overlay(
+                        model, sale_validation_context
+                    )
+                )
             return primary_result, metadata
         optimum = float(value(model.represented_procurement_cost_eur))
         tolerance = float(deterministic_cost_policy["objective_tolerance_eur"])
         if tolerance < 0.0:
             raise S44CModelBuilderError("Cost-objective tolerance cannot be negative.")
         metadata["primary_cost_objective_eur"] = optimum
+        if sale_enabled:
+            metadata["primary_import_procurement_cost_eur"] = float(
+                value(model.represented_import_procurement_cost_eur)
+            )
+            metadata["primary_electricity_export_revenue_eur"] = float(
+                value(model.electricity_export_revenue_eur)
+            )
         try:
             primary_best_bound = float(primary_result.problem.lower_bound)
             if not math.isfinite(primary_best_bound):
@@ -1963,7 +4415,8 @@ def _solve_with_optional_lexicographic_cost(
     tie_start = time.perf_counter()
     tie_result = solver.solve(model)
     metadata["tie_break_runtime_seconds"] = time.perf_counter() - tie_start
-    if str(tie_result.solver.termination_condition).lower() in {
+    tie_termination = str(tie_result.solver.termination_condition)
+    if tie_termination.lower() in {
         "optimal",
         "feasible",
     }:
@@ -1986,6 +4439,42 @@ def _solve_with_optional_lexicographic_cost(
             metadata["production_progress_deficit_t"] = float(
                 value(model.rolling_production_progress_deficit_t)
             )
+    if sale_preservation_context is not None:
+        finalized_state_preservation = _finalize_sale_state_preservation(
+            model,
+            context=sale_preservation_context,
+            termination_condition=tie_termination,
+            tolerance=TERMINAL_STATE_TOLERANCE_T,
+        )
+        metadata["sale_state_preservation"] = finalized_state_preservation
+        if finalized_state_preservation["status"] != "pass":
+            error = S44CModelBuilderError(
+                "Sale economic solve failed the governed terminal-state "
+                "preservation audit."
+            )
+            error.phase2_stage = "sale_state_preservation.final_audit"
+            error.state_preservation_evidence_path = (
+                finalized_state_preservation["evidence_path"]
+            )
+            raise error
+    if sale_validation_context is not None:
+        finalized_validation_overlay = (
+            _finalize_sale_economic_validation_overlay(
+                model, sale_validation_context
+            )
+        )
+        metadata["sale_economic_validation_overlay"] = (
+            finalized_validation_overlay
+        )
+        if finalized_validation_overlay["status"] != "pass":
+            error = S44CModelBuilderError(
+                "Sale economic solve failed the registered validation-row "
+                "acceptance audit."
+            )
+            error.phase2_stage = (
+                "sale_economic.validation_overlay_final_audit"
+            )
+            raise error
     if normal_solution_capture is not None:
         metadata.update(
             _capture_complete_normal_solution(
@@ -3385,6 +5874,129 @@ def _add_day_commitment_layer(
         )
 
 
+def _constraint_aware_hourly_import_bounds(model: ConcreteModel) -> dict[str, Any]:
+    """Tighten the completed C0 sale model and prove an hourly import bound."""
+
+    started = time.perf_counter()
+    active_constraint_families = sorted(
+        {
+            constraint.parent_component().name
+            for constraint in model.component_data_objects(
+                Constraint, active=True
+            )
+        }
+    )
+    audit: dict[str, Any] = {
+        "schema_version": "steel_c0_hourly_import_bound_audit_v1",
+        "status": "running",
+        "derivation_method": (
+            "pyomo.contrib.fbbt.fbbt.fbbt(model), followed by "
+            "compute_bounds_on_expr(gross_total_electricity_mwh[t])"
+        ),
+        "constraint_aware_fbbt": True,
+        "hourly_bounds": [],
+        "unbounded_variables": [],
+        "missing_constraint_families": [],
+        "ineffective_constraint_families": [],
+        "active_constraint_family_count": len(active_constraint_families),
+        "active_constraint_families": active_constraint_families,
+        "active_constraint_families_sha256": hashlib.sha256(
+            json.dumps(
+                active_constraint_families, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest(),
+    }
+    try:
+        fbbt(model)
+        for t in model.TIME:
+            lower, upper = compute_bounds_on_expr(
+                model.gross_total_electricity_mwh[t]
+            )
+            finite = upper is not None and math.isfinite(float(upper))
+            audit["hourly_bounds"].append(
+                {
+                    "hour_index": int(t),
+                    "gross_consumption_lower_bound_mwh": (
+                        None if lower is None else float(lower)
+                    ),
+                    "gross_consumption_upper_bound_mwh": (
+                        None if upper is None else float(upper)
+                    ),
+                    "gross_grid_import_upper_bound_mwh": (
+                        float(upper) if finite else None
+                    ),
+                    "status": "finite" if finite else "nonfinite",
+                }
+            )
+        failed_hours = [
+            row for row in audit["hourly_bounds"] if row["status"] != "finite"
+        ]
+        if failed_hours:
+            failed_indices = {row["hour_index"] for row in failed_hours}
+            unbounded: dict[str, dict[str, Any]] = {}
+            for t in model.TIME:
+                if int(t) not in failed_indices:
+                    continue
+                for variable in identify_variables(
+                    model.gross_total_electricity_mwh[t], include_fixed=False
+                ):
+                    if variable.ub is None or not math.isfinite(float(variable.ub)):
+                        unbounded[variable.name] = {
+                            "name": variable.name,
+                            "lower_bound": variable.lb,
+                            "upper_bound": variable.ub,
+                        }
+            active_constraints = list(
+                model.component_data_objects(Constraint, active=True)
+            )
+            families: set[str] = set()
+            for constraint in active_constraints:
+                names = {
+                    variable.name
+                    for variable in identify_variables(
+                        constraint.body, include_fixed=False
+                    )
+                }
+                if names.intersection(unbounded):
+                    families.add(constraint.parent_component().name)
+            audit["unbounded_variables"] = sorted(
+                unbounded.values(), key=lambda row: row["name"]
+            )
+            audit["missing_constraint_families"] = (
+                ["no_active_capacity_constraint_references_unbounded_consumption_variables"]
+                if unbounded and not families
+                else []
+            )
+            audit["ineffective_constraint_families"] = sorted(families)
+            audit["status"] = "fail_nonfinite"
+            error = S44CModelBuilderError(
+                "Constraint-aware FBBT could not prove finite hourly gross-consumption "
+                "bounds; no grid-capacity or guessed big-M fallback is permitted. "
+                f"Unbounded variables={sorted(unbounded)}; "
+                f"missing families={audit['missing_constraint_families']}; "
+                f"ineffective families={audit['ineffective_constraint_families']}."
+            )
+            error.phase2_stage = "model_construction.constraint_aware_fbbt"
+            error.bound_audit = audit
+            raise error
+        audit["status"] = "pass"
+        return audit
+    except S44CModelBuilderError:
+        raise
+    except Exception as exc:
+        audit["status"] = "fail_fbbt_exception"
+        audit["exception_type"] = type(exc).__name__
+        audit["exception_message"] = str(exc)
+        error = S44CModelBuilderError(
+            f"Constraint-aware FBBT failed closed: {type(exc).__name__}: {exc}"
+        )
+        error.phase2_stage = "model_construction.constraint_aware_fbbt"
+        error.bound_audit = audit
+        raise error from exc
+    finally:
+        audit["runtime_seconds"] = time.perf_counter() - started
+
+
 def _add_c0_minimal_wag_layer(
     model: ConcreteModel,
     inputs: C0ExecutableInputs | RetainedBfBofInputs,
@@ -3416,6 +6028,7 @@ def _add_c0_minimal_wag_layer(
     dsp_output_activity_rule: Any | None = None,
     bf_hot_metal_activity_rule: Any | None = None,
     bf_electricity_intensity_scale: float = 1.0,
+    electricity_sale_sensitivity: Mapping[str, Any] | None = None,
 ) -> None:
     lhv_mj_per_nm3, combustion_t_per_mwh = load_governed_wag_factor_maps()
     bf_hot_stove_mwh_per_t_hm = bf_hot_stove_mwh_per_t_hot_metal()
@@ -4252,23 +6865,100 @@ def _add_c0_minimal_wag_layer(
         model.gross_electricity_mwh = Expression(
             model.TIME, rule=lambda m, t: m.gross_total_electricity_mwh[t]
         )
-        model.no_export_from_total_generation = Constraint(
-            model.TIME,
-            rule=lambda m, t: m.total_generator_electricity_mwh[t]
-            <= m.gross_total_electricity_mwh[t],
+        sale_enabled = bool(
+            electricity_sale_sensitivity
+            and electricity_sale_sensitivity.get("enabled") is True
         )
-        model.gross_grid_import_mwh = Expression(
-            model.TIME,
-            rule=lambda m, t: m.gross_total_electricity_mwh[t]
-            - m.total_generator_electricity_mwh[t],
-        )
-        model.gross_grid_export_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        # Freeze the common declaration schema before the sale-only FBBT pass.
+        # FBBT correctly tightens current bounds in place; those derived bounds
+        # must remain auditable without becoming formulation identity.
+        _record_declared_variable_schema(model)
+        if sale_enabled:
+            if aggregate_generator_technical_interface is None:
+                raise S44CModelBuilderError(
+                    "The C0 electricity-sale sensitivity requires the frozen aggregate-generator interface."
+                )
+            if bool(aggregate_generator_technical_interface.get("export_allowed")):
+                raise S44CModelBuilderError(
+                    "The Phase-1 aggregate-generator interface must remain export-disabled; export is opt-in only through the sale sensitivity."
+                )
+            if electricity_sale_sensitivity.get("policy_id") != "athanasiadis_sale_enabled":
+                raise S44CModelBuilderError("Unexpected electricity-sale sensitivity policy.")
+            model.electricity_sale_sensitivity_active = True
+            export_big_m_mw = float(aggregate_electrical_capacity_mw)
+            model.grid_import_mode = Var(model.TIME, domain=Binary)
+            model.gross_grid_import_mwh = Var(model.TIME, domain=NonNegativeReals)
+            model.gross_grid_export_mwh = Var(model.TIME, domain=NonNegativeReals)
+            _record_declared_variable_schema(model)
+            model.grid_export_capacity = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.gross_grid_export_mwh[t]
+                <= export_big_m_mw * (1 - m.grid_import_mode[t]),
+            )
+            model.no_grid_reexport = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.gross_grid_import_mwh[t]
+                <= m.gross_total_electricity_mwh[t],
+            )
+            model.export_bounded_by_internal_generation = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.gross_grid_export_mwh[t]
+                <= m.total_generator_electricity_mwh[t],
+            )
+            model.gross_site_electricity_balance = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.total_generator_electricity_mwh[t]
+                + m.gross_grid_import_mwh[t]
+                == m.gross_total_electricity_mwh[t]
+                + m.gross_grid_export_mwh[t],
+            )
+            # Run the model-level, constraint-aware FBBT pass only after the
+            # complete sale electricity boundary and all upstream process
+            # capacity constraints exist.  The import disjunction is added
+            # afterwards from the separately proven bound for each hour.
+            model.grid_import_bound_audit = _constraint_aware_hourly_import_bounds(
+                model
+            )
+            hourly_import_upper_bound = {
+                int(row["hour_index"]): float(
+                    row["gross_grid_import_upper_bound_mwh"]
+                )
+                for row in model.grid_import_bound_audit["hourly_bounds"]
+            }
+            model.grid_import_capacity = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.gross_grid_import_mwh[t]
+                <= hourly_import_upper_bound[int(t)] * m.grid_import_mode[t],
+            )
+            model.grid_import_big_m_proof = {
+                "source": model.grid_import_bound_audit["derivation_method"],
+                "status": model.grid_import_bound_audit["status"],
+                "hourly_upper_bounds_mwh": hourly_import_upper_bound,
+                "export_upper_bound_mwh": export_big_m_mw,
+            }
+        else:
+            model.no_export_from_total_generation = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.total_generator_electricity_mwh[t]
+                <= m.gross_total_electricity_mwh[t],
+            )
+            model.gross_grid_import_mwh = Expression(
+                model.TIME,
+                rule=lambda m, t: m.gross_total_electricity_mwh[t]
+                - m.total_generator_electricity_mwh[t],
+            )
+            model.gross_grid_export_mwh = Expression(
+                model.TIME, rule=lambda _m, _t: 0.0
+            )
         model.net_grid_exchange_mwh = Expression(
             model.TIME,
             rule=lambda m, t: m.gross_grid_import_mwh[t] - m.gross_grid_export_mwh[t],
         )
+        # Historical cost contracts name this purchase quantity
+        # ``net_grid_import_mwh``.  Under the sale sensitivity it remains the
+        # non-negative gross import; signed exchange is separate above.
         model.net_grid_import_mwh = Expression(
-            model.TIME, rule=lambda m, t: m.net_grid_exchange_mwh[t]
+            model.TIME, rule=lambda m, t: m.gross_grid_import_mwh[t]
         )
         model.gross_site_electricity_identity_residual_mwh = Expression(
             model.TIME,
@@ -4520,6 +7210,7 @@ def _build_c0_model(
     bf_electricity_intensity_scale: float = 1.0,
     aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
     full_site_energy_bridge: Mapping[str, float] | None = None,
+    electricity_sale_sensitivity: Mapping[str, Any] | None = None,
 ):
     if commitment_granularity not in {"hourly_binary", "daily_binary_hourly_throughput"}:
         raise S44CModelBuilderError(f"Unsupported commitment granularity: {commitment_granularity}")
@@ -4769,6 +7460,7 @@ def _build_c0_model(
             bf_electricity_intensity_scale=bf_electricity_intensity_scale,
             aggregate_generator_technical_interface=aggregate_generator_technical_interface,
             full_site_energy_bridge=full_site_energy_bridge,
+            electricity_sale_sensitivity=electricity_sale_sensitivity,
             kgf_underfiring_activity_rule=(
                 (lambda m, t: m.coke_output_kgf1[t]) if c0_coke_chain_reconciliation is not None else None
             ),
@@ -6166,6 +8858,7 @@ def _solve_c0_configuration(
     bf_electricity_intensity_scale: float = 1.0,
     aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
     full_site_energy_bridge: Mapping[str, float] | None = None,
+    electricity_sale_sensitivity: Mapping[str, Any] | None = None,
     allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
     normal_solution_capture: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
@@ -6200,6 +8893,7 @@ def _solve_c0_configuration(
         bf_electricity_intensity_scale=bf_electricity_intensity_scale,
         aggregate_generator_technical_interface=aggregate_generator_technical_interface,
         full_site_energy_bridge=full_site_energy_bridge,
+        electricity_sale_sensitivity=electricity_sale_sensitivity,
     )
     if rolling_production_progress_target_t is not None:
         _add_rolling_production_progress_tracking(
@@ -6224,6 +8918,7 @@ def _solve_c0_configuration(
             solver=solver,
             configuration_id="C0_current_BF_BOF_reference",
             deterministic_cost_policy=deterministic_cost_policy,
+            electricity_sale_sensitivity=electricity_sale_sensitivity,
             allocation_envelope_diagnostic=allocation_envelope_diagnostic,
             normal_solution_capture=normal_solution_capture,
         )
@@ -6377,6 +9072,43 @@ def _solve_c0_configuration(
             round(float(cost_metadata["primary_cost_objective_eur"]), 6)
             if cost_metadata["primary_cost_objective_eur"] is not None
             else ""
+        ),
+        "primary_import_procurement_cost_eur": (
+            round(float(cost_metadata["primary_import_procurement_cost_eur"]), 6)
+            if cost_metadata["primary_import_procurement_cost_eur"] is not None
+            else ""
+        ),
+        "primary_electricity_export_revenue_eur": (
+            round(float(cost_metadata["primary_electricity_export_revenue_eur"]), 6)
+            if cost_metadata["primary_electricity_export_revenue_eur"] is not None
+            else ""
+        ),
+        "electricity_sale_sensitivity_active": cost_metadata[
+            "electricity_sale_sensitivity_active"
+        ],
+        "grid_import_bound_audit_status": (
+            model.grid_import_bound_audit["status"]
+            if hasattr(model, "grid_import_bound_audit")
+            else "not_applicable"
+        ),
+        "grid_import_bound_derivation_method": (
+            model.grid_import_bound_audit["derivation_method"]
+            if hasattr(model, "grid_import_bound_audit")
+            else ""
+        ),
+        "grid_import_bound_audit_runtime_seconds": (
+            model.grid_import_bound_audit["runtime_seconds"]
+            if hasattr(model, "grid_import_bound_audit")
+            else 0.0
+        ),
+        "grid_import_hourly_upper_bounds_json": (
+            json.dumps(
+                model.grid_import_bound_audit["hourly_bounds"],
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            if hasattr(model, "grid_import_bound_audit")
+            else "[]"
         ),
         "primary_cost_best_bound_eur": (
             round(float(cost_metadata["primary_cost_best_bound_eur"]), 6)
@@ -6805,6 +9537,12 @@ def _solve_c0_configuration(
             "caveat": "Daily production must stay within 80-120 percent of average daily target when active.",
         },
     ]
+    import_bound_by_hour = {
+        int(row["hour_index"]): row
+        for row in getattr(model, "grid_import_bound_audit", {}).get(
+            "hourly_bounds", []
+        )
+    }
     hourly_rows = []
     for t in model.TIME:
         hourly_rows.append(
@@ -7114,6 +9852,45 @@ def _solve_c0_configuration(
                 "gross_grid_export_mwh": round(float(value(model.gross_grid_export_mwh[t])), 12)
                 if enable_minimal_wag_layer
                 else "",
+                "gross_grid_import_upper_bound_mwh": (
+                    import_bound_by_hour[int(t)][
+                        "gross_grid_import_upper_bound_mwh"
+                    ]
+                    if int(t) in import_bound_by_hour
+                    else ""
+                ),
+                "gross_grid_import_bound_status": (
+                    import_bound_by_hour[int(t)]["status"]
+                    if int(t) in import_bound_by_hour
+                    else "not_applicable"
+                ),
+                "gross_grid_import_bound_method": (
+                    model.grid_import_bound_audit["derivation_method"]
+                    if int(t) in import_bound_by_hour
+                    else ""
+                ),
+                "electricity_sale_price_eur_per_mwh": (
+                    float(
+                        electricity_sale_sensitivity["sale_price_eur_by_hour"][int(t)]
+                    )
+                    if electricity_sale_sensitivity
+                    and electricity_sale_sensitivity.get("enabled") is True
+                    else ""
+                ),
+                "electricity_export_revenue_eur": (
+                    round(
+                        float(
+                            electricity_sale_sensitivity[
+                                "sale_price_eur_by_hour"
+                            ][int(t)]
+                        )
+                        * float(value(model.gross_grid_export_mwh[t])),
+                        9,
+                    )
+                    if electricity_sale_sensitivity
+                    and electricity_sale_sensitivity.get("enabled") is True
+                    else 0.0
+                ),
                 "net_grid_exchange_mwh": round(float(value(model.net_grid_exchange_mwh[t])), 12)
                 if enable_minimal_wag_layer
                 else "",
@@ -8605,6 +11382,7 @@ def run_s44c_unified_physical_regression(
     bf_electricity_intensity_scale_by_configuration: Mapping[str, float] | None = None,
     c0_aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
     c0_full_site_energy_bridge: Mapping[str, float] | None = None,
+    c0_electricity_sale_sensitivity: Mapping[str, Any] | None = None,
     c0_allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
     normal_solution_capture_by_configuration: Mapping[
         str, Mapping[str, Any]
@@ -8754,6 +11532,7 @@ def run_s44c_unified_physical_regression(
             ],
             aggregate_generator_technical_interface=c0_aggregate_generator_technical_interface,
             full_site_energy_bridge=c0_full_site_energy_bridge,
+            electricity_sale_sensitivity=c0_electricity_sale_sensitivity,
             allocation_envelope_diagnostic=c0_allocation_envelope_diagnostic,
             normal_solution_capture=(
                 normal_solution_capture_by_configuration.get(
@@ -8926,6 +11705,17 @@ def run_s44c_unified_physical_regression(
             c0_aggregate_generator_technical_interface or {}
         ),
         "c0_full_site_energy_bridge": dict(c0_full_site_energy_bridge or {}),
+        **(
+            {
+                "c0_electricity_sale_sensitivity": {
+                    key: value
+                    for key, value in dict(c0_electricity_sale_sensitivity).items()
+                    if key != "sale_price_eur_by_hour"
+                }
+            }
+            if c0_electricity_sale_sensitivity is not None
+            else {}
+        ),
         **(
             {
                 "c0_allocation_envelope_diagnostic": dict(

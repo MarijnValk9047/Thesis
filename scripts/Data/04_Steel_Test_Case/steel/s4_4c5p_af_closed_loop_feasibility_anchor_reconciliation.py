@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,6 +59,16 @@ from .s4_4c_unified_physical_modelbuilder import (
     _load_tables,
     _select_solver,
     run_s44c_unified_physical_regression,
+)
+from .validation_tolerance_policy import (
+    HOURLY_MONEY_IDENTITY_TOLERANCE_EUR,
+    SOLVER_NUMERICAL_TOLERANCE,
+    TERMINAL_STATE_TOLERANCE_T,
+    ValidationTolerancePolicyError,
+    exact_input_fingerprint,
+    policy_contract as validation_tolerance_policy_contract,
+    require_exact_input_fingerprint,
+    trajectory_cost_record,
 )
 
 
@@ -230,6 +241,14 @@ def _input_manifest(
 
 def _float(value: Any) -> float:
     return 0.0 if value in (None, "") else float(value)
+
+
+def _initialize_normal_solution_capture_directory(
+    policy: Mapping[str, Any],
+) -> Path:
+    directory = Path(str(policy["directory"])).resolve()
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
 
 
 def _config(path: Path) -> dict[str, Any]:
@@ -577,6 +596,262 @@ def _cost_component_for_attribute(component: str, attribute: str) -> str:
     return aliases.get(attribute, component)
 
 
+_FROZEN_PROCUREMENT_PRICE_IDS = frozenset(
+    {
+        "grid_electricity_flat_nl",
+        "natural_gas_ttf_proxy",
+        "coking_coal_hcc_proxy",
+        "pci_coal_proxy",
+        "iron_ore_62fe_proxy",
+        "imported_dr_pellets_proxy",
+        "purchased_scrap_proxy",
+        "imported_slab_proxy",
+    }
+)
+_GOVERNED_SALE_PRICE_ID = "governed_y_pred_sale_value"
+_GOVERNED_SALE_POLICY_IDENTITY = {
+    "enabled": True,
+    "policy_id": "athanasiadis_sale_enabled",
+    "price_basis": "same_governed_y_pred_as_import",
+    "revenue_scope": "gross_grid_export_only",
+    "settlement_claim": False,
+}
+
+
+def _planning_horizon_cost_preservation_validation(
+    *,
+    primary_cost_eur: float,
+    tie_break_cost_eur: float,
+    endpoint_cost_eur: float,
+) -> dict[str, Any]:
+    """Validate planning-horizon cost preservation as aggregate EUR records."""
+
+    tie_break = trajectory_cost_record(
+        "tie_break_cost_preservation",
+        tie_break_cost_eur - primary_cost_eur,
+        comparison_scale_eur=max(abs(primary_cost_eur), abs(tie_break_cost_eur)),
+    )
+    endpoint = trajectory_cost_record(
+        "allocation_envelope_endpoint_cost_preservation",
+        endpoint_cost_eur - primary_cost_eur,
+        comparison_scale_eur=max(abs(primary_cost_eur), abs(endpoint_cost_eur)),
+    )
+    return {
+        "status": (
+            "pass"
+            if tie_break["status"] == "pass" and endpoint["status"] == "pass"
+            else "fail"
+        ),
+        "tie_break": tie_break,
+        "endpoint": endpoint,
+    }
+_GOVERNED_SALE_LEDGER_IDENTITY = {
+    "configuration_id": C0_CONFIGURATION,
+    "flow_id": "C0_EL_EXPORT",
+    "component": "gross_grid_export",
+    "cost_route": "represented_electricity_sale_sensitivity",
+    "physical_quantity_attribute": "gross_grid_export_mwh",
+    "price_scenario_id": "same_governed_y_pred_as_import",
+}
+
+
+def _ledger_price_input_identity(
+    *,
+    price_id: str,
+    price_scenario_id: str,
+    plan_hour_index: int,
+    price_eur_per_unit: float,
+) -> dict[str, Any]:
+    return {
+        "price_id": str(price_id),
+        "price_scenario_id": str(price_scenario_id),
+        "plan_hour_index": int(plan_hour_index),
+        "price_eur_per_unit": float(price_eur_per_unit),
+    }
+
+
+def _ledger_price_input_fingerprint(row: Mapping[str, Any]) -> str:
+    return exact_input_fingerprint(
+        _ledger_price_input_identity(
+            price_id=str(row["price_id"]),
+            price_scenario_id=str(row["price_scenario_id"]),
+            plan_hour_index=int(row["plan_hour_index"]),
+            price_eur_per_unit=float(row["price_eur_per_unit"]),
+        )
+    )
+
+
+def _governed_cost_ledger_validation(
+    config: Mapping[str, Any],
+    ledger: Collection[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Validate the frozen procurement ledger plus the one opt-in sale family."""
+
+    raw_sale_policy = config.get("c0_electricity_sale_sensitivity")
+    sale_enabled = bool(
+        isinstance(raw_sale_policy, Mapping)
+        and raw_sale_policy.get("enabled") is True
+    )
+    sale_policy_valid = bool(
+        sale_enabled
+        and all(
+            raw_sale_policy.get(key) == expected
+            for key, expected in _GOVERNED_SALE_POLICY_IDENTITY.items()
+        )
+    )
+    expected_price_ids = set(_FROZEN_PROCUREMENT_PRICE_IDS)
+    if sale_policy_valid:
+        expected_price_ids.add(_GOVERNED_SALE_PRICE_ID)
+    actual_price_ids = {str(row.get("price_id")) for row in ledger}
+    price_fingerprint_diagnostics: list[dict[str, Any]] = []
+    for index, row in enumerate(ledger):
+        expected_fingerprint = str(
+            row.get("price_input_fingerprint_sha256", "")
+        )
+        try:
+            require_exact_input_fingerprint(
+                _ledger_price_input_identity(
+                    price_id=str(row["price_id"]),
+                    price_scenario_id=str(row["price_scenario_id"]),
+                    plan_hour_index=int(row["plan_hour_index"]),
+                    price_eur_per_unit=float(row["price_eur_per_unit"]),
+                ),
+                expected_fingerprint=expected_fingerprint,
+                purpose=f"procurement ledger price row {index}",
+            )
+        except (
+            KeyError,
+            TypeError,
+            ValueError,
+            ValidationTolerancePolicyError,
+        ) as exc:
+            price_fingerprint_diagnostics.append(
+                {
+                    "ledger_row_index": index,
+                    "status": "fail",
+                    "price_id": row.get("price_id"),
+                    "failure": type(exc).__name__,
+                }
+            )
+        else:
+            price_fingerprint_diagnostics.append(
+                {
+                    "ledger_row_index": index,
+                    "status": "pass",
+                    "price_id": row.get("price_id"),
+                    "price_input_fingerprint_sha256": expected_fingerprint,
+                }
+            )
+    price_input_fingerprints_valid = bool(ledger) and all(
+        row["status"] == "pass" for row in price_fingerprint_diagnostics
+    )
+    sale_rows = [
+        (index, row)
+        for index, row in enumerate(ledger)
+        if str(row.get("price_id")) == _GOVERNED_SALE_PRICE_ID
+    ]
+    sale_row_diagnostics: list[dict[str, Any]] = []
+    for index, row in sale_rows:
+        failures = [
+            f"wrong_{key}"
+            for key, expected in _GOVERNED_SALE_LEDGER_IDENTITY.items()
+            if row.get(key) != expected
+        ]
+        try:
+            quantity = float(row.get("quantity"))
+            price = float(row.get("price_eur_per_unit"))
+            cost = float(row.get("cost_eur"))
+        except (TypeError, ValueError):
+            quantity = price = cost = math.nan
+        if not math.isfinite(quantity):
+            failures.append("nonfinite_quantity")
+        elif quantity < 0.0:
+            failures.append("negative_quantity")
+        if not math.isfinite(price):
+            failures.append("nonfinite_price")
+        if not math.isfinite(cost):
+            failures.append("nonfinite_cost")
+        if (
+            math.isfinite(quantity)
+            and math.isfinite(price)
+            and math.isfinite(cost)
+            and abs(cost + quantity * price)
+            > HOURLY_MONEY_IDENTITY_TOLERANCE_EUR
+        ):
+            failures.append("sale_cost_not_negative_quantity_times_price")
+        sale_row_diagnostics.append(
+            {
+                "ledger_row_index": index,
+                "status": "pass" if not failures else "fail",
+                "failure_ids": failures,
+            }
+        )
+    sale_rows_valid = bool(
+        (
+            sale_policy_valid
+            and sale_rows
+            and all(row["status"] == "pass" for row in sale_row_diagnostics)
+        )
+        or (not sale_enabled and not sale_rows)
+    )
+    forbidden_flags_absent = all(
+        config.get(key) is False
+        for key in (
+            "market_prices_enabled",
+            "product_revenue_enabled",
+            "co2_ets_objective_enabled",
+        )
+    )
+    missing_price_ids = sorted(expected_price_ids.difference(actual_price_ids))
+    unauthorized_price_ids = sorted(actual_price_ids.difference(expected_price_ids))
+    price_family_contract_valid = not missing_price_ids and not unauthorized_price_ids
+    status = bool(
+        price_family_contract_valid
+        and price_input_fingerprints_valid
+        and sale_rows_valid
+        and forbidden_flags_absent
+        and (not sale_enabled or sale_policy_valid)
+    )
+    return {
+        "status": "pass" if status else "fail",
+        "expected_price_ids": sorted(expected_price_ids),
+        "actual_price_ids": sorted(actual_price_ids),
+        "missing_price_ids": missing_price_ids,
+        "unauthorized_price_ids": unauthorized_price_ids,
+        "price_family_contract_valid": price_family_contract_valid,
+        "price_input_comparison": "exact_fingerprint_no_numeric_tolerance",
+        "price_input_fingerprints_valid": price_input_fingerprints_valid,
+        "price_fingerprint_diagnostics": price_fingerprint_diagnostics,
+        "sale_enabled": sale_enabled,
+        "sale_policy_valid": sale_policy_valid,
+        "sale_row_count": len(sale_rows),
+        "sale_rows_valid": sale_rows_valid,
+        "sale_row_diagnostics": sale_row_diagnostics,
+        "forbidden_economic_flags_absent": forbidden_flags_absent,
+    }
+
+
+def _cost_acceptance_readiness(
+    *,
+    pre_cost_boundary_ready: bool,
+    cost_mode_active: bool,
+    cost_objectives_active: bool,
+    cost_objective_reconciliation_pass: bool,
+    cost_ledger_validation: Mapping[str, Any],
+) -> bool:
+    return bool(
+        pre_cost_boundary_ready
+        and (
+            not cost_mode_active
+            or (
+                cost_objectives_active
+                and cost_objective_reconciliation_pass
+                and cost_ledger_validation.get("status") == "pass"
+            )
+        )
+    )
+
+
 def _procurement_cost_ledger(
     hourly_rows: Collection[Mapping[str, Any]],
     deterministic_cost_policy: Mapping[str, Any] | None,
@@ -609,8 +884,7 @@ def _procurement_cost_ledger(
                     raise ClosedLoopFeasibilityError(
                         f"External procurement flow is negative: {flow['flow_id']}/{attribute}."
                     )
-                ledger.append(
-                    {
+                ledger_row = {
                         "configuration_id": configuration_id,
                         "replan_index": block,
                         "plan_hour_index": plan_hour,
@@ -629,7 +903,48 @@ def _procurement_cost_ledger(
                         "cost_eur": round(max(0.0, quantity) * price, 9),
                         "run_id": run_id,
                     }
+                ledger_row["price_input_fingerprint_sha256"] = (
+                    _ledger_price_input_fingerprint(ledger_row)
                 )
+                ledger.append(ledger_row)
+        sale = deterministic_cost_policy.get("electricity_sale_sensitivity")
+        if (
+            configuration == "C0"
+            and isinstance(sale, Mapping)
+            and sale.get("enabled") is True
+        ):
+            prices = list(sale.get("sale_price_eur_by_hour", ()))
+            horizon = len(next(iter(deterministic_cost_policy["flows"]))["price_eur_by_hour"])
+            if len(prices) != horizon:
+                raise ClosedLoopFeasibilityError(
+                    "Electricity-sale reporting price horizon mismatch."
+                )
+            exported = _float(row.get("gross_grid_export_mwh"))
+            if exported < -TOLERANCE_T:
+                raise ClosedLoopFeasibilityError("Gross grid export cannot be negative.")
+            ledger_row = {
+                    "configuration_id": configuration_id,
+                    "replan_index": block,
+                    "plan_hour_index": plan_hour,
+                    "executed_hour_index": executed_hour,
+                    "flow_id": "C0_EL_EXPORT",
+                    "component": "gross_grid_export",
+                    "cost_route": "represented_electricity_sale_sensitivity",
+                    "physical_quantity_attribute": "gross_grid_export_mwh",
+                    "quantity": round(max(0.0, exported), 9),
+                    "quantity_unit": "MWh_e",
+                    "price_id": "governed_y_pred_sale_value",
+                    "price_scenario_id": "same_governed_y_pred_as_import",
+                    "price_eur_per_unit": float(prices[plan_hour]),
+                    "cost_eur": round(
+                        -max(0.0, exported) * float(prices[plan_hour]), 9
+                    ),
+                    "run_id": run_id,
+                }
+            ledger_row["price_input_fingerprint_sha256"] = (
+                _ledger_price_input_fingerprint(ledger_row)
+            )
+            ledger.append(ledger_row)
     return ledger
 
 
@@ -1815,6 +2130,164 @@ def _next_inventory_overrides(endpoints: Mapping[str, Mapping[str, Any]]) -> dic
             )
         output[configuration] = values
     return output
+
+
+HANDOFF_STATE_SCHEMA_BY_CONFIGURATION = {
+    C0_CONFIGURATION: {
+        "coke_store_initial_t",
+        "sinter_store_initial_t",
+        "hot_iron_store_initial_t",
+        "cold_slab_store_initial_t",
+    },
+    C1_CONFIGURATION: {
+        "coke_store_initial_t",
+        "sinter_store_initial_t",
+        "hot_iron_store_initial_t",
+        "cold_slab_store_initial_t",
+        "dri_buffer_initial_t",
+    },
+}
+
+
+def _validate_inventory_handoff_contract(
+    rows: Collection[Mapping[str, Any]],
+    *,
+    replan_count: int,
+    phase2_single_window_preflight: bool,
+    tolerance: float = TERMINAL_STATE_TOLERANCE_T,
+) -> dict[str, Any]:
+    """Validate terminal state snapshots and every governed rolling transition."""
+
+    result: dict[str, Any] = {
+        "status": "fail",
+        "validation_scope": (
+            "phase2_single_window_terminal_snapshot_only"
+            if phase2_single_window_preflight
+            else "complete_multi_window_handoff_chain"
+        ),
+        "terminal_handoff_snapshot_complete": False,
+        "inter_window_handoff_continuity": "fail",
+        "checked_transition_count": 0,
+        "checked_state_value_count": 0,
+        "max_state_residual": 0.0,
+        "allowed_state_tolerance_t": tolerance,
+        "validation_tolerance_policy": validation_tolerance_policy_contract(),
+        "failure_reasons": [],
+    }
+    if replan_count == 1 and not phase2_single_window_preflight:
+        result["validation_scope"] = "invalid_unflagged_single_window"
+        result["failure_reasons"].append(
+            "one_replan_requires_explicit_phase2_single_window_preflight"
+        )
+        return result
+    if phase2_single_window_preflight and replan_count != 1:
+        result["failure_reasons"].append(
+            "phase2_single_window_preflight_requires_replan_count_1"
+        )
+        return result
+    expected_keys = {
+        (configuration, replan_index)
+        for configuration in CONFIGURATIONS
+        for replan_index in range(replan_count)
+    }
+    keyed: dict[tuple[str, int], Mapping[str, Any]] = {}
+    try:
+        for row in rows:
+            key = (str(row["configuration_id"]), int(row["replan_index"]))
+            if key in keyed:
+                result["failure_reasons"].append(f"duplicate_row:{key}")
+            keyed[key] = row
+    except (KeyError, TypeError, ValueError) as exc:
+        result["failure_reasons"].append(f"invalid_row_key:{type(exc).__name__}")
+        return result
+    missing = sorted(expected_keys.difference(keyed))
+    extra = sorted(set(keyed).difference(expected_keys))
+    if missing:
+        result["failure_reasons"].append(f"missing_rows:{missing}")
+    if extra:
+        result["failure_reasons"].append(f"unexpected_rows:{extra}")
+    terminal_complete = not missing and not extra and len(keyed) == len(expected_keys)
+    parsed: dict[tuple[str, int], tuple[dict[str, float], dict[str, float]]] = {}
+    for key in sorted(expected_keys.intersection(keyed)):
+        row = keyed[key]
+        expected_schema = HANDOFF_STATE_SCHEMA_BY_CONFIGURATION[key[0]]
+        try:
+            start = json.loads(str(row["start_overrides"]))
+            end = json.loads(str(row["next_overrides"]))
+            if not isinstance(start, dict) or not isinstance(end, dict):
+                raise TypeError("handoff containers must be mappings")
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            result["failure_reasons"].append(
+                f"invalid_handoff_payload:{key}:{type(exc).__name__}"
+            )
+            terminal_complete = False
+            continue
+        if set(end) != expected_schema or not end:
+            result["failure_reasons"].append(f"incomplete_next_schema:{key}")
+            terminal_complete = False
+        if key[1] > 0 and set(start) != expected_schema:
+            result["failure_reasons"].append(f"incomplete_start_schema:{key}")
+        try:
+            start_float = {name: float(value) for name, value in start.items()}
+            end_float = {name: float(value) for name, value in end.items()}
+        except (TypeError, ValueError):
+            result["failure_reasons"].append(f"non_numeric_state:{key}")
+            terminal_complete = False
+            continue
+        if not all(math.isfinite(value) for value in end_float.values()):
+            result["failure_reasons"].append(f"nonfinite_terminal_state:{key}")
+            terminal_complete = False
+        if key[1] > 0 and not all(
+            math.isfinite(value) for value in start_float.values()
+        ):
+            result["failure_reasons"].append(f"nonfinite_start_state:{key}")
+        parsed[key] = (start_float, end_float)
+    result["terminal_handoff_snapshot_complete"] = terminal_complete
+    if phase2_single_window_preflight:
+        result["inter_window_handoff_continuity"] = "not_applicable"
+        result["status"] = "pass" if terminal_complete and not result["failure_reasons"] else "fail"
+        return result
+    continuity_ok = True
+    for configuration in CONFIGURATIONS:
+        for replan_index in range(1, replan_count):
+            previous = parsed.get((configuration, replan_index - 1))
+            current = parsed.get((configuration, replan_index))
+            if previous is None or current is None:
+                continuity_ok = False
+                continue
+            previous_end = previous[1]
+            current_start = current[0]
+            expected_schema = HANDOFF_STATE_SCHEMA_BY_CONFIGURATION[configuration]
+            result["checked_transition_count"] += 1
+            if set(previous_end) != expected_schema or set(current_start) != expected_schema:
+                continuity_ok = False
+                continue
+            for state in sorted(expected_schema):
+                result["checked_state_value_count"] += 1
+                residual = abs(previous_end[state] - current_start[state])
+                result["max_state_residual"] = max(
+                    result["max_state_residual"], residual
+                )
+                if not math.isfinite(residual) or residual > tolerance:
+                    continuity_ok = False
+    expected_transitions = len(CONFIGURATIONS) * (replan_count - 1)
+    continuity_ok = (
+        continuity_ok
+        and result["checked_transition_count"] == expected_transitions
+        and not any(
+            reason.startswith(("incomplete_start_schema", "nonfinite_start_state"))
+            for reason in result["failure_reasons"]
+        )
+    )
+    result["inter_window_handoff_continuity"] = (
+        "pass" if continuity_ok else "fail"
+    )
+    result["status"] = (
+        "pass"
+        if terminal_complete and continuity_ok and not result["failure_reasons"]
+        else "fail"
+    )
+    return result
 
 
 def _execution_rows(
@@ -3654,6 +4127,32 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         and config.get("forecast_price_override_eur_per_mwh") in {None, ""}
     )
     raw_allocation_envelope = config.get("c0_allocation_envelope_diagnostic")
+    raw_sale_sensitivity = config.get("c0_electricity_sale_sensitivity")
+    if raw_sale_sensitivity is not None:
+        if not isinstance(raw_sale_sensitivity, Mapping):
+            raise ClosedLoopFeasibilityError(
+                "c0_electricity_sale_sensitivity must be a mapping."
+            )
+        if raw_sale_sensitivity.get("enabled") is not True:
+            raw_sale_sensitivity = None
+        elif (
+            raw_sale_sensitivity.get("policy_id") != "athanasiadis_sale_enabled"
+            or forecast_price_field != "y_pred"
+            or perfect_foresight_oracle
+            or str(config.get("forecast_dataset_split", "validation"))
+            != "validation"
+        ):
+            raise ClosedLoopFeasibilityError(
+                "The C0 sale sensitivity requires governed validation y_pred and forbids oracle/held-out prices."
+            )
+        elif (
+            not raw_sale_sensitivity.get("incumbent_capture_directory")
+            or not isinstance(raw_sale_sensitivity.get("incumbent_provenance"), Mapping)
+            or not raw_sale_sensitivity.get("containment_oracle_root")
+        ):
+            raise ClosedLoopFeasibilityError(
+                "The sale sensitivity requires captured no-export incumbent and containment-oracle paths."
+            )
     raw_normal_solution_capture = config.get("normal_solution_capture")
     if raw_normal_solution_capture is not None and (
         not isinstance(raw_normal_solution_capture, Mapping)
@@ -3667,6 +4166,8 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             "Normal-solution capture requires enabled=true, a directory, and "
             "complete provenance fingerprints."
         )
+    if raw_normal_solution_capture is not None:
+        _initialize_normal_solution_capture_directory(raw_normal_solution_capture)
     normal_schedule_by_key: dict[tuple[int, str], Mapping[str, Any]] = {}
     if raw_allocation_envelope is not None:
         if (
@@ -3889,6 +4390,87 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             replan_index=replan_index,
             execution_block_hours=plan.execution_block_hours,
         )
+        resolved_sale_sensitivity: dict[str, Any] | None = None
+        if raw_sale_sensitivity is not None:
+            if deterministic_cost_policy is None:
+                raise ClosedLoopFeasibilityError(
+                    "The electricity-sale sensitivity requires represented deterministic cost."
+                )
+            electricity_flows = [
+                row
+                for row in deterministic_cost_policy["flows"]
+                if row.get("configuration") in {"C0", "both"}
+                and row.get("model_component_attribute") == "net_grid_import_mwh"
+            ]
+            if len(electricity_flows) != 1:
+                raise ClosedLoopFeasibilityError(
+                    "Exactly one governed C0 grid-electricity price flow is required."
+                )
+            resolved_sale_sensitivity = {
+                **dict(raw_sale_sensitivity),
+                "sale_price_eur_by_hour": list(
+                    electricity_flows[0]["price_eur_by_hour"]
+                ),
+                "replan_index": replan_index,
+                "execution_hours": plan.execution_block_hours,
+            }
+            implementation_sha256 = str(
+                config.get("phase2_implementation_sha256", "")
+            ).lower()
+            if (
+                len(implementation_sha256) != 64
+                or any(
+                    character not in "0123456789abcdef"
+                    for character in implementation_sha256
+                )
+            ):
+                raise ClosedLoopFeasibilityError(
+                    "Sale state preservation requires the exact Phase 2 "
+                    "implementation identity."
+                )
+            state_preservation_contract = {
+                "schema_version": "steel_phase2_sale_state_preservation_v3",
+                "enabled": True,
+                "configuration_id": C0_CONFIGURATION,
+                "replan_index": replan_index,
+                "execution_hours": plan.execution_block_hours,
+                "implementation_sha256": implementation_sha256,
+            }
+            resolved_sale_sensitivity["state_preservation"] = (
+                state_preservation_contract
+            )
+            incumbent_path = (
+                Path(str(raw_sale_sensitivity["incumbent_capture_directory"]))
+                / (
+                    f"normal_solution_replan_{replan_index:02d}__"
+                    f"{C0_CONFIGURATION}.json.gz"
+                )
+            ).resolve()
+            if not incumbent_path.is_file():
+                raise ClosedLoopFeasibilityError(
+                    f"Captured no-export incumbent is missing: {incumbent_path}"
+                )
+            resolved_sale_sensitivity["incumbent_containment"] = {
+                "normal_solution_record_path": str(incumbent_path),
+                "normal_solution_record_sha256": hashlib.sha256(
+                    incumbent_path.read_bytes()
+                ).hexdigest(),
+                "normal_solution_expected_provenance": dict(
+                    raw_sale_sensitivity["incumbent_provenance"]
+                ),
+                "oracle_directory": str(
+                    Path(str(raw_sale_sensitivity["containment_oracle_root"])).resolve()
+                    / f"replan_{replan_index:02d}"
+                ),
+                "validation_tolerance_policy": (
+                    validation_tolerance_policy_contract()
+                ),
+                "state_preservation": state_preservation_contract,
+            }
+            deterministic_cost_policy = {
+                **deterministic_cost_policy,
+                "electricity_sale_sensitivity": resolved_sale_sensitivity,
+            }
         if deterministic_cost_policy is not None:
             cost_policies_by_replan[replan_index] = deterministic_cost_policy
             electricity_price_series_rows.extend(
@@ -3977,6 +4559,7 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 c0_aggregate_generator_technical_interface
             ),
             c0_full_site_energy_bridge=c0_full_site_energy_bridge,
+            c0_electricity_sale_sensitivity=resolved_sale_sensitivity,
             c0_allocation_envelope_diagnostic=(
                 {
                     **dict(raw_allocation_envelope),
@@ -4047,6 +4630,11 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 {
                     configuration: {
                         "enabled": True,
+                        "structural_inactive_exclusion_enabled": bool(
+                            raw_normal_solution_capture.get(
+                                "structural_inactive_exclusion_enabled", False
+                            )
+                        ),
                         "path": str(
                             Path(
                                 str(raw_normal_solution_capture["directory"])
@@ -4235,6 +4823,46 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                     if executed_solution_model_cost not in {None, ""}
                     else float("inf")
                 )
+                reporting_validation = (
+                    trajectory_cost_record(
+                        (
+                            "reported_ledger_vs_executed_solution_cost"
+                            f"[{configuration_id},{replan_index}]"
+                        ),
+                        reporting_residual,
+                        comparison_scale_eur=max(
+                            abs(planned_cost),
+                            abs(float(executed_solution_model_cost)),
+                        ),
+                    )
+                    if executed_solution_model_cost not in {None, ""}
+                    else {
+                        "status": "fail",
+                        "allowed_tolerance": 0.0,
+                        "raw_residual": "missing_executed_solution_model_cost",
+                    }
+                )
+                objective_preservation_tolerance = float(
+                    deterministic_cost_policy["objective_tolerance_eur"]
+                )
+                aggregate_preservation_validation = (
+                    _planning_horizon_cost_preservation_validation(
+                        primary_cost_eur=float(primary),
+                        tie_break_cost_eur=float(tie_break_model_cost),
+                        endpoint_cost_eur=float(
+                            endpoint_model_cost
+                            if endpoint_model_cost not in {None, ""}
+                            else tie_break_model_cost
+                        ),
+                    )
+                    if primary not in {None, ""}
+                    and tie_break_model_cost not in {None, ""}
+                    else {
+                        "status": "fail",
+                        "tie_break": {"allowed_tolerance": 0.0},
+                        "endpoint": {"allowed_tolerance": 0.0},
+                    }
+                )
                 cost_objective_reconciliation_rows.append(
                     {
                         "replan_index": replan_index,
@@ -4256,15 +4884,39 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                         "allowed_tolerance_eur": deterministic_cost_policy[
                             "objective_tolerance_eur"
                         ],
+                        "model_cost_preservation_constraint_tolerance_eur": (
+                            objective_preservation_tolerance
+                        ),
+                        "solver_numerical_tolerance": SOLVER_NUMERICAL_TOLERANCE,
+                        "tie_break_aggregate_validation_tolerance_eur": (
+                            aggregate_preservation_validation["tie_break"][
+                                "allowed_tolerance"
+                            ]
+                        ),
+                        "endpoint_aggregate_validation_tolerance_eur": (
+                            aggregate_preservation_validation["endpoint"][
+                                "allowed_tolerance"
+                            ]
+                        ),
+                        "cost_preservation_validation_purpose": (
+                            "trajectory_or_yearly_aggregate_cost"
+                        ),
+                        "cost_preservation_validation_status": (
+                            aggregate_preservation_validation["status"]
+                        ),
+                        "reported_ledger_allowed_tolerance_eur": (
+                            reporting_validation["allowed_tolerance"]
+                        ),
+                        "reported_ledger_validation_purpose": (
+                            "trajectory_or_yearly_aggregate_cost"
+                        ),
+                        "validation_tolerance_policy": (
+                            validation_tolerance_policy_contract()
+                        ),
                         "status": (
                             "pass"
-                            if preservation_residual
-                            <= float(deterministic_cost_policy["objective_tolerance_eur"])
-                            + 1e-4
-                            and endpoint_preservation_residual
-                            <= float(deterministic_cost_policy["objective_tolerance_eur"])
-                            + 1e-4
-                            and abs(reporting_residual) <= 1e-4
+                            if aggregate_preservation_validation["status"] == "pass"
+                            and reporting_validation["status"] == "pass"
                             else "fail"
                         ),
                     }
@@ -4357,7 +5009,9 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                         "production_progress_runtime_seconds", ""
                     ),
                     "objective_hierarchy": (
-                        "production_progress_then_represented_procurement_cost_then_physical_tie_break"
+                        "production_progress_then_represented_net_procurement_cost_then_physical_tie_break"
+                        if resolved_sale_sensitivity is not None
+                        else "production_progress_then_represented_procurement_cost_then_physical_tie_break"
                         if deterministic_cost_policy is not None
                         else "rolling_production_progress_then_physical_tie_break"
                     ),
@@ -4649,19 +5303,9 @@ def run_closed_loop_feasibility_anchor_reconciliation(
     ) and all(
         row["status"] == "pass" for row in cost_objective_reconciliation_rows
     )
-    executed_cost_price_ids = {
-        row["price_id"] for row in executed_cost_ledger
-    }
-    expected_cost_price_ids = {
-        "grid_electricity_flat_nl",
-        "natural_gas_ttf_proxy",
-        "coking_coal_hcc_proxy",
-        "pci_coal_proxy",
-        "iron_ore_62fe_proxy",
-        "imported_dr_pellets_proxy",
-        "purchased_scrap_proxy",
-        "imported_slab_proxy",
-    }
+    cost_ledger_validation = _governed_cost_ledger_validation(
+        config, executed_cost_ledger
+    )
     cost_summary_total = sum(
         _float(row.get("executed_procurement_cost_eur"))
         for row in procurement_cost_configuration_rows
@@ -4691,6 +5335,14 @@ def run_closed_loop_feasibility_anchor_reconciliation(
     global_terminal_reached = (
         global_terminal_hours in {None, ""}
         or executed_hours_so_far >= int(global_terminal_hours)
+    )
+    handoff_contract = _validate_inventory_handoff_contract(
+        replan_rows,
+        replan_count=int(config["replan_count"]),
+        phase2_single_window_preflight=(
+            config.get("phase2_single_window_preflight") is True
+        ),
+        tolerance=TOLERANCE_T,
     )
     validation_rows = [
         {"check_id": "c0_closed_loop_replans_completed", "status": "pass" if len(c0_execution) == int(config["replan_count"]) else "fail", "evidence": "rolling_execution.csv"},
@@ -4773,7 +5425,41 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         {"check_id": "c0_downstream_origin_conservation", "status": "pass" if c0_origin_rows and all(abs(_float(row.get("annualised_value_t_y"))) <= ANNUALISED_ACCOUNTING_TOLERANCE_MWH for row in c0_origin_rows if row.get("flow_role") == "accounting_residual") else "fail", "evidence": "annual_c0_downstream_origin_ledger.csv"},
         {"check_id": "material_conservation", "status": "pass" if all(float(row["max_abs_material_balance_residual_t"]) <= HOURLY_REPORTING_MATERIAL_TOLERANCE_T for row in execution_rows) else "fail", "evidence": "rolling_execution.csv"},
         {"check_id": "carrier_specific_wag_balance", "status": "pass" if all(float(row["max_abs_carrier_wag_balance_residual_mwh"]) <= TOLERANCE_T for row in execution_rows) else "fail", "evidence": "rolling_execution.csv"},
-        {"check_id": "inventory_handoff_active", "status": "pass" if any(row["next_overrides"] != "{}" for row in replan_rows[2:]) else "fail", "evidence": "inventory_handoff.csv"},
+        {
+            "check_id": "terminal_handoff_snapshot_complete",
+            "status": (
+                "pass"
+                if handoff_contract["terminal_handoff_snapshot_complete"]
+                else "fail"
+            ),
+            "validation_scope": handoff_contract["validation_scope"],
+            "checked_transition_count": handoff_contract[
+                "checked_transition_count"
+            ],
+            "evidence": "inventory_handoff.csv; complete finite next_overrides schema",
+        },
+        {
+            "check_id": "inter_window_handoff_continuity",
+            "status": (
+                "pass"
+                if handoff_contract["inter_window_handoff_continuity"]
+                in {"pass", "not_applicable"}
+                and handoff_contract["status"] == "pass"
+                else "fail"
+            ),
+            "result": handoff_contract["inter_window_handoff_continuity"],
+            "validation_scope": handoff_contract["validation_scope"],
+            "checked_transition_count": handoff_contract[
+                "checked_transition_count"
+            ],
+            "max_state_residual": handoff_contract["max_state_residual"],
+            "evidence": (
+                "not_applicable: terminal snapshot only; no propagation claim"
+                if handoff_contract["inter_window_handoff_continuity"]
+                == "not_applicable"
+                else "inventory_handoff.csv; previous next_overrides versus next start_overrides"
+            ),
+        },
         {"check_id": "market_terms_disabled", "status": "pass", "evidence": "resolved config"},
         {"check_id": "annual_reporting_fail_closed_to_solved_rolling_lineage", "status": "pass", "evidence": "annual ledgers are generated only after the complete C0/C1 rolling chain solves"},
         {"check_id": "no_fixed_route_split", "status": "pass" if c1_route_policy == "quota_driven_topology" and c1_route_band is None else "fail", "evidence": "config_resolved.yaml"},
@@ -4807,7 +5493,11 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 },
                 {
                     "check_id": "all_governed_procurement_price_families_active",
-                    "status": "pass" if executed_cost_price_ids == expected_cost_price_ids else "fail",
+                    "status": (
+                        "pass"
+                        if cost_ledger_validation["status"] == "pass"
+                        else "fail"
+                    ),
                     "evidence": "executed_procurement_cost_ledger.csv",
                 },
                 {
@@ -4830,10 +5520,7 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 {
                     "check_id": "no_revenue_residual_ets_or_market_cost_terms",
                     "status": "pass"
-                    if config.get("market_prices_enabled") is False
-                    and config.get("product_revenue_enabled") is False
-                    and config.get("co2_ets_objective_enabled") is False
-                    and not executed_cost_price_ids.difference(expected_cost_price_ids)
+                    if cost_ledger_validation["status"] == "pass"
                     else "fail",
                     "evidence": "resolved_config.yaml;executed_procurement_cost_ledger.csv",
                 },
@@ -4968,13 +5655,12 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         and residuals_excluded_from_future_cost
         and wag_has_no_direct_purchase_price
     )
-    cost_acceptance_ready = pre_cost_boundary_ready and (
-        not cost_mode_active
-        or (
-            cost_objectives_active
-            and cost_objective_reconciliation_pass
-            and executed_cost_price_ids == expected_cost_price_ids
-        )
+    cost_acceptance_ready = _cost_acceptance_readiness(
+        pre_cost_boundary_ready=pre_cost_boundary_ready,
+        cost_mode_active=cost_mode_active,
+        cost_objectives_active=cost_objectives_active,
+        cost_objective_reconciliation_pass=cost_objective_reconciliation_pass,
+        cost_ledger_validation=cost_ledger_validation,
     )
     gate3_stage_gate = {
         "stage_id": (
@@ -5282,6 +5968,20 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         "initial_cumulative_production_t": initial_cumulative,
         "terminal_cumulative_production_t": cumulative,
         "terminal_inventory_overrides_by_configuration": overrides,
+        "terminal_handoff_snapshot_complete": handoff_contract[
+            "terminal_handoff_snapshot_complete"
+        ],
+        "inter_window_handoff_continuity": handoff_contract[
+            "inter_window_handoff_continuity"
+        ],
+        "handoff_validation_scope": handoff_contract["validation_scope"],
+        "handoff_checked_transition_count": handoff_contract[
+            "checked_transition_count"
+        ],
+        "handoff_checked_state_value_count": handoff_contract[
+            "checked_state_value_count"
+        ],
+        "handoff_max_state_residual": handoff_contract["max_state_residual"],
         "cumulative_execution_t": cumulative, "annualisation_reporting_only": True,
         "rolling_production_progress_state_enabled": progress_state_enabled,
         "objective_hierarchy": (
