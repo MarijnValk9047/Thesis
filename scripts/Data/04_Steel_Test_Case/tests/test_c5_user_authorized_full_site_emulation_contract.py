@@ -3,6 +3,7 @@ import hashlib
 import math
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -20,6 +21,12 @@ CONFIG_PATH = (
     / "scripts/Data/04_Steel_Test_Case/configs/"
     "steel_c5_user_authorized_full_site_emulation.yaml"
 )
+V6_ROOT = (
+    ROOT
+    / "data/03_Optimisation/runs/"
+    "steel_c5_wag_ng_allocation_envelope_v6_20260726"
+)
+V6_COVERAGE_PATH = V6_ROOT / "anchor_coverage.csv"
 
 ANCHOR_FIELDS = {
     "overlay_id",
@@ -81,12 +88,13 @@ def _float(row, field):
 
 def test_real_anchor_repair_extends_overlay_and_preserves_remaining_five_percent_targets():
     rows = _rows(ANCHOR_PATH)
-    assert len(rows) == 28
+    assert len(rows) == 42
     assert set(rows[0]) == ANCHOR_FIELDS
-    assert len({row["overlay_id"] for row in rows}) == 28
+    assert len({row["overlay_id"] for row in rows}) == 42
     assert {row["user_authorised_provenance"] for row in rows} == {
         "user_authorized_goal_objective_20260722",
         "user_authorized_real_anchor_repair_20260723",
+        "user_authorized_phase1_boundary_freeze_20260726",
     }
     assert all(all(row[field].strip() for field in ANCHOR_FIELDS) for row in rows)
 
@@ -106,8 +114,8 @@ def test_real_anchor_repair_extends_overlay_and_preserves_remaining_five_percent
 
     expected_bands = {
         "uae_c0_wag_generator_electricity": (2.528, 2.528, 2.528),
-        "uae_c0_figure91_wag_band": (2.74, 2.74, 2.773),
-        "uae_c0_figure91_ng_band": (270.0, 270.0, 270.0),
+        "uae_c0_figure91_wag_band": (2.74, 2.74, 2.74),
+        "uae_c0_figure91_ng_band": (9.666, 9.666, 9.666),
         "uae_c0_first_order_co2": (12.24, 12.24, 12.24),
         "uae_c0_figure91_coal_band": (3.66, 3.66, 3.66),
         "uae_bad_fig69_dri_correlation": (0.159, None, 0.412),
@@ -133,12 +141,15 @@ def test_background_arithmetic_and_accounting_definitions_are_distinct():
             assert math.isclose(_float(row, "value_central"), expected)
             assert math.isclose(_float(row, "value_high"), expected)
             assert row["implementation_ledger"] == "explicit_background_electricity"
-            assert row["tolerance_rule"] == "exact_discrete_case"
+            assert row["target_role"] == (
+                "historical_analytical_screen_case_superseded"
+            )
+            assert row["tolerance_rule"] == "historical_provenance_only"
 
     wag_rows = [
         row for row in by_id.values() if row["metric"] == "wag_only_generator_electricity"
     ]
-    assert len(wag_rows) == 3
+    assert len(wag_rows) == 4
     assert {row["implementation_ledger"] for row in wag_rows} == {
         "wag_only_generator_electricity",
         "WAG_generator_electricity_mwh",
@@ -196,6 +207,7 @@ def test_gross_site_electricity_import_export_algebra_subtracts_export_once():
         row
         for row in _rows(ANCHOR_PATH)
         if row["metric"] == "gross_site_electricity"
+        and row["comparison_basis"] == "full_site_gross_consumption"
     ]
     assert len(gross_rows) == 2
     for row in gross_rows:
@@ -220,9 +232,13 @@ def test_ng_hourly_annual_caveat_and_co2_ledger_separation():
     by_id = _by_id(ANCHOR_PATH, "overlay_id")
     c0_hourly = by_id["uae_c0_ng_hourly"]
     c0_annual = by_id["uae_c0_figure91_ng_band"]
-    assert c0_hourly["target_role"] == "secondary_directional_model_context"
-    assert _float(c0_annual, "value_central") == 270.0
+    assert c0_hourly["target_role"] == (
+        "historical_source_volume_superseded_by_phase1_lhv_calendar_convention"
+    )
+    assert _float(c0_annual, "value_central") == 9.666
     assert c0_annual["target_role"] == "primary_real_anchor"
+    assert c0_annual["unit"] == "PJ_LHV/y"
+    assert c0_annual["time_basis"] == "annual_calendar"
 
     co2_rows = [
         row for row in by_id.values() if row["metric"] == "first_order_full_site_co2"
@@ -243,13 +259,246 @@ def test_ng_hourly_annual_caveat_and_co2_ledger_separation():
     )
 
 
+def test_phase1_background_classes_supersede_but_preserve_historical_screen():
+    rows = _rows(ANCHOR_PATH)
+    historical = [
+        row
+        for row in rows
+        if row["target_role"] == "historical_analytical_screen_case_superseded"
+    ]
+    assert len(historical) == 6
+    assert {row["calibration_stage"] for row in historical} == {
+        "historical_provenance"
+    }
+    active = {
+        row["overlay_id"]: row
+        for row in rows
+        if row["metric"] == "explicit_background_electricity_share"
+        and row["calibration_stage"] == "boundary_freeze"
+    }
+    assert {
+        overlay_id: _float(row, "value_central")
+        for overlay_id, row in active.items()
+    } == {
+        "phase1_c0_background_low": 0.25,
+        "phase1_c0_background_central": 0.30,
+        "phase1_c0_background_high": 0.31,
+        "phase1_c0_background_excluded": 0.375,
+    }
+    assert active["phase1_c0_background_excluded"]["value_low"] == "0.35"
+    assert active["phase1_c0_background_excluded"]["value_high"] == "0.40"
+    assert active["phase1_c0_background_excluded"]["tolerance_rule"] == (
+        "hard_exclusion"
+    )
+    assert "new Tata evidence" in active[
+        "phase1_c0_background_excluded"
+    ]["accepted_interpretation"]
+    assert not any(
+        row["target_role"] == "explicit_background_case" for row in rows
+    )
+
+
+def test_phase1_primary_and_context_anchor_hierarchy_is_explicit():
+    by_id = _by_id(ANCHOR_PATH, "overlay_id")
+    gross = by_id["uae_c0_gross_site_electricity"]
+    assert gross["target_role"] == "primary_real_anchor"
+    assert (_float(gross, "value_low"), _float(gross, "value_high")) == (
+        3.154,
+        3.170,
+    )
+    assert _float(gross, "value_central") == 3.162
+    assert "authoritative accepted values" in gross["accepted_interpretation"]
+    assert "arithmetic midpoint" in gross["accepted_interpretation"]
+    assert "not an independently accepted anchor" in gross[
+        "accepted_interpretation"
+    ]
+    assert "calibration target or precedence value" in gross[
+        "accepted_interpretation"
+    ]
+    assert "low/high band has authority" in gross["arithmetic_caveat"]
+    gross_context = by_id["phase1_c0_gross_electricity_table8_context"]
+    assert gross_context["target_role"] == "supporting_model_context_table8"
+    assert _float(gross_context, "value_central") == 3.17
+
+    wag_primary = by_id["uae_c0_wag_generator_electricity"]
+    assert wag_primary["target_role"] == "primary_real_anchor"
+    assert _float(wag_primary, "value_central") == 2.528
+    assert wag_primary["implementation_ledger"] == "WAG_generator_electricity_mwh"
+    assert "excludes NG-generated electricity" in wag_primary[
+        "accepted_interpretation"
+    ]
+    wag_context = {
+        "uae_c0_figure91_wag_band": (2.74, "supporting_model_context_table8"),
+        "phase1_c0_wag_generator_electricity_figure91_context": (
+            2.773,
+            "supporting_model_context_figure91",
+        ),
+    }
+    for overlay_id, (value, role) in wag_context.items():
+        assert _float(by_id[overlay_id], "value_central") == value
+        assert by_id[overlay_id]["target_role"] == role
+        assert "NG-generated electricity" in by_id[overlay_id][
+            "accepted_interpretation"
+        ]
+
+
+def test_phase1_ng_uses_one_lhv_calendar_convention_without_plug():
+    by_id = _by_id(ANCHOR_PATH, "overlay_id")
+    active_ng_ids = (
+        "real_anchor_c0_inferred_low_case_ng_floor",
+        "phase1_c0_flexible_heat_ng_allocation_envelope",
+        "uae_c0_figure91_ng_band",
+        "phase1_c0_ng_figure91_context",
+        "phase1_c0_ng_table8_context",
+    )
+    for overlay_id in active_ng_ids:
+        row = by_id[overlay_id]
+        assert row["unit"] == "PJ_LHV/y"
+        assert row["time_basis"] == "annual_calendar"
+        combined = " ".join(
+            (row["accepted_interpretation"], row["arithmetic_caveat"])
+        ).lower()
+        assert row["target_role"] not in {"residual", "plug", "calibration_plug"}
+        if "residual" in combined or "plug" in combined:
+            assert "no" in combined or "not a residual" in combined
+    assert _float(
+        by_id["real_anchor_c0_inferred_low_case_ng_floor"], "value_central"
+    ) == 8.005
+    assert (
+        _float(by_id["uae_c0_figure91_ng_band"], "value_central") == 9.666
+    )
+    assert _float(
+        by_id["phase1_c0_ng_figure91_context"], "value_central"
+    ) == 10.35
+    assert _float(by_id["phase1_c0_ng_table8_context"], "value_central") == 10.425
+    allocation = by_id["phase1_c0_flexible_heat_ng_allocation_envelope"]
+    assert allocation["value_low"] == "0"
+    assert allocation["value_central"] == "not_prescribed"
+    assert allocation["value_high"] == "3.07"
+    service = by_id["real_anchor_c0_flexible_heat_service_envelope"]
+    assert service["comparison_basis"] == "WAG_plus_NG_energy_service"
+    assert service["implementation_ledger"] == (
+        "flexible_other_site_heat_service_envelope_mwh"
+    )
+    assert "not an NG dispatch target" in service["arithmetic_caveat"]
+    assert by_id["uae_c0_ng_hourly"]["target_role"] == (
+        "historical_source_volume_superseded_by_phase1_lhv_calendar_convention"
+    )
+
+
+def test_phase1_total_wag_co2_bridge_and_yield_freeze():
+    anchors = _by_id(ANCHOR_PATH, "overlay_id")
+    current_wag = anchors["phase1_c0_total_wag_current"]
+    assert (_float(current_wag, "value_low"), _float(current_wag, "value_high")) == (
+        57.3,
+        57.5,
+    )
+    assert _float(
+        anchors["phase1_c0_total_wag_mer_tata_context"], "value_central"
+    ) == 54.0
+    assert "approximately 6 percent" in current_wag["arithmetic_caveat"].lower()
+
+    bridge = anchors["phase1_c0_co2_site_boundary_bridge"]
+    assert (_float(bridge, "value_low"), _float(bridge, "value_high")) == (
+        1.7,
+        2.0,
+    )
+    assert bridge["target_role"] == "reporting_sensitivity"
+    forbidden = " ".join(
+        (bridge["accepted_interpretation"], bridge["arithmetic_caveat"])
+    )
+    for term in ("dispatch", "optimization", "procurement cost", "marginal"):
+        assert term in forbidden
+    assert _float(anchors["uae_c0_first_order_co2"], "value_central") == 12.24
+
+    parameters = _by_id(PARAMETER_PATH, "parameter_id")
+    unchanged_yields = {
+        "uae_bfg_generation_yield": (1600.0, 1200.0, 2000.0, 900.0, 2500.0),
+        "uae_cog_generation_yield": (365.0, 280.0, 450.0, 210.0, 562.5),
+        "uae_bofg_generation_yield": (75.0, 50.0, 100.0, 37.5, 125.0),
+    }
+    for parameter_id, expected in unchanged_yields.items():
+        row = parameters[parameter_id]
+        assert tuple(
+            _float(row, field)
+            for field in (
+                "baseline_central",
+                "baseline_low",
+                "baseline_high",
+                "first_relaxed_low",
+                "first_relaxed_high",
+            )
+        ) == expected
+        assert row["may_move"] == "false"
+        assert "no WAG-yield calibration is authorized" in row["caveat"]
+
+
+def test_phase1_tolerance_and_v6_boundary_finding_are_not_calibration():
+    by_id = _by_id(ANCHOR_PATH, "overlay_id")
+    policy = by_id["phase1_anchor_tolerance_policy"]
+    assert policy["value_low"] == "within_5_percent"
+    assert policy["value_central"] == (
+        "5_to_10_percent_if_physically_and_methodologically_credible"
+    )
+    assert policy["value_high"] == (
+        "above_10_percent_requires_explicit_boundary_or_configuration_explanation"
+    )
+    assert "materially worsening several others" in policy[
+        "accepted_interpretation"
+    ]
+    finding = by_id["phase1_c0_wag_envelope_v6_finding"]
+    assert finding["target_role"] == "development_boundary_finding"
+    assert finding["value_central"] == "above_maximum_all_four_cases"
+    assert "steel_c5_wag_ng_allocation_envelope_v6_20260726" in finding[
+        "source_locator"
+    ]
+    assert "no candidate is promoted" in finding["accepted_interpretation"]
+    assert "not calibration" in finding["arithmetic_caveat"]
+
+
+@pytest.mark.skipif(
+    not V6_COVERAGE_PATH.is_file(),
+    reason="governed ignored v6 local evidence is absent in a clean clone",
+)
+def test_local_v6_certified_coverage_evidence_matches_frozen_classification():
+    coverage = _rows(V6_COVERAGE_PATH)
+    expected = {
+        ("recovery_bg30_ng55", "calm_price_insensitive"): (
+            2229430.707022833,
+            298569.292977167,
+        ),
+        ("recovery_bg30_ng55", "volatile_negative_governed_y_pred"): (
+            1935250.6946325423,
+            592749.3053674577,
+        ),
+        ("recovery_bg30_ng30", "calm_price_insensitive"): (
+            2230098.7855618005,
+            297901.2144381995,
+        ),
+        ("recovery_bg30_ng30", "volatile_negative_governed_y_pred"): (
+            2056504.6139837499,
+            471495.3860162501,
+        ),
+    }
+    assert len(coverage) == 4
+    for row in coverage:
+        outer, gap = expected[(row["candidate_id"], row["scenario_id"])]
+        assert _float(row, "certified_maximum_outer_bound_mwh_y") == outer
+        assert _float(row, "conservative_gap_above_certified_maximum_mwh_y") == gap
+        assert row["status"] == "above_maximum"
+        assert row["certified_classification_basis"] == (
+            "certified_solver_bound_outer_range"
+        )
+
+
 def test_parameter_overlay_ranges_stages_and_sensitivity_labels():
     rows = _rows(PARAMETER_PATH)
     assert len(rows) == 23
     assert set(rows[0]) == PARAMETER_FIELDS
     assert len({row["parameter_id"] for row in rows}) == len(rows)
     assert {row["stage"] for row in rows} == {
-        "analytical", "rolling", "reporting", "checkpoint_1_2", "validation"
+        "analytical", "rolling", "reporting", "checkpoint_1_2", "validation",
+        "boundary_freeze",
     }
     assert {row["may_move"] for row in rows} == {"true", "false"}
     assert all(row["physical_hard_bound"].strip() for row in rows)
@@ -279,10 +528,13 @@ def test_parameter_overlay_ranges_stages_and_sensitivity_labels():
         assert "user_authorized_sensitivity" in row["caveat"]
 
     background = by_id["uae_background_electricity_share"]
-    assert background["allowed_values"] == "0.05;0.15;0.25"
-    assert _float(background, "first_relaxed_low") == 0.05
-    assert _float(background, "first_relaxed_high") == 0.25
-    assert "discrete share" in background["selection_rule"]
+    assert background["allowed_values"] == "0.25;0.30;0.31"
+    assert _float(background, "baseline_low") == 0.25
+    assert _float(background, "baseline_central") == 0.30
+    assert _float(background, "baseline_high") == 0.31
+    assert background["may_move"] == "false"
+    assert "35" in background["physical_hard_bound"]
+    assert "40" in background["physical_hard_bound"]
 
     eaf = by_id["uae_c1_eaf_liquid_steel_share"]
     assert eaf["stage"] == "rolling"
@@ -296,19 +548,21 @@ def test_parameter_overlay_ranges_stages_and_sensitivity_labels():
     ):
         assert by_id[parameter_id]["stage"] == "rolling"
         assert "Rolling-only" in by_id[parameter_id]["caveat"]
-    for parameter_id in (
-        "uae_c0_first_order_co2_constant",
-        "uae_c1_first_order_co2_constant",
-    ):
-        assert by_id[parameter_id]["stage"] == "reporting"
-        assert "exempt from the 25-percent endpoint extension rule" in by_id[
-            parameter_id
-        ]["selection_rule"]
-        assert "never modify or combine" in by_id[parameter_id]["caveat"]
-        assert by_id[parameter_id]["physical_hard_bound"] == (
-            "0<=constant<=configured_target_minus_selected_factor_subtotal"
-        )
-        assert "standalone envelope only" in by_id[parameter_id]["caveat"]
+    c0_co2 = by_id["uae_c0_first_order_co2_constant"]
+    assert c0_co2["stage"] == "boundary_freeze"
+    assert c0_co2["may_move"] == "false"
+    assert c0_co2["physical_hard_bound"] == "1.7<=reporting_bridge<=2.0"
+    assert "never enter dispatch" in c0_co2["selection_rule"]
+    c1_co2 = by_id["uae_c1_first_order_co2_constant"]
+    assert c1_co2["stage"] == "reporting"
+    assert "exempt from the 25-percent endpoint extension rule" in c1_co2[
+        "selection_rule"
+    ]
+    assert "never modify or combine" in c1_co2["caveat"]
+    assert c1_co2["physical_hard_bound"] == (
+        "0<=constant<=configured_target_minus_selected_factor_subtotal"
+    )
+    assert "standalone envelope only" in c1_co2["caveat"]
 
     electricity_scaler = by_id[
         "uae_named_process_electricity_intensity_scaling"
@@ -352,8 +606,8 @@ def test_parameter_overlay_numeric_physical_bounds():
     assert _float(eaf, "first_relaxed_high") <= 1
     background = by_id["uae_background_electricity_share"]
     background_values = [float(value) for value in background["allowed_values"].split(";")]
-    assert background_values == [0.05, 0.15, 0.25]
-    assert all(0 < value <= 0.25 for value in background_values)
+    assert background_values == [0.25, 0.30, 0.31]
+    assert all(0 < value <= 0.31 for value in background_values)
 
     for parameter_id in (
         "uae_c0_kgf1_band_review",
@@ -375,14 +629,13 @@ def test_parameter_overlay_numeric_physical_bounds():
         assert _float(row, "first_relaxed_low") > 0
         assert _float(row, "first_relaxed_high") > 0
 
-    co2_caps = {
-        "uae_c0_first_order_co2_constant": 13.365216,
-        "uae_c1_first_order_co2_constant": 9.56318265,
-    }
-    for parameter_id, cap in co2_caps.items():
-        row = by_id[parameter_id]
-        assert _float(row, "first_relaxed_low") == 0
-        assert _float(row, "first_relaxed_high") == cap
+    c0_bridge = by_id["uae_c0_first_order_co2_constant"]
+    assert _float(c0_bridge, "first_relaxed_low") == 1.7
+    assert _float(c0_bridge, "first_relaxed_high") == 2.0
+    assert c0_bridge["may_move"] == "false"
+    c1_bridge = by_id["uae_c1_first_order_co2_constant"]
+    assert _float(c1_bridge, "first_relaxed_low") == 0
+    assert _float(c1_bridge, "first_relaxed_high") == 9.56318265
 
 
 def test_design_limits_no_execution_and_strict_contracts_untouched():
@@ -438,15 +691,19 @@ def test_design_limits_no_execution_and_strict_contracts_untouched():
     assert "wag_yield_range_position" not in design
     assert config["execution"] == {
         "enabled": True,
-        "analytical_prescreen_enabled": True,
-        "solver_runs_enabled": False,
+        "analytical_prescreen_enabled": False,
+        "solver_runs_enabled": True,
         "calibration_candidates_run": True,
         "unsupported_code_execution_enabled": False,
-        "execution_scope": "analytical_annual_ledger_projection_only",
-        "next_checkpoint_required": "checkpoint_4_independent_review",
+        "execution_scope": "frozen_development_week_rolling_evaluation_only",
+        "next_checkpoint_required": (
+            "independent_review_before_held_out_final_evaluation"
+        ),
     }
-    assert config["mode"] == "user_authorized_full_site_emulation_prescreen"
-    assert config["checkpoint_id"] == "checkpoint_3_bounded_analytical_annual_prescreen"
+    assert config["mode"] == "user_authorized_full_site_emulation_checkpoint4"
+    assert config["checkpoint_id"] == (
+        "checkpoint_4_frozen_development_week_behavioural_evaluation"
+    )
     assert config["prescreen"]["score_families_kept_separate"] is True
     assert config["claims"]["exact_digital_twin"] is False
     assert config["claims"]["tata_questionnaire_separate"] is True

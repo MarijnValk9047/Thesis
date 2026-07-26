@@ -4,6 +4,14 @@
   "baseline_status": "immutable",
   "candidate_policy": "checkpoint-8 analytical screen complete: source-driven baseline only; the transparent PeFa overlay is rejected before execution and KGF/PeFa remain may_move=false because no clean source-backed executable degree of freedom exists",
   "accepted_lineage": "steel_s2_deterministic_price_response_anchor_diagnostics_v1_20260720",
+  "post_freeze_reconciliation": {
+    "reconciled_on": "2026-07-26",
+    "accepted_diagnostic_lineage": "steel_c5_wag_ng_allocation_envelope_v6_20260726",
+    "scope": "refresh the strict hashes for the rolling controller and unified builder after acceptance of the opt-in C0 allocation-envelope diagnostic",
+    "absent_hook_baseline_behaviour_changed": false,
+    "physical_parameters_changed": false,
+    "candidate_promoted": false
+  },
   "active_config": "scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml",
   "active_input_directory": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs",
   "identifiability": {
@@ -130,14 +138,14 @@
     },
     {
       "path": "scripts/Data/04_Steel_Test_Case/steel/s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation.py",
-      "sha256": "42d4515b27c280c8191dab4b681ad5ba6fe4f5ec47f1f62961d8c562b5c4503f",
-      "bytes": 233863,
+      "sha256": "cffdd1940f5613923ee56893274caf30770aa77c5912bf72315362b8f00223d2",
+      "bytes": 289830,
       "role": "active_rolling_orchestration_and_accounting"
     },
     {
       "path": "scripts/Data/04_Steel_Test_Case/steel/s4_4c_unified_physical_modelbuilder.py",
-      "sha256": "80ff6ca1344476b3c863db800fb16ec4ade47d0ba6f87ecf64bf07cba0b52424",
-      "bytes": 305294,
+      "sha256": "21d931b88703b21bdbb8b63273162bfaa7f58e4b05d2ded2fa0d7935046f0753",
+      "bytes": 436700,
       "role": "active_unified_physical_builder"
     },
     {
@@ -212,7 +220,12 @@
     {
       "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/s4_4b_input_validation_report.json",
       "sha256": "9296fa5c826a3d38ff3a9c764b9dd92ef4f3a892d3b4f86a6554036cad83bd60",
-      "bytes": 6743
+      "bytes": 6743,
+      "hash_policy": "semantic_json_excluding_volatile_fields",
+      "volatile_fields": [
+        "timestamp_utc"
+      ],
+      "semantic_sha256": "ec595587b102c4c6328f033b996b305276743283ed8bb6ac98ff381aa680c45f"
     },
     {
       "path": "data/03_Optimisation/inputs/assets/steel/S4/s4_4b5a_asymmetric_c0_c1_correction/corrected_dev_inputs/s4_4b_stage_gate.csv",

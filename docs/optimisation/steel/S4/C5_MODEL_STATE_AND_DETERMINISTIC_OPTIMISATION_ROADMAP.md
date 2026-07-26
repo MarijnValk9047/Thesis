@@ -2,7 +2,7 @@
 
 ## Decision in one sentence
 
-Current gate: `lower_ng_activates_generator_ng_in_volatile_cases_allocation_location_tiebreak_selected_stop_no_second_search`. A bounded DEVELOPMENT-only mechanism experiment reused 15 fingerprint-checked case caches (210/210 optimal models): lower NG activates named generator NG in the governed volatile and oracle cases but not in the calm case. The builder tie-break penalizes flexible-heat NG but not generator NG, so zero flexible NG is non-identifiable and does not prove absence of substitution. Realised WAG-generation spreads are diagnostic endogenous-dispatch outcomes, not parameter drift or a promotion gate. The strict source-driven baseline remains immutable and central; all repair candidates remain nonpromoted, no second search is authorized, and held-out periods remain untouched. The completed Checkpoint-6 held-out result remains valid. The next thesis gate is terminal-inventory equivalence and a terminal-inventory value bridge before any economic-uplift claim. The work remains a Tata IJmuiden-inspired full-site emulation rather than an exact digital twin. Bidding, settlement, revenue, ETS, stochasticity, CVaR and mFRR remain unauthorised.
+Current gate: `phase1_full_site_boundary_and_anchor_hierarchy_frozen_phase2_go`. The repaired bounded DEVELOPMENT allocation-envelope run `steel_c5_wag_ng_allocation_envelope_v6_20260726` passes 4/4 hook-absent normals, 8/8 trajectories and 56/56 endpoint windows with all cost, state, physical, bound and evidence guardrails. The 2.528-TWh/y real WAG-only anchor is above the certified represented-cost-optimal maximum in all four frozen cases. This is a boundary/result finding, not calibration or candidate promotion. The accepted Phase-1 overlay now governs the full-site boundary and anchor hierarchy; strict source-ranked contracts, WAG yields, physical parameters and held-out results remain unchanged. Phase 2 may proceed only within this frozen hierarchy. Bidding, settlement, revenue, ETS, stochasticity, CVaR and mFRR remain unauthorised.
 
 The fixed-reference deterministic procurement-cost path, pre-DAM
 operational-hardening validation, bounded VN25 development response and
@@ -784,6 +784,39 @@ not proof of no substitution. Small realised WAG-generation spreads are
 endogenous-dispatch diagnostics, not parameter drift. The source-driven
 baseline remains central, all repair candidates remain nonpromoted, and the
 stop rule authorizes no second search.
+
+#### Phase-1 accepted boundary freeze
+
+The accepted overlay has explicit precedence over older user-authorized
+analytical-screen classifications; it does not modify the immutable strict
+source-ranked contracts. Historical 5/15/25% cases remain documented, but
+active C0 background classes are 25% low, 30% central and 31% high, with
+35-40% excluded absent new Tata evidence. Primary gross electricity is
+3.154-3.170 TWh/y; Athanasiadis Table 8 at 3.17 TWh/y is model context.
+
+The primary generator anchor is 2.528 TWh/y of WAG-only electricity, excluding
+NG-generated electricity. Separate model precedents are approximately 2.74
+TWh/y from Table 8 and 2.773 TWh/y from the Figure-91 interpretation. All NG
+boundary rows use PJ_LHV/y and an annual-calendar basis: 8.005 PJ/y fixed,
+0-3.07 PJ/y flexible-heat NG allocation within the unchanged 3.07-PJ/y total
+WAG-plus-NG service, 9.666 PJ/y primary real, and approximately 10.35/10.425
+PJ/y Figure-91/Table-8 context. No residual percentage or plug is permitted.
+
+Total WAG remains approximately 57.3-57.5 PJ/y against approximately 54 PJ/y
+MER/Tata context (approximately +6%); WAG yields and runtime coefficients are
+frozen. A 1.7-2.0-MtCO2/y site-boundary bridge is reporting sensitivity only,
+separate from represented Mode-B/marginal emissions, and may not affect
+dispatch, optimization or cost. Anchor deviations are preferred within 5%,
+may be accepted at 5-10% only with physical and methodological credibility,
+and require an explicit boundary/configuration explanation above 10%; improving
+one anchor by materially worsening several others is prohibited.
+
+The Phase-0 v6 diagnostic passes 8/8 trajectories and 56/56 endpoints. Across
+the four frozen DEVELOPMENT cases, the certified WAG-electricity outer maxima
+are 2.229431, 1.935251, 2.230099 and 2.056505 TWh/y, all below 2.528 TWh/y.
+No candidate is promoted. Phase 2 is GO only as the next bounded improvement
+step under these frozen classifications; it is not permission for calibration,
+candidate search, export, price, route-share or physical-parameter changes.
 
 This reopening does not authorize an exact digital-twin claim or combine the
 physical fuel/oxidation CO2 ledger with the first-order full-site ledger. The

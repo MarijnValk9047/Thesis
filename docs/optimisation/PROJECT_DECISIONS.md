@@ -565,6 +565,46 @@ Any later result remains a Tata IJmuiden-inspired full-site emulation, not an
 exact digital twin. The Tata-facing questionnaire is a separate workstream,
 and the physical and first-order full-site CO2 ledgers must remain separate.
 
+### 4P. Phase-1 full-site boundary and anchor hierarchy is frozen
+
+The user-accepted Phase-1 overlay supersedes earlier overlay classifications
+when they conflict, while the strict source-ranked target and parameter
+contracts remain unchanged. The 5/15/25% background cases and their YAML are
+historical analytical-screen provenance only. Active C0 background classes are
+25% low, 30% central and 31% high; 35-40% is excluded without new Tata
+evidence. The primary real gross-electricity anchor is 3.154-3.170 TWh/y;
+Athanasiadis Table 8 at 3.17 TWh/y is supporting model context.
+
+The primary electricity-generation anchor is 2.528 TWh/y of real WAG-only
+generator output. NG-generated electricity is excluded. Separate Athanasiadis
+model precedents are approximately 2.74 TWh/y (Table 8) and 2.773 TWh/y
+(Figure 91 interpretation). Natural gas uses one annual-calendar LHV
+convention: fixed full-site NG is 8.005 PJ/y, flexible-heat NG may allocate
+0-3.07 PJ/y within the separately conserved 3.07-PJ/y WAG-plus-NG heat
+service, the primary real anchor is 9.666 PJ/y, and context values are
+approximately 10.35 PJ/y (Figure 91) and 10.425 PJ/y (Table 8). No percentage
+residual or NG plug is allowed.
+
+Current represented total WAG remains approximately 57.3-57.5 PJ/y versus
+approximately 54 PJ/y MER/Tata context, a difference of approximately +6%.
+Phase 1 does not authorize movement of WAG yields or runtime coefficients.
+Represented Mode-B/marginal emissions remain separate from a reporting-only
+constant site-boundary sensitivity of approximately 1.7-2.0 Mt CO2/y used to
+reconcile the partial represented boundary toward the accepted 12.24-Mt/y
+first-order total. This bridge never enters dispatch, optimization,
+procurement cost, CO2 pricing or marginal emissions.
+
+Anchor interpretation uses one policy: within 5% is preferred; 5-10% is
+acceptable only when physically and methodologically credible; above 10%
+requires an explicit boundary or configuration explanation; and no single
+anchor may be improved by materially worsening several others. The bounded
+DEVELOPMENT diagnostic
+`steel_c5_wag_ng_allocation_envelope_v6_20260726` passes 8/8 trajectories and
+56/56 endpoints. Its certified represented-cost-optimal WAG-electricity
+maximum is below 2.528 TWh/y in all four frozen cases. This is a boundary/result
+finding, not a calibration objective or candidate-selection result; no
+candidate is promoted.
+
 ## Benchmark Decisions
 
 ### 5. Perfect foresight is oracle only

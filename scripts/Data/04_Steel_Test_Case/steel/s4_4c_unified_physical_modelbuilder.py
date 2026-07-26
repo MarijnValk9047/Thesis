@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import hashlib
 import json
 import math
 import re
+import shutil
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -54,6 +56,10 @@ from .wag_development_controller_contract import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
+ALLOCATION_ENDPOINT_ACCURACY_SCHEMA = "steel_endpoint_solver_accuracy_v1"
+ALLOCATION_ENDPOINT_RELATIVE_MIP_GAP = 0.0
+ALLOCATION_ENDPOINT_ABSOLUTE_MIP_GAP_MWH = 0.001
+ALLOCATION_ENDPOINT_BOUND_COMPARISON_EPSILON_MWH = 1e-9
 S44C_DIR = (
     REPO_ROOT
     / "data"
@@ -628,6 +634,989 @@ def _audit_loaded_incumbent(model: ConcreteModel, *, tolerance: float = 1e-6) ->
     }
 
 
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _portable_repository_path(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(REPO_ROOT)).replace("\\", "/")
+    except ValueError:
+        return str(resolved)
+
+
+def _variable_bound(variable: Any, attribute: str) -> float | None:
+    raw = getattr(variable, attribute)
+    return None if raw is None else float(value(raw))
+
+
+def _active_variable_records(model: ConcreteModel) -> list[dict[str, Any]]:
+    records = []
+    for variable in model.component_data_objects(Var, active=True):
+        if variable.value is None:
+            raise S44CModelBuilderError(
+                f"Normal solution contains an undefined variable: {variable.name}."
+            )
+        current = float(variable.value)
+        records.append(
+            {
+                "name": variable.name,
+                "value": current,
+                "fixed": bool(variable.fixed),
+                "fixed_value": current if variable.fixed else None,
+                "domain": str(variable.domain),
+                "lb": _variable_bound(variable, "lb"),
+                "ub": _variable_bound(variable, "ub"),
+            }
+        )
+    return sorted(records, key=lambda row: row["name"])
+
+
+def _variable_name_and_schema_hashes(
+    records: Collection[Mapping[str, Any]],
+) -> tuple[str, str, str]:
+    names = [str(row["name"]) for row in records]
+    schema = [
+        {
+            "name": row["name"],
+            "domain": row["domain"],
+            "lb": row["lb"],
+            "ub": row["ub"],
+        }
+        for row in records
+    ]
+    fixed_schema = [
+        {
+            "name": row["name"],
+            "fixed": bool(row["fixed"]),
+            "fixed_value": (
+                float(row["fixed_value"])
+                if row["fixed_value"] is not None
+                else None
+            ),
+        }
+        for row in records
+    ]
+    return (
+        hashlib.sha256(
+            json.dumps(names, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+        hashlib.sha256(
+            json.dumps(
+                schema, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest(),
+        hashlib.sha256(
+            json.dumps(
+                fixed_schema, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        ).hexdigest(),
+    )
+
+
+def _variable_value_and_fixed_state_sha256(
+    records: Collection[Mapping[str, Any]],
+) -> str:
+    state = [
+        {
+            "name": row["name"],
+            "value": float(row["value"]),
+            "fixed": bool(row["fixed"]),
+            "fixed_value": (
+                float(row["fixed_value"])
+                if row["fixed_value"] is not None
+                else None
+            ),
+        }
+        for row in records
+    ]
+    return hashlib.sha256(
+        json.dumps(state, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
+def _model_structure_sha256(model: ConcreteModel) -> str:
+    variables = _active_variable_records(model)
+    _, variable_schema_hash, _ = _variable_name_and_schema_hashes(variables)
+    payload = {
+        "variable_schema_sha256": variable_schema_hash,
+        "active_constraint_names": sorted(
+            constraint.name
+            for constraint in model.component_data_objects(
+                Constraint, active=True
+            )
+        ),
+        "active_objectives": sorted(
+            [
+                {
+                    "name": objective.name,
+                    "sense": str(objective.sense),
+                }
+                for objective in model.component_data_objects(
+                    Objective, active=True
+                )
+            ],
+            key=lambda row: row["name"],
+        ),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
+def _write_deterministic_gzip_json(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    encoded = (
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        + "\n"
+    ).encode("utf-8")
+    with path.open("wb") as raw:
+        with gzip.GzipFile(
+            filename="", mode="wb", fileobj=raw, mtime=0
+        ) as compressed:
+            compressed.write(encoded)
+
+
+def _read_gzip_json(path: Path) -> dict[str, Any]:
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise S44CModelBuilderError(
+            "Normal solution record must contain a JSON mapping."
+        )
+    return payload
+
+
+def _solver_version(solver: Any) -> str:
+    try:
+        raw = solver.version()
+    except Exception:
+        return "unavailable"
+    if isinstance(raw, tuple):
+        return ".".join(str(item) for item in raw)
+    return str(raw)
+
+
+def _capture_complete_normal_solution(
+    model: ConcreteModel,
+    *,
+    metadata: Mapping[str, Any],
+    solver: Any,
+    configuration_id: str,
+    policy: Mapping[str, Any],
+) -> dict[str, Any]:
+    if policy.get("enabled") is not True:
+        raise S44CModelBuilderError(
+            "Normal-solution capture requires enabled=true."
+        )
+    path = Path(str(policy["path"])).resolve()
+    records = _active_variable_records(model)
+    name_hash, schema_hash, fixed_schema_hash = (
+        _variable_name_and_schema_hashes(records)
+    )
+    payload = {
+        "schema_version": "steel_complete_normal_solution_v2",
+        "configuration_id": configuration_id,
+        "replan_index": int(policy["replan_index"]),
+        "variable_count": len(records),
+        "variable_name_sha256": name_hash,
+        "variable_schema_sha256": schema_hash,
+        "variable_fixed_schema_sha256": fixed_schema_hash,
+        "model_structure_sha256": _model_structure_sha256(model),
+        "variables": records,
+        "solve_hierarchy": {
+            "primary_cost_objective_eur": metadata.get(
+                "primary_cost_objective_eur"
+            ),
+            "primary_cost_best_bound_eur": metadata.get(
+                "primary_cost_best_bound_eur"
+            ),
+            "primary_cost_termination_condition": metadata.get(
+                "primary_cost_termination_condition"
+            ),
+            "tie_break_objective_value": metadata.get(
+                "tie_break_objective_value"
+            ),
+            "tie_break_cost_objective_eur": metadata.get(
+                "tie_break_cost_objective_eur"
+            ),
+            "production_progress_target_t": metadata.get(
+                "production_progress_target_t"
+            ),
+            "production_progress_optimum_deviation_t": metadata.get(
+                "production_progress_optimum_deviation_t"
+            ),
+            "production_progress_actual_t": metadata.get(
+                "production_progress_actual_t"
+            ),
+        },
+        "solver": {
+            "name": str(getattr(solver, "name", "")),
+            "version": _solver_version(solver),
+            "options": {
+                str(key): value
+                for key, value in sorted(
+                    dict(getattr(solver, "options", {})).items()
+                )
+            },
+        },
+        "controller_state": dict(policy.get("controller_state", {})),
+        "provenance": dict(policy.get("provenance", {})),
+    }
+    _write_deterministic_gzip_json(path, payload)
+    return {
+        "normal_solution_capture_path": str(path),
+        "normal_solution_capture_sha256": _sha256_file(path),
+        "normal_solution_variable_count": len(records),
+        "normal_solution_variable_name_sha256": name_hash,
+        "normal_solution_variable_schema_sha256": schema_hash,
+        "normal_solution_variable_fixed_schema_sha256": fixed_schema_hash,
+        "normal_solution_model_structure_sha256": payload[
+            "model_structure_sha256"
+        ],
+    }
+
+
+def _native_gurobi_zero_objective_check(
+    lp_path: Path,
+    *,
+    log_path: Path,
+    iis_path: Path,
+    tolerance: float,
+) -> dict[str, Any]:
+    import gurobipy as gp
+
+    native = gp.read(str(lp_path))
+    native.Params.TimeLimit = 300.0
+    native.Params.DualReductions = 0
+    native.Params.InfUnbdInfo = 1
+    native.Params.FeasibilityTol = tolerance
+    native.Params.LogFile = str(log_path)
+    native.optimize()
+    status_names = {
+        gp.GRB.OPTIMAL: "optimal",
+        gp.GRB.INFEASIBLE: "infeasible",
+        gp.GRB.INF_OR_UNBD: "infeasible_or_unbounded",
+        gp.GRB.UNBOUNDED: "unbounded",
+        gp.GRB.TIME_LIMIT: "time_limit",
+        gp.GRB.NUMERIC: "numeric",
+    }
+    status = status_names.get(native.Status, f"status_{native.Status}")
+
+    def _optional_quality_attribute(name: str) -> float | None:
+        if native.SolCount <= 0:
+            return None
+        try:
+            return float(getattr(native, name))
+        except (AttributeError, gp.GurobiError):
+            # Some quality attributes (notably IntVio) are unavailable when
+            # the fixed oracle LP contains no variables of the relevant type.
+            return None
+
+    iis_created = False
+    if native.Status in {gp.GRB.INFEASIBLE, gp.GRB.INF_OR_UNBD}:
+        native.computeIIS()
+        native.write(str(iis_path))
+        iis_created = True
+    return {
+        "status": status,
+        "status_code": int(native.Status),
+        "solution_count": int(native.SolCount),
+        "objective_sense": (
+            "maximise" if native.ModelSense == -1 else "minimise"
+        ),
+        "objective_term_count": sum(
+            abs(float(variable.Obj)) > 0.0 for variable in native.getVars()
+        ),
+        "max_primal_violation": _optional_quality_attribute("MaxVio"),
+        "constraint_violation": _optional_quality_attribute("ConstrVio"),
+        "bound_violation": _optional_quality_attribute("BoundVio"),
+        "integrality_violation": _optional_quality_attribute("IntVio"),
+        "model_fingerprint": f"0x{int(native.Fingerprint) & 0xFFFFFFFF:08x}",
+        "row_count": int(native.NumConstrs),
+        "column_count": int(native.NumVars),
+        "binary_count": int(native.NumBinVars),
+        "iis_created": iis_created,
+        "iis_path": str(iis_path) if iis_created else None,
+    }
+
+
+def _complete_normal_feasibility_oracle(
+    model: ConcreteModel,
+    *,
+    solver: Any,
+    diagnostic: Mapping[str, Any],
+    tolerance: float,
+    base_model_structure_sha256: str,
+) -> dict[str, Any]:
+    record_path = Path(str(diagnostic["normal_solution_record_path"])).resolve()
+    oracle_directory = Path(str(diagnostic["oracle_directory"])).resolve()
+    oracle_directory.mkdir(parents=True, exist_ok=True)
+    record_output = oracle_directory / "normal_feasibility_oracle.json"
+    expected_record_hash = str(
+        diagnostic["normal_solution_record_sha256"]
+    )
+    if _sha256_file(record_path) != expected_record_hash:
+        raise S44CModelBuilderError(
+            "Complete normal-solution record fingerprint mismatch."
+        )
+    saved = _read_gzip_json(record_path)
+    expected_provenance = dict(
+        diagnostic.get("normal_solution_expected_provenance", {})
+    )
+    actual_provenance = dict(saved.get("provenance", {}))
+    if actual_provenance != expected_provenance:
+        raise S44CModelBuilderError(
+            "Complete normal-solution provenance fingerprint mismatch."
+        )
+    saved_records = list(saved.get("variables", ()))
+    if saved.get("schema_version") != "steel_complete_normal_solution_v2":
+        raise S44CModelBuilderError(
+            "Complete normal-solution record does not use the v2 fixed-state schema."
+        )
+    if saved.get("model_structure_sha256") != base_model_structure_sha256:
+        raise S44CModelBuilderError(
+            "Endpoint base-model structure fingerprint differs from the saved "
+            "normal model."
+        )
+    current_records = _active_variable_records(model)
+    (
+        current_name_hash,
+        current_schema_hash,
+        current_fixed_schema_hash,
+    ) = _variable_name_and_schema_hashes(current_records)
+    (
+        saved_name_hash,
+        saved_schema_hash,
+        saved_fixed_schema_hash,
+    ) = _variable_name_and_schema_hashes(saved_records)
+    if (
+        len(saved_records) != len(current_records)
+        or saved.get("variable_count") != len(saved_records)
+        or saved.get("variable_name_sha256") != saved_name_hash
+        or saved.get("variable_schema_sha256") != saved_schema_hash
+        or saved.get("variable_fixed_schema_sha256")
+        != saved_fixed_schema_hash
+        or saved_name_hash != current_name_hash
+        or saved_schema_hash != current_schema_hash
+        or [row["name"] for row in saved_records]
+        != [row["name"] for row in current_records]
+    ):
+        raise S44CModelBuilderError(
+            "Endpoint variable names/schema differ from the saved normal model."
+        )
+
+    variables = {
+        variable.name: variable
+        for variable in model.component_data_objects(Var, active=True)
+    }
+    saved_by_name = {str(row["name"]): row for row in saved_records}
+    endpoint_prefixed_checked_count = 0
+    max_endpoint_prefixed_value_residual = 0.0
+    mismatches: list[dict[str, Any]] = []
+    for current in current_records:
+        name = str(current["name"])
+        saved_row = saved_by_name[name]
+        current_fixed = bool(current["fixed"])
+        saved_fixed = bool(saved_row.get("fixed"))
+        if current_fixed:
+            endpoint_prefixed_checked_count += 1
+        if current_fixed != saved_fixed:
+            mismatches.append(
+                {
+                    "name": name,
+                    "reason": (
+                        "endpoint_fixed_saved_free"
+                        if current_fixed
+                        else "endpoint_free_saved_fixed"
+                    ),
+                    "endpoint_fixed": current_fixed,
+                    "saved_fixed": saved_fixed,
+                    "endpoint_fixed_value": current.get("fixed_value"),
+                    "saved_fixed_value": saved_row.get("fixed_value"),
+                }
+            )
+            continue
+        if current_fixed:
+            current_fixed_value = current.get("fixed_value")
+            saved_fixed_value = saved_row.get("fixed_value")
+            if current_fixed_value is None or saved_fixed_value is None:
+                residual = float("inf")
+            else:
+                residual = abs(
+                    float(current_fixed_value) - float(saved_fixed_value)
+                )
+                max_endpoint_prefixed_value_residual = max(
+                    max_endpoint_prefixed_value_residual, residual
+                )
+            if residual > tolerance:
+                mismatches.append(
+                    {
+                        "name": name,
+                        "reason": "endpoint_fixed_value_mismatch",
+                        "endpoint_fixed": True,
+                        "saved_fixed": True,
+                        "endpoint_fixed_value": current_fixed_value,
+                        "saved_fixed_value": saved_fixed_value,
+                        "absolute_residual": residual,
+                        "tolerance": tolerance,
+                    }
+                )
+
+    fixed_compatibility = {
+        "endpoint_prefixed_checked_count": endpoint_prefixed_checked_count,
+        "endpoint_prefixed_overwrite_count": 0,
+        "temporarily_fixed_count": 0,
+        "max_endpoint_prefixed_value_residual": (
+            max_endpoint_prefixed_value_residual
+        ),
+        "fixed_status_or_value_mismatch_count": len(mismatches),
+        "fixed_status_or_value_mismatches": mismatches,
+        "endpoint_fixed_state_sha256_before": current_fixed_schema_hash,
+        "endpoint_fixed_state_sha256_after": current_fixed_schema_hash,
+        "endpoint_variable_state_sha256_before": (
+            _variable_value_and_fixed_state_sha256(current_records)
+        ),
+        "endpoint_variable_state_sha256_after": (
+            _variable_value_and_fixed_state_sha256(current_records)
+        ),
+        "saved_normal_fixed_schema_sha256": saved_fixed_schema_hash,
+        "unchanged_endpoint_fixed_state": True,
+    }
+    if mismatches:
+        mismatch_record = {
+            "schema_version": "steel_normal_feasibility_oracle_v2",
+            "case_id": diagnostic.get("case_id"),
+            "replan_index": diagnostic.get("replan_index"),
+            "configuration_id": "C0_current_BF_BOF_reference",
+            "feasibility_tolerance": tolerance,
+            "saved_normal_solution_path": _portable_repository_path(
+                record_path
+            ),
+            "saved_normal_solution_sha256": expected_record_hash,
+            "variable_count": len(saved_records),
+            "variable_name_sha256": current_name_hash,
+            "variable_schema_sha256": current_schema_hash,
+            "variable_fixed_schema_sha256": saved_fixed_schema_hash,
+            "endpoint_fixed_schema_sha256": current_fixed_schema_hash,
+            "fixed_variable_compatibility_audit": fixed_compatibility,
+            "controller_state": saved.get("controller_state", {}),
+            "provenance": actual_provenance,
+            "status": "fail_closed",
+            "failure_stage": "pre_mutation_fixed_variable_compatibility",
+        }
+        record_output.write_text(
+            json.dumps(mismatch_record, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        raise S44CModelBuilderError(
+            "Endpoint/saved-normal fixed-variable compatibility failed before "
+            f"mutation: {fixed_compatibility}."
+        )
+
+    original_free_values: dict[str, float | None] = {}
+    temporarily_fixed_names: list[str] = []
+    active_objectives = list(model.component_data_objects(Objective, active=True))
+    original_solver_options = dict(getattr(solver, "options", {}))
+    lp_path = oracle_directory / "normal_feasibility_oracle.lp"
+    pre_solve_audit: dict[str, Any] = {
+        "feasible": False,
+        "status": "not_run",
+        "tolerance": tolerance,
+    }
+    pyomo_status = "not_run"
+    pyomo_termination = "not_run"
+    native_record: dict[str, Any] = {
+        "status": "not_run",
+        "status_code": None,
+        "solution_count": 0,
+        "iis_created": False,
+        "iis_path": None,
+    }
+    oracle_exception: Exception | None = None
+    failure_stage = "temporary_free_variable_fixing"
+    try:
+        for row in saved_records:
+            name = str(row["name"])
+            variable = variables[name]
+            if variable.fixed:
+                continue
+            original_free_values[name] = (
+                None if variable.value is None else float(variable.value)
+            )
+            temporarily_fixed_names.append(name)
+            variable.set_value(float(row["value"]), skip_validation=False)
+            variable.fix(float(row["value"]))
+        fixed_compatibility["temporarily_fixed_count"] = len(
+            temporarily_fixed_names
+        )
+        _, _, pre_solve_fixed_state_hash = _variable_name_and_schema_hashes(
+            _active_variable_records(model)
+        )
+        fixed_compatibility["oracle_pre_solve_fixed_state_sha256"] = (
+            pre_solve_fixed_state_hash
+        )
+        failure_stage = "zero_objective_setup"
+        for objective in active_objectives:
+            objective.deactivate()
+        model.allocation_envelope_normal_oracle_objective = Objective(
+            expr=0.0, sense=minimize
+        )
+        failure_stage = "pre_solve_lp_write"
+        model.write(str(lp_path), io_options={"symbolic_solver_labels": True})
+        failure_stage = "loaded_value_audit"
+        pre_solve_audit = _audit_loaded_incumbent(model, tolerance=tolerance)
+        solver_name = str(getattr(solver, "name", "")).lower()
+        if "gurobi" in solver_name:
+            solver.options["TimeLimit"] = 300.0
+            solver.options["DualReductions"] = 0
+            solver.options["InfUnbdInfo"] = 1
+            solver.options["FeasibilityTol"] = tolerance
+            solver.options["LogFile"] = str(
+                oracle_directory / "pyomo_oracle_solver.log"
+            )
+        failure_stage = "pyomo_zero_objective_solve"
+        pyomo_result = solver.solve(model, load_solutions=False)
+        pyomo_status = str(pyomo_result.solver.status)
+        pyomo_termination = str(pyomo_result.solver.termination_condition)
+        failure_stage = "native_gurobi_zero_objective_reread"
+        native_record = _native_gurobi_zero_objective_check(
+            lp_path,
+            log_path=oracle_directory / "native_oracle_solver.log",
+            iis_path=oracle_directory / "normal_feasibility_oracle_iis.ilp",
+            tolerance=tolerance,
+        )
+        failure_stage = "combined_oracle_audit"
+    except Exception as exc:
+        oracle_exception = exc
+    finally:
+        if hasattr(model, "allocation_envelope_normal_oracle_objective"):
+            model.allocation_envelope_normal_oracle_objective.deactivate()
+            model.del_component(
+                "allocation_envelope_normal_oracle_objective"
+            )
+        for name in temporarily_fixed_names:
+            variable = variables[name]
+            variable.unfix()
+            original_value = original_free_values[name]
+            variable.set_value(original_value, skip_validation=False)
+        for objective in active_objectives:
+            objective.activate()
+        if hasattr(solver, "options"):
+            solver.options.clear()
+            solver.options.update(original_solver_options)
+    restored_records = _active_variable_records(model)
+    _, _, restored_fixed_state_hash = _variable_name_and_schema_hashes(
+        restored_records
+    )
+    fixed_compatibility["endpoint_fixed_state_sha256_after"] = (
+        restored_fixed_state_hash
+    )
+    fixed_compatibility["unchanged_endpoint_fixed_state"] = (
+        restored_fixed_state_hash == current_fixed_schema_hash
+    )
+    fixed_compatibility["endpoint_variable_state_sha256_after"] = (
+        _variable_value_and_fixed_state_sha256(restored_records)
+    )
+    fixed_compatibility["unchanged_endpoint_variable_state"] = (
+        fixed_compatibility["endpoint_variable_state_sha256_after"]
+        == fixed_compatibility["endpoint_variable_state_sha256_before"]
+    )
+    pyomo_optimal = pyomo_termination.lower() == "optimal"
+    native_optimal = native_record["status"] == "optimal"
+    pyomo_log_path = oracle_directory / "pyomo_oracle_solver.log"
+    native_log_path = oracle_directory / "native_oracle_solver.log"
+    oracle_pass = bool(
+        oracle_exception is None
+        and
+        pyomo_optimal
+        and native_optimal
+        and pre_solve_audit.get("feasible") is True
+        and fixed_compatibility["unchanged_endpoint_fixed_state"]
+        and fixed_compatibility["unchanged_endpoint_variable_state"]
+        and not mismatches
+        and fixed_compatibility["endpoint_prefixed_overwrite_count"] == 0
+    )
+    oracle_record = {
+        "schema_version": "steel_normal_feasibility_oracle_v2",
+        "case_id": diagnostic.get("case_id"),
+        "replan_index": diagnostic.get("replan_index"),
+        "configuration_id": "C0_current_BF_BOF_reference",
+        "feasibility_tolerance": tolerance,
+        "saved_normal_solution_path": _portable_repository_path(record_path),
+        "saved_normal_solution_sha256": expected_record_hash,
+        "variable_count": len(saved_records),
+        "variable_name_sha256": current_name_hash,
+        "variable_schema_sha256": current_schema_hash,
+        "variable_fixed_schema_sha256": saved_fixed_schema_hash,
+        "endpoint_fixed_schema_sha256": current_fixed_schema_hash,
+        "fixed_variable_compatibility_audit": fixed_compatibility,
+        "normal_base_model_structure_sha256": (
+            base_model_structure_sha256
+        ),
+        "pre_solve_symbolic_lp": (
+            _portable_repository_path(lp_path) if lp_path.is_file() else None
+        ),
+        "pre_solve_symbolic_lp_sha256": (
+            _sha256_file(lp_path) if lp_path.is_file() else None
+        ),
+        "pre_solve_loaded_value_audit": pre_solve_audit,
+        "pyomo_solve": {
+            "solver_status": pyomo_status,
+            "termination_condition": pyomo_termination,
+            "optimal": pyomo_optimal,
+            "FeasibilityTol": tolerance,
+        },
+        "native_gurobi_reread_solve": native_record,
+        "solver_log_evidence": {
+            "pyomo": {
+                "path": (
+                    _portable_repository_path(pyomo_log_path)
+                    if pyomo_log_path.is_file()
+                    else None
+                ),
+                "sha256": (
+                    _sha256_file(pyomo_log_path)
+                    if pyomo_log_path.is_file()
+                    else None
+                ),
+            },
+            "native_gurobi": {
+                "path": (
+                    _portable_repository_path(native_log_path)
+                    if native_log_path.is_file()
+                    else None
+                ),
+                "sha256": (
+                    _sha256_file(native_log_path)
+                    if native_log_path.is_file()
+                    else None
+                ),
+            },
+        },
+        "dual_path_agreement": (
+            oracle_exception is None and pyomo_optimal == native_optimal
+        ),
+        "controller_state": saved.get("controller_state", {}),
+        "provenance": actual_provenance,
+        "status": (
+            "pass" if oracle_pass else "fail_closed"
+        ),
+        "failure_stage": (
+            None if oracle_pass else failure_stage
+        ),
+        "exception": (
+            None
+            if oracle_exception is None
+            else {
+                "type": type(oracle_exception).__name__,
+                "message": str(oracle_exception),
+            }
+        ),
+    }
+    record_output.write_text(
+        json.dumps(oracle_record, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    if oracle_exception is not None:
+        raise S44CModelBuilderError(
+            "Normal-feasibility oracle failed closed during "
+            f"{failure_stage}: {type(oracle_exception).__name__}: "
+            f"{oracle_exception}"
+        ) from oracle_exception
+    if not fixed_compatibility["unchanged_endpoint_fixed_state"] or not (
+        fixed_compatibility["unchanged_endpoint_variable_state"]
+    ):
+        raise S44CModelBuilderError(
+            "Normal-feasibility oracle altered the endpoint fixed-state schema."
+        )
+    if not (pyomo_optimal and native_optimal):
+        raise S44CModelBuilderError(
+            "Complete normal-feasibility oracle failed or solver paths "
+            f"disagreed: pyomo={pyomo_termination}, "
+            f"native={native_record['status']}."
+        )
+    if not pre_solve_audit.get("feasible"):
+        raise S44CModelBuilderError(
+            "Loaded complete normal solution violates the endpoint formulation "
+            f"at tolerance {tolerance}: {pre_solve_audit}."
+        )
+    if not oracle_pass:
+        raise S44CModelBuilderError(
+            "Complete normal-feasibility oracle failed its combined v5 audit."
+        )
+
+    return {
+        **oracle_record,
+        "oracle_record_path": _portable_repository_path(record_output),
+        "oracle_record_sha256": _sha256_file(record_output),
+    }
+
+
+def _prepare_allocation_endpoint_warm_start(
+    model: ConcreteModel,
+    *,
+    diagnostic: Mapping[str, Any],
+    normal_oracle: Mapping[str, Any],
+    tolerance: float,
+) -> dict[str, Any]:
+    """Load only endpoint-free values from the verified v2 normal record."""
+
+    record_path = Path(str(diagnostic["normal_solution_record_path"])).resolve()
+    expected_record_hash = str(
+        diagnostic["normal_solution_record_sha256"]
+    )
+    actual_record_hash = _sha256_file(record_path)
+    if (
+        actual_record_hash != expected_record_hash
+        or actual_record_hash
+        != normal_oracle.get("saved_normal_solution_sha256")
+    ):
+        raise S44CModelBuilderError(
+            "Endpoint warm-start saved-normal fingerprint mismatch."
+        )
+    saved = _read_gzip_json(record_path)
+    saved_records = list(saved.get("variables", ()))
+    if saved.get("schema_version") != "steel_complete_normal_solution_v2":
+        raise S44CModelBuilderError(
+            "Endpoint warm start requires the saved-normal v2 schema."
+        )
+    current_records = _active_variable_records(model)
+    (
+        current_name_hash,
+        current_schema_hash,
+        current_fixed_schema_hash,
+    ) = _variable_name_and_schema_hashes(current_records)
+    (
+        saved_name_hash,
+        saved_schema_hash,
+        saved_fixed_schema_hash,
+    ) = _variable_name_and_schema_hashes(saved_records)
+    if (
+        len(saved_records) != len(current_records)
+        or saved.get("variable_count") != len(saved_records)
+        or saved.get("variable_name_sha256") != saved_name_hash
+        or saved.get("variable_schema_sha256") != saved_schema_hash
+        or saved.get("variable_fixed_schema_sha256")
+        != saved_fixed_schema_hash
+        or saved_name_hash != current_name_hash
+        or saved_schema_hash != current_schema_hash
+        or saved_fixed_schema_hash != current_fixed_schema_hash
+        or [row["name"] for row in saved_records]
+        != [row["name"] for row in current_records]
+    ):
+        raise S44CModelBuilderError(
+            "Endpoint warm-start variable name/schema/fixed-state mismatch."
+        )
+
+    # The oracle directory is replan-specific.  Keep the warm-start proof beside
+    # that oracle so a multi-window trajectory cannot overwrite earlier audits.
+    raw_directory = diagnostic.get("oracle_directory") or diagnostic.get(
+        "failure_evidence_directory"
+    )
+    if not raw_directory:
+        raise S44CModelBuilderError(
+            "Endpoint warm-start audit directory is missing."
+        )
+    audit_directory = Path(str(raw_directory)).resolve()
+    audit_directory.mkdir(parents=True, exist_ok=True)
+    audit_path = audit_directory / "endpoint_warm_start_audit.json"
+    variables = {
+        variable.name: variable
+        for variable in model.component_data_objects(Var, active=True)
+    }
+    saved_by_name = {str(row["name"]): row for row in saved_records}
+    fixed_value_mismatches: list[dict[str, Any]] = []
+    assignment_names: list[str] = []
+    for current in current_records:
+        name = str(current["name"])
+        saved_row = saved_by_name[name]
+        if bool(current["fixed"]):
+            current_value = float(current["fixed_value"])
+            saved_value = float(saved_row["fixed_value"])
+            residual = abs(current_value - saved_value)
+            if not bool(saved_row["fixed"]) or residual > tolerance:
+                fixed_value_mismatches.append(
+                    {
+                        "name": name,
+                        "endpoint_fixed_value": current_value,
+                        "saved_fixed": bool(saved_row["fixed"]),
+                        "saved_fixed_value": saved_row["fixed_value"],
+                        "absolute_residual": residual,
+                    }
+                )
+            continue
+        if bool(saved_row["fixed"]):
+            fixed_value_mismatches.append(
+                {
+                    "name": name,
+                    "endpoint_fixed_value": None,
+                    "saved_fixed": True,
+                    "saved_fixed_value": saved_row["fixed_value"],
+                    "absolute_residual": None,
+                }
+            )
+            continue
+        assignment_names.append(name)
+
+    if fixed_value_mismatches:
+        failure = {
+            "schema_version": "steel_endpoint_warm_start_v1",
+            "status": "fail_closed",
+            "failure_stage": "fixed_variable_compatibility",
+            "source_normal_solution_sha256": actual_record_hash,
+            "fixed_status_or_value_mismatch_count": len(
+                fixed_value_mismatches
+            ),
+            "fixed_status_or_value_mismatches": fixed_value_mismatches,
+        }
+        audit_path.write_text(
+            json.dumps(failure, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        raise S44CModelBuilderError(
+            "Endpoint warm-start fixed-variable compatibility failed before "
+            "value loading."
+        )
+
+    fixed_state_hash_before = current_fixed_schema_hash
+    for name in assignment_names:
+        variables[name].set_value(
+            float(saved_by_name[name]["value"]), skip_validation=False
+        )
+    loaded_records = _active_variable_records(model)
+    _, _, fixed_state_hash_after = _variable_name_and_schema_hashes(
+        loaded_records
+    )
+    assignment_record_names = set(assignment_names)
+    assignment_records = [
+        row
+        for row in loaded_records
+        if str(row["name"]) in assignment_record_names
+    ]
+    assignment_name_hash, assignment_schema_hash, _ = (
+        _variable_name_and_schema_hashes(assignment_records)
+    )
+    loaded_audit = _audit_loaded_incumbent(model, tolerance=tolerance)
+    fixed_state_unchanged = (
+        fixed_state_hash_after == fixed_state_hash_before
+    )
+    status = (
+        "pass"
+        if loaded_audit["feasible"] and fixed_state_unchanged
+        else "fail_closed"
+    )
+    warm_start_record = {
+        "schema_version": "steel_endpoint_warm_start_v1",
+        "case_id": diagnostic.get("case_id"),
+        "replan_index": diagnostic.get("replan_index"),
+        "status": status,
+        "failure_stage": (
+            None if status == "pass" else "loaded_start_feasibility_audit"
+        ),
+        "feasibility_tolerance": tolerance,
+        "source_normal_solution_path": _portable_repository_path(record_path),
+        "source_normal_solution_sha256": actual_record_hash,
+        "source_variable_count": len(saved_records),
+        "source_variable_name_sha256": saved_name_hash,
+        "source_variable_schema_sha256": saved_schema_hash,
+        "source_variable_fixed_schema_sha256": saved_fixed_schema_hash,
+        "assignment_count": len(assignment_records),
+        "assignment_variable_name_sha256": assignment_name_hash,
+        "assignment_variable_schema_sha256": assignment_schema_hash,
+        "assignment_value_state_sha256": (
+            _variable_value_and_fixed_state_sha256(assignment_records)
+        ),
+        "full_start_value_state_sha256": (
+            _variable_value_and_fixed_state_sha256(loaded_records)
+        ),
+        "endpoint_fixed_count": len(saved_records) - len(assignment_records),
+        "endpoint_fixed_overwrite_count": 0,
+        "endpoint_fixed_state_sha256_before": fixed_state_hash_before,
+        "endpoint_fixed_state_sha256_after": fixed_state_hash_after,
+        "endpoint_fixed_state_unchanged": fixed_state_unchanged,
+        "loaded_start_audit": loaded_audit,
+    }
+    audit_path.write_text(
+        json.dumps(warm_start_record, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    warm_start_record["audit_path"] = _portable_repository_path(audit_path)
+    warm_start_record["audit_sha256"] = _sha256_file(audit_path)
+    if status != "pass":
+        raise S44CModelBuilderError(
+            "Endpoint warm-start values failed the governed feasibility audit: "
+            f"{loaded_audit}."
+        )
+    return warm_start_record
+
+
+def _allocation_endpoint_objective_bound_audit(
+    result: Any,
+    *,
+    endpoint: str,
+    incumbent_mwh: float,
+    absolute_gap_limit_mwh: float = ALLOCATION_ENDPOINT_ABSOLUTE_MIP_GAP_MWH,
+    comparison_epsilon_mwh: float = (
+        ALLOCATION_ENDPOINT_BOUND_COMPARISON_EPSILON_MWH
+    ),
+) -> dict[str, Any]:
+    """Audit the endpoint incumbent against the sense-correct solver bound."""
+
+    bound_attribute = "lower_bound" if endpoint == "min" else "upper_bound"
+    record: dict[str, Any] = {
+        "schema_version": ALLOCATION_ENDPOINT_ACCURACY_SCHEMA,
+        "status": "fail",
+        "endpoint": endpoint,
+        "incumbent_mwh": float(incumbent_mwh),
+        "best_bound_attribute": bound_attribute,
+        "best_bound_availability": "unavailable",
+        "best_bound_mwh": None,
+        "absolute_objective_bound_gap_mwh": None,
+        "absolute_gap_limit_mwh": float(absolute_gap_limit_mwh),
+        "comparison_epsilon_mwh": float(comparison_epsilon_mwh),
+        "sense_consistency_status": "not_checked",
+        "failure_reason": None,
+    }
+    if endpoint not in {"min", "max"}:
+        record["failure_reason"] = "invalid_endpoint_sense"
+        return record
+    raw_bound = getattr(getattr(result, "problem", None), bound_attribute, None)
+    try:
+        best_bound = float(raw_bound)
+    except (TypeError, ValueError):
+        record["failure_reason"] = "missing_or_non_numeric_best_bound"
+        return record
+    if not math.isfinite(best_bound):
+        record["failure_reason"] = "nonfinite_best_bound"
+        return record
+    record["best_bound_availability"] = "available"
+    record["best_bound_mwh"] = best_bound
+    sense_consistent = (
+        best_bound <= incumbent_mwh + comparison_epsilon_mwh
+        if endpoint == "min"
+        else best_bound >= incumbent_mwh - comparison_epsilon_mwh
+    )
+    record["sense_consistency_status"] = (
+        "pass" if sense_consistent else "fail"
+    )
+    absolute_gap = abs(float(incumbent_mwh) - best_bound)
+    record["absolute_objective_bound_gap_mwh"] = absolute_gap
+    if not sense_consistent:
+        record["failure_reason"] = "sense_inconsistent_best_bound"
+        return record
+    if absolute_gap > absolute_gap_limit_mwh + comparison_epsilon_mwh:
+        record["failure_reason"] = "absolute_objective_bound_gap_exceeds_limit"
+        return record
+    record["status"] = "pass"
+    return record
+
+
 def _preserve_allocation_endpoint_failure(
     model: ConcreteModel,
     result: Any,
@@ -637,6 +1626,15 @@ def _preserve_allocation_endpoint_failure(
     normal_snapshot: Mapping[str, float],
     primary_cost: float,
     primary_best_bound: float | None,
+    normal_cost: float,
+    cost_tolerance: float,
+    normal_oracle: Mapping[str, Any],
+    warm_start_audit: Mapping[str, Any],
+    deactivated_deadline_name: str,
+    endpoint_pre_solve_model_path: Path | None,
+    endpoint_pre_solve_model_sha256: str | None,
+    endpoint_solver_log_path: Path | None,
+    endpoint_objective_bound_audit: Mapping[str, Any] | None = None,
 ) -> None:
     """Persist the first endpoint failure without performing another solve."""
 
@@ -646,6 +1644,23 @@ def _preserve_allocation_endpoint_failure(
     directory = Path(str(raw_directory)).resolve()
     directory.mkdir(parents=True, exist_ok=True)
     stats = collect_model_stats(model)
+    controller_state = dict(normal_oracle.get("controller_state", {}))
+    provenance = dict(normal_oracle.get("provenance", {}))
+    authoritative_schedule = dict(
+        controller_state.get("authoritative_schedule_row", {})
+    )
+    endpoint_log_hash = (
+        _sha256_file(endpoint_solver_log_path)
+        if endpoint_solver_log_path is not None
+        and endpoint_solver_log_path.is_file()
+        else None
+    )
+    saved_normal_source = Path(
+        str(diagnostic["normal_solution_record_path"])
+    ).resolve()
+    bundled_normal_path = directory / "saved_normal_solution.json.gz"
+    shutil.copy2(saved_normal_source, bundled_normal_path)
+    bundled_normal_hash = _sha256_file(bundled_normal_path)
     record = {
         "case_id": diagnostic.get("case_id"),
         "replan_index": diagnostic.get("replan_index"),
@@ -659,16 +1674,115 @@ def _preserve_allocation_endpoint_failure(
             in {"optimal", "feasible"}
             else None
         ),
-        "solver_best_bound": getattr(result.problem, "lower_bound", None),
+        "solver_best_bound": (
+            endpoint_objective_bound_audit.get("best_bound_mwh")
+            if endpoint_objective_bound_audit is not None
+            else getattr(
+                result.problem,
+                "lower_bound" if endpoint == "min" else "upper_bound",
+                None,
+            )
+        ),
+        "endpoint_objective_bound_audit": (
+            dict(endpoint_objective_bound_audit)
+            if endpoint_objective_bound_audit is not None
+            else None
+        ),
         "primary_cost_objective_eur": primary_cost,
         "primary_cost_best_bound_eur": primary_best_bound,
+        "cost_cap_rhs_eur": primary_cost + cost_tolerance,
+        "governed_cost_tolerance_eur": cost_tolerance,
+        "loaded_normal_cost_eur": normal_cost,
+        "loaded_normal_cost_minus_cap_rhs_eur": (
+            normal_cost - primary_cost - cost_tolerance
+        ),
         "variable_count": stats.variables,
         "binary_count": stats.binaries,
         "constraint_count": stats.constraints,
         "normal_snapshot": dict(normal_snapshot),
+        "normal_feasibility_oracle": {
+            "path": normal_oracle.get("oracle_record_path"),
+            "sha256": normal_oracle.get("oracle_record_sha256"),
+            "status": normal_oracle.get("status"),
+            "saved_normal_solution_path": normal_oracle.get(
+                "saved_normal_solution_path"
+            ),
+            "saved_normal_solution_sha256": normal_oracle.get(
+                "saved_normal_solution_sha256"
+            ),
+            "variable_count": normal_oracle.get("variable_count"),
+            "variable_name_sha256": normal_oracle.get(
+                "variable_name_sha256"
+            ),
+            "variable_schema_sha256": normal_oracle.get(
+                "variable_schema_sha256"
+            ),
+            "variable_fixed_schema_sha256": normal_oracle.get(
+                "variable_fixed_schema_sha256"
+            ),
+            "fixed_variable_compatibility_audit": normal_oracle.get(
+                "fixed_variable_compatibility_audit"
+            ),
+            "loaded_value_audit": normal_oracle.get(
+                "pre_solve_loaded_value_audit"
+            ),
+            "pre_solve_symbolic_lp": normal_oracle.get(
+                "pre_solve_symbolic_lp"
+            ),
+            "pre_solve_symbolic_lp_sha256": normal_oracle.get(
+                "pre_solve_symbolic_lp_sha256"
+            ),
+            "solver_log_evidence": normal_oracle.get(
+                "solver_log_evidence"
+            ),
+        },
+        "endpoint_warm_start": dict(warm_start_audit),
+        "bundled_saved_normal_solution": {
+            "path": _portable_repository_path(bundled_normal_path),
+            "sha256": bundled_normal_hash,
+            "source_sha256": normal_oracle.get(
+                "saved_normal_solution_sha256"
+            ),
+            "hash_matches_source": (
+                bundled_normal_hash
+                == normal_oracle.get("saved_normal_solution_sha256")
+            ),
+        },
+        "normal_controller_schedule_sha256": provenance.get(
+            "normal_controller_schedule_sha256"
+        ),
+        "controller_schedule_row_sha256": provenance.get(
+            "controller_schedule_row_sha256"
+        ),
+        "controller_state": controller_state,
+        "authoritative_schedule_row": authoritative_schedule,
+        "start_state": authoritative_schedule.get(
+            "start_overrides", controller_state.get("start_overrides")
+        ),
+        "deactivated_constraint_row": deactivated_deadline_name,
+        "endpoint_pre_solve_model": (
+            _portable_repository_path(endpoint_pre_solve_model_path)
+            if endpoint_pre_solve_model_path is not None
+            else None
+        ),
+        "endpoint_pre_solve_model_sha256": (
+            endpoint_pre_solve_model_sha256
+        ),
+        "endpoint_solver_log": (
+            _portable_repository_path(endpoint_solver_log_path)
+            if endpoint_solver_log_path is not None
+            else None
+        ),
+        "endpoint_solver_log_sha256": endpoint_log_hash,
         "diagnostic_solver_options": {
             "DualReductions": 0,
             "InfUnbdInfo": 1,
+            "FeasibilityTol": normal_oracle.get(
+                "feasibility_tolerance"
+            ),
+            "MIPGap": ALLOCATION_ENDPOINT_RELATIVE_MIP_GAP,
+            "MIPGapAbs": ALLOCATION_ENDPOINT_ABSOLUTE_MIP_GAP_MWH,
+            "warmstart": True,
         },
         "second_solve_performed": False,
     }
@@ -685,6 +1799,9 @@ def _preserve_allocation_endpoint_failure(
             record["compact_model_status"] = "omitted_above_3MB_budget"
         else:
             record["compact_model_status"] = "preserved"
+            record["compact_model_path"] = _portable_repository_path(
+                model_path
+            )
             record["compact_model_sha256"] = hashlib.sha256(
                 model_path.read_bytes()
             ).hexdigest()
@@ -707,6 +1824,7 @@ def _solve_with_optional_lexicographic_cost(
     configuration_id: str,
     deterministic_cost_policy: Mapping[str, Any] | None,
     allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
+    normal_solution_capture: Mapping[str, Any] | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Solve physical progress, represented cost and tie-breaker in order."""
 
@@ -868,6 +1986,16 @@ def _solve_with_optional_lexicographic_cost(
             metadata["production_progress_deficit_t"] = float(
                 value(model.rolling_production_progress_deficit_t)
             )
+    if normal_solution_capture is not None:
+        metadata.update(
+            _capture_complete_normal_solution(
+                model,
+                metadata=metadata,
+                solver=solver,
+                configuration_id=configuration_id,
+                policy=normal_solution_capture,
+            )
+        )
     if allocation_envelope_diagnostic is None:
         return tie_result, metadata
 
@@ -897,13 +2025,45 @@ def _solve_with_optional_lexicographic_cost(
     state_tolerance = float(
         allocation_envelope_diagnostic.get("state_tolerance", 1e-6)
     )
+    endpoint_accuracy_schema = allocation_envelope_diagnostic.get(
+        "endpoint_solver_accuracy_schema", ALLOCATION_ENDPOINT_ACCURACY_SCHEMA
+    )
+    endpoint_relative_mip_gap = float(
+        allocation_envelope_diagnostic.get(
+            "endpoint_relative_mip_gap", ALLOCATION_ENDPOINT_RELATIVE_MIP_GAP
+        )
+    )
+    endpoint_absolute_mip_gap_mwh = float(
+        allocation_envelope_diagnostic.get(
+            "endpoint_absolute_mip_gap_mwh",
+            ALLOCATION_ENDPOINT_ABSOLUTE_MIP_GAP_MWH,
+        )
+    )
+    endpoint_bound_comparison_epsilon_mwh = float(
+        allocation_envelope_diagnostic.get(
+            "endpoint_bound_comparison_epsilon_mwh",
+            ALLOCATION_ENDPOINT_BOUND_COMPARISON_EPSILON_MWH,
+        )
+    )
     if (
         execution_hours <= 0
         or execution_hours > len(model.TIME)
-        or state_tolerance <= 0.0
+        or state_tolerance != 1e-6
     ):
         raise S44CModelBuilderError(
-            "Invalid allocation-envelope execution hours or state tolerance."
+            "Allocation-envelope execution hours are invalid or the governed "
+            "absolute feasibility tolerance is not exactly 1e-6."
+        )
+    if (
+        endpoint_accuracy_schema != ALLOCATION_ENDPOINT_ACCURACY_SCHEMA
+        or endpoint_relative_mip_gap != ALLOCATION_ENDPOINT_RELATIVE_MIP_GAP
+        or endpoint_absolute_mip_gap_mwh
+        != ALLOCATION_ENDPOINT_ABSOLUTE_MIP_GAP_MWH
+        or endpoint_bound_comparison_epsilon_mwh
+        != ALLOCATION_ENDPOINT_BOUND_COMPARISON_EPSILON_MWH
+    ):
+        raise S44CModelBuilderError(
+            "Allocation-envelope endpoint solver-accuracy contract changed."
         )
     for attribute in (
         "wag_generator_electricity_mwh",
@@ -949,7 +2109,7 @@ def _solve_with_optional_lexicographic_cost(
             abs(local_normal_snapshot[key] - normal_snapshot[key])
             for key in normal_snapshot
         )
-        if max_local_normal_schedule_residual > state_tolerance + 1e-6:
+        if max_local_normal_schedule_residual > state_tolerance:
             raise S44CModelBuilderError(
                 "Current hook-absent normal schedule does not reproduce in the "
                 "endpoint formulation: "
@@ -985,17 +2145,15 @@ def _solve_with_optional_lexicographic_cost(
         )
 
     def _snapshot_hash(snapshot: Mapping[str, float]) -> str:
-        normalized = {
-            key: round(float(snapshot[key]), 6) for key in sorted(snapshot)
-        }
+        normalized = {key: float(snapshot[key]) for key in sorted(snapshot)}
         return hashlib.sha256(
             json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode(
                 "utf-8"
             )
         ).hexdigest()
 
+    base_model_structure_sha256 = _model_structure_sha256(model)
     model.static_price_naive_objective.deactivate()
-    model.allocation_envelope_state_preservation = ConstraintList()
     state_expressions = {
         "executed_final_product_t": sum(
             model.final_product_output[t] for t in range(execution_hours)
@@ -1005,14 +2163,55 @@ def _solve_with_optional_lexicographic_cost(
         "hot_iron_inventory_t": model.hot_iron_inventory[handoff_hour],
         "cold_slab_inventory_t": model.cold_slab_inventory[handoff_hour],
     }
+    if hasattr(model, "dri_inventory"):
+        state_expressions["dri_inventory_t"] = model.dri_inventory[handoff_hour]
+        normal_snapshot["dri_inventory_t"] = float(
+            supplied_normal_snapshot["dri_inventory_t"]
+        )
+    preservation_names = {
+        "executed_final_product_t": (
+            "allocation_envelope_executed_final_product_preservation"
+        ),
+        "coke_inventory_t": "allocation_envelope_coke_inventory_preservation",
+        "sinter_inventory_t": (
+            "allocation_envelope_sinter_inventory_preservation"
+        ),
+        "hot_iron_inventory_t": (
+            "allocation_envelope_hot_iron_inventory_preservation"
+        ),
+        "cold_slab_inventory_t": (
+            "allocation_envelope_cold_slab_inventory_preservation"
+        ),
+        "dri_inventory_t": "allocation_envelope_dri_inventory_preservation",
+    }
     for key, expression in state_expressions.items():
-        normal_value = normal_snapshot[key]
-        model.allocation_envelope_state_preservation.add(
-            expression >= normal_value - state_tolerance
+        setattr(
+            model,
+            preservation_names[key],
+            Constraint(expr=expression == normal_snapshot[key]),
         )
-        model.allocation_envelope_state_preservation.add(
-            expression <= normal_value + state_tolerance
+    deadline = getattr(model, "rolling_production_deadline", None)
+    if deadline is None or execution_hours not in deadline:
+        raise S44CModelBuilderError(
+            "The IIS-proven executed-hours rolling deadline row is absent."
         )
+    deadline_row = deadline[execution_hours]
+    if not deadline_row.active:
+        raise S44CModelBuilderError(
+            "The IIS-proven executed-hours rolling deadline row was already inactive."
+        )
+    deadline_row.deactivate()
+    deactivated_deadline_name = deadline_row.name
+    if hasattr(model, "rolling_production_progress_identity"):
+        if not model.rolling_production_progress_identity.active:
+            raise S44CModelBuilderError(
+                "Rolling production progress identity must remain active."
+            )
+    if hasattr(model, "rolling_production_progress_optimum_preservation"):
+        if not model.rolling_production_progress_optimum_preservation.active:
+            raise S44CModelBuilderError(
+                "Rolling production progress optimum preservation must remain active."
+            )
     endpoint_expression = sum(
         model.wag_generator_electricity_mwh[t]
         for t in range(execution_hours)
@@ -1021,8 +2220,16 @@ def _solve_with_optional_lexicographic_cost(
         expr=endpoint_expression,
         sense=minimize if endpoint == "min" else maximize,
     )
-    normal_incumbent_audit = _audit_loaded_incumbent(
-        model, tolerance=state_tolerance + 1e-6
+    model.allocation_envelope_objective.deactivate()
+    normal_oracle = _complete_normal_feasibility_oracle(
+        model,
+        solver=solver,
+        diagnostic=allocation_envelope_diagnostic,
+        tolerance=state_tolerance,
+        base_model_structure_sha256=base_model_structure_sha256,
+    )
+    normal_incumbent_audit = dict(
+        normal_oracle["pre_solve_loaded_value_audit"]
     )
     objective_definition_valid = (
         model.allocation_envelope_objective.expr is endpoint_expression
@@ -1035,8 +2242,14 @@ def _solve_with_optional_lexicographic_cost(
         model, "procurement_cost_optimum_preservation"
     )
     normal_incumbent_audit["production_and_state_preservation_present"] = (
-        len(model.allocation_envelope_state_preservation)
-        == 2 * len(state_expressions)
+        all(
+            hasattr(model, preservation_names[key])
+            for key in state_expressions
+        )
+    )
+    normal_incumbent_audit["single_absolute_tolerance"] = state_tolerance
+    normal_incumbent_audit["deactivated_deadline_row"] = (
+        deactivated_deadline_name
     )
     normal_incumbent_audit["objective_definition_valid"] = (
         objective_definition_valid
@@ -1052,25 +2265,218 @@ def _solve_with_optional_lexicographic_cost(
             "The complete saved-normal incumbent feasibility audit failed: "
             f"{normal_incumbent_audit}."
         )
-    solver_name = str(getattr(solver, "name", "")).lower()
-    if "gurobi" in solver_name:
-        solver.options["DualReductions"] = 0
-        solver.options["InfUnbdInfo"] = 1
-        failure_directory = allocation_envelope_diagnostic.get(
-            "failure_evidence_directory"
+    metadata.update(
+        {
+            "allocation_envelope_active": True,
+            "allocation_envelope_endpoint": endpoint,
+            "allocation_envelope_execution_hours": execution_hours,
+            "allocation_envelope_normal_feasibility_oracle_status": (
+                normal_oracle["status"]
+            ),
+            "allocation_envelope_normal_feasibility_oracle_record_path": (
+                normal_oracle["oracle_record_path"]
+            ),
+            "allocation_envelope_normal_feasibility_oracle_record_sha256": (
+                normal_oracle["oracle_record_sha256"]
+            ),
+            "allocation_envelope_normal_solution_variable_count": (
+                normal_oracle["variable_count"]
+            ),
+            "allocation_envelope_normal_solution_variable_name_sha256": (
+                normal_oracle["variable_name_sha256"]
+            ),
+            "allocation_envelope_normal_solution_variable_schema_sha256": (
+                normal_oracle["variable_schema_sha256"]
+            ),
+            "allocation_envelope_normal_solution_variable_fixed_schema_sha256": (
+                normal_oracle["variable_fixed_schema_sha256"]
+            ),
+            "allocation_envelope_normal_solution_record_sha256": (
+                normal_oracle["saved_normal_solution_sha256"]
+            ),
+            "allocation_envelope_endpoint_prefixed_checked_count": (
+                normal_oracle["fixed_variable_compatibility_audit"][
+                    "endpoint_prefixed_checked_count"
+                ]
+            ),
+            "allocation_envelope_oracle_temporarily_fixed_count": (
+                normal_oracle["fixed_variable_compatibility_audit"][
+                    "temporarily_fixed_count"
+                ]
+            ),
+            "allocation_envelope_endpoint_prefixed_overwrite_count": (
+                normal_oracle["fixed_variable_compatibility_audit"][
+                    "endpoint_prefixed_overwrite_count"
+                ]
+            ),
+            "allocation_envelope_endpoint_prefixed_max_value_residual": (
+                normal_oracle["fixed_variable_compatibility_audit"][
+                    "max_endpoint_prefixed_value_residual"
+                ]
+            ),
+            "allocation_envelope_endpoint_fixed_state_sha256_before": (
+                normal_oracle["fixed_variable_compatibility_audit"][
+                    "endpoint_fixed_state_sha256_before"
+                ]
+            ),
+            "allocation_envelope_endpoint_fixed_state_sha256_after": (
+                normal_oracle["fixed_variable_compatibility_audit"][
+                    "endpoint_fixed_state_sha256_after"
+                ]
+            ),
+            "allocation_envelope_deactivated_deadline_row": (
+                deactivated_deadline_name
+            ),
+            "allocation_envelope_iis_evidence_sha256": str(
+                allocation_envelope_diagnostic["iis_evidence_sha256"]
+            ),
+            "allocation_envelope_state_tolerance": state_tolerance,
+            "allocation_envelope_effective_state_tolerance": state_tolerance,
+        }
+    )
+    if bool(allocation_envelope_diagnostic.get("oracle_only", False)):
+        metadata.update(
+            {
+                "allocation_envelope_oracle_only": True,
+                "allocation_envelope_termination_condition": (
+                    "not_run_oracle_only"
+                ),
+            }
         )
-        if failure_directory:
-            Path(str(failure_directory)).resolve().mkdir(
-                parents=True, exist_ok=True
-            )
-            solver.options["LogFile"] = str(
-                Path(str(failure_directory)).resolve()
-                / "endpoint_solver.log"
-            )
+        return tie_result, metadata
+    model.allocation_envelope_objective.activate()
+    endpoint_warm_start = _prepare_allocation_endpoint_warm_start(
+        model,
+        diagnostic=allocation_envelope_diagnostic,
+        normal_oracle=normal_oracle,
+        tolerance=state_tolerance,
+    )
+    metadata.update(
+        {
+            "allocation_envelope_warm_start_status": endpoint_warm_start[
+                "status"
+            ],
+            "allocation_envelope_warm_start_assignment_count": (
+                endpoint_warm_start["assignment_count"]
+            ),
+            "allocation_envelope_warm_start_variable_name_sha256": (
+                endpoint_warm_start["assignment_variable_name_sha256"]
+            ),
+            "allocation_envelope_warm_start_variable_schema_sha256": (
+                endpoint_warm_start["assignment_variable_schema_sha256"]
+            ),
+            "allocation_envelope_warm_start_value_state_sha256": (
+                endpoint_warm_start["assignment_value_state_sha256"]
+            ),
+            "allocation_envelope_warm_start_full_state_sha256": (
+                endpoint_warm_start["full_start_value_state_sha256"]
+            ),
+            "allocation_envelope_warm_start_source_record_sha256": (
+                endpoint_warm_start["source_normal_solution_sha256"]
+            ),
+            "allocation_envelope_warm_start_fixed_overwrite_count": (
+                endpoint_warm_start["endpoint_fixed_overwrite_count"]
+            ),
+            "allocation_envelope_warm_start_max_constraint_violation": (
+                endpoint_warm_start["loaded_start_audit"][
+                    "max_constraint_violation"
+                ]
+            ),
+            "allocation_envelope_warm_start_max_bound_violation": (
+                endpoint_warm_start["loaded_start_audit"][
+                    "max_variable_bound_violation"
+                ]
+            ),
+            "allocation_envelope_warm_start_max_integrality_violation": (
+                endpoint_warm_start["loaded_start_audit"][
+                    "max_integrality_violation"
+                ]
+            ),
+            "allocation_envelope_warm_start_audit_path": (
+                endpoint_warm_start["audit_path"]
+            ),
+            "allocation_envelope_warm_start_audit_sha256": (
+                endpoint_warm_start["audit_sha256"]
+            ),
+        }
+    )
+    solver_name = str(getattr(solver, "name", "")).lower()
+    endpoint_warmstart_argument = "gurobi" in solver_name
+    endpoint_pre_solve_model_path: Path | None = None
+    endpoint_pre_solve_model_sha256: str | None = None
+    endpoint_solver_log_path: Path | None = None
+    endpoint_option_names = (
+        "DualReductions",
+        "InfUnbdInfo",
+        "FeasibilityTol",
+        "MIPGap",
+        "MIPGapAbs",
+        "LogFile",
+    )
+    missing_option = object()
+    prior_endpoint_options: dict[str, Any] = {}
     endpoint_start = time.perf_counter()
-    endpoint_result = solver.solve(model)
+    try:
+        if "gurobi" in solver_name:
+            prior_endpoint_options = {
+                name: (
+                    solver.options[name]
+                    if name in solver.options
+                    else missing_option
+                )
+                for name in endpoint_option_names
+            }
+            solver.options["DualReductions"] = 0
+            solver.options["InfUnbdInfo"] = 1
+            solver.options["FeasibilityTol"] = state_tolerance
+            solver.options["MIPGap"] = endpoint_relative_mip_gap
+            solver.options["MIPGapAbs"] = endpoint_absolute_mip_gap_mwh
+            # Prefer the replan-specific oracle directory.  The failure-evidence
+            # directory is shared by the trajectory and would overwrite earlier
+            # endpoint LPs and solver logs in a seven-window run.
+            failure_directory = allocation_envelope_diagnostic.get(
+                "oracle_directory"
+            ) or allocation_envelope_diagnostic.get(
+                "failure_evidence_directory"
+            )
+            if failure_directory:
+                resolved_failure_directory = Path(
+                    str(failure_directory)
+                ).resolve()
+                resolved_failure_directory.mkdir(parents=True, exist_ok=True)
+                endpoint_solver_log_path = (
+                    resolved_failure_directory / "endpoint_solver.log"
+                )
+                endpoint_pre_solve_model_path = (
+                    resolved_failure_directory / "endpoint_pre_solve_model.lp"
+                )
+                model.write(
+                    str(endpoint_pre_solve_model_path),
+                    io_options={"symbolic_solver_labels": True},
+                )
+                endpoint_pre_solve_model_sha256 = _sha256_file(
+                    endpoint_pre_solve_model_path
+                )
+                solver.options["LogFile"] = str(endpoint_solver_log_path)
+        endpoint_result = (
+            solver.solve(model, warmstart=True)
+            if endpoint_warmstart_argument
+            else solver.solve(model)
+        )
+    finally:
+        for name, previous_value in prior_endpoint_options.items():
+            if previous_value is missing_option:
+                solver.options.pop(name, None)
+            else:
+                solver.options[name] = previous_value
     endpoint_runtime = time.perf_counter() - endpoint_start
     endpoint_termination = str(endpoint_result.solver.termination_condition)
+    endpoint_solver_log_sha256 = (
+        _sha256_file(endpoint_solver_log_path)
+        if endpoint_solver_log_path is not None
+        and endpoint_solver_log_path.is_file()
+        else None
+    )
     if endpoint_termination.lower() != "optimal":
         _preserve_allocation_endpoint_failure(
             model,
@@ -1080,10 +2486,59 @@ def _solve_with_optional_lexicographic_cost(
             normal_snapshot=normal_snapshot,
             primary_cost=primary_cost,
             primary_best_bound=metadata["primary_cost_best_bound_eur"],
+            normal_cost=normal_cost,
+            cost_tolerance=cost_tolerance,
+            normal_oracle=normal_oracle,
+            warm_start_audit=endpoint_warm_start,
+            deactivated_deadline_name=deactivated_deadline_name,
+            endpoint_pre_solve_model_path=endpoint_pre_solve_model_path,
+            endpoint_pre_solve_model_sha256=(
+                endpoint_pre_solve_model_sha256
+            ),
+            endpoint_solver_log_path=endpoint_solver_log_path,
         )
         raise S44CModelBuilderError(
             "Allocation-envelope endpoint did not terminate optimal: "
             f"{endpoint_termination}."
+        )
+    endpoint_incumbent_mwh = float(value(endpoint_expression))
+    endpoint_objective_bound_audit = (
+        _allocation_endpoint_objective_bound_audit(
+            endpoint_result,
+            endpoint=endpoint,
+            incumbent_mwh=endpoint_incumbent_mwh,
+            absolute_gap_limit_mwh=endpoint_absolute_mip_gap_mwh,
+            comparison_epsilon_mwh=(
+                endpoint_bound_comparison_epsilon_mwh
+            ),
+        )
+    )
+    if endpoint_objective_bound_audit["status"] != "pass":
+        _preserve_allocation_endpoint_failure(
+            model,
+            endpoint_result,
+            allocation_envelope_diagnostic,
+            endpoint=endpoint,
+            normal_snapshot=normal_snapshot,
+            primary_cost=primary_cost,
+            primary_best_bound=metadata["primary_cost_best_bound_eur"],
+            normal_cost=normal_cost,
+            cost_tolerance=cost_tolerance,
+            normal_oracle=normal_oracle,
+            warm_start_audit=endpoint_warm_start,
+            deactivated_deadline_name=deactivated_deadline_name,
+            endpoint_pre_solve_model_path=endpoint_pre_solve_model_path,
+            endpoint_pre_solve_model_sha256=(
+                endpoint_pre_solve_model_sha256
+            ),
+            endpoint_solver_log_path=endpoint_solver_log_path,
+            endpoint_objective_bound_audit=(
+                endpoint_objective_bound_audit
+            ),
+        )
+        raise S44CModelBuilderError(
+            "Allocation-envelope endpoint incumbent/best-bound audit failed: "
+            f"{endpoint_objective_bound_audit}."
         )
     endpoint_snapshot = {
         key: float(value(expression))
@@ -1123,11 +2578,9 @@ def _solve_with_optional_lexicographic_cost(
     solver_state_feasibility_tolerance = (
         1e-6 if "gurobi" in str(getattr(solver, "name", "")).lower() else 0.0
     )
-    effective_state_tolerance = (
-        state_tolerance + solver_state_feasibility_tolerance
-    )
+    effective_state_tolerance = state_tolerance
     if (
-        max_state_residual > effective_state_tolerance + 1e-9
+        max_state_residual > effective_state_tolerance
         or endpoint_cost > primary_cost + cost_tolerance + 1e-6
         or best_bound_audit_status != "pass"
     ):
@@ -1148,8 +2601,56 @@ def _solve_with_optional_lexicographic_cost(
             "allocation_envelope_active": True,
             "allocation_envelope_endpoint": endpoint,
             "allocation_envelope_execution_hours": execution_hours,
-            "allocation_envelope_objective_value_mwh": float(
-                value(endpoint_expression)
+            "allocation_envelope_objective_value_mwh": endpoint_incumbent_mwh,
+            "allocation_envelope_endpoint_accuracy_schema": (
+                endpoint_objective_bound_audit["schema_version"]
+            ),
+            "allocation_envelope_endpoint_incumbent_basis": (
+                "feasible_solution"
+            ),
+            "allocation_envelope_endpoint_best_bound_availability": (
+                endpoint_objective_bound_audit["best_bound_availability"]
+            ),
+            "allocation_envelope_endpoint_best_bound_mwh": (
+                endpoint_objective_bound_audit["best_bound_mwh"]
+            ),
+            "allocation_envelope_endpoint_objective_bound_abs_gap_mwh": (
+                endpoint_objective_bound_audit[
+                    "absolute_objective_bound_gap_mwh"
+                ]
+            ),
+            "allocation_envelope_endpoint_objective_bound_audit_status": (
+                endpoint_objective_bound_audit["status"]
+            ),
+            "allocation_envelope_endpoint_bound_sense_status": (
+                endpoint_objective_bound_audit["sense_consistency_status"]
+            ),
+            "allocation_envelope_endpoint_relative_mip_gap_target": (
+                endpoint_relative_mip_gap
+            ),
+            "allocation_envelope_endpoint_absolute_mip_gap_target_mwh": (
+                endpoint_absolute_mip_gap_mwh
+            ),
+            "allocation_envelope_endpoint_bound_comparison_epsilon_mwh": (
+                endpoint_bound_comparison_epsilon_mwh
+            ),
+            "allocation_envelope_endpoint_solver_options": {
+                "MIPGap": endpoint_relative_mip_gap,
+                "MIPGapAbs": endpoint_absolute_mip_gap_mwh,
+                "warmstart": endpoint_warmstart_argument,
+            },
+            "allocation_envelope_endpoint_solver_options_sha256": (
+                hashlib.sha256(
+                    json.dumps(
+                        {
+                            "MIPGap": endpoint_relative_mip_gap,
+                            "MIPGapAbs": endpoint_absolute_mip_gap_mwh,
+                            "warmstart": endpoint_warmstart_argument,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()
             ),
             "allocation_envelope_runtime_seconds": endpoint_runtime,
             "allocation_envelope_solver_status": str(
@@ -1157,6 +2658,25 @@ def _solve_with_optional_lexicographic_cost(
             ),
             "allocation_envelope_termination_condition": endpoint_termination,
             "allocation_envelope_mip_gap": _mip_gap(endpoint_result),
+            "allocation_envelope_warmstart_solver_argument": (
+                endpoint_warmstart_argument
+            ),
+            "allocation_envelope_endpoint_solver_log_path": (
+                _portable_repository_path(endpoint_solver_log_path)
+                if endpoint_solver_log_path is not None
+                else None
+            ),
+            "allocation_envelope_endpoint_pre_solve_model_path": (
+                _portable_repository_path(endpoint_pre_solve_model_path)
+                if endpoint_pre_solve_model_path is not None
+                else None
+            ),
+            "allocation_envelope_endpoint_pre_solve_model_sha256": (
+                endpoint_pre_solve_model_sha256
+            ),
+            "allocation_envelope_endpoint_solver_log_sha256": (
+                endpoint_solver_log_sha256
+            ),
             "allocation_envelope_cost_eur": endpoint_cost,
             "allocation_envelope_cost_minus_primary_eur": endpoint_cost
             - primary_cost,
@@ -1191,6 +2711,21 @@ def _solve_with_optional_lexicographic_cost(
             ),
             "allocation_envelope_normal_incumbent_feasibility_audit": (
                 normal_incumbent_audit
+            ),
+            "allocation_envelope_normal_feasibility_oracle_status": (
+                normal_oracle["status"]
+            ),
+            "allocation_envelope_normal_feasibility_oracle_record_path": (
+                normal_oracle["oracle_record_path"]
+            ),
+            "allocation_envelope_normal_feasibility_oracle_record_sha256": (
+                normal_oracle["oracle_record_sha256"]
+            ),
+            "allocation_envelope_deactivated_deadline_row": (
+                deactivated_deadline_name
+            ),
+            "allocation_envelope_iis_evidence_sha256": str(
+                allocation_envelope_diagnostic["iis_evidence_sha256"]
             ),
             "allocation_envelope_normal_objective_value_mwh": (
                 normal_endpoint_objective_value
@@ -4632,6 +6167,7 @@ def _solve_c0_configuration(
     aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
     full_site_energy_bridge: Mapping[str, float] | None = None,
     allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
+    normal_solution_capture: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
     inputs = _build_c0_inputs(
         tables,
@@ -4689,6 +6225,7 @@ def _solve_c0_configuration(
             configuration_id="C0_current_BF_BOF_reference",
             deterministic_cost_policy=deterministic_cost_policy,
             allocation_envelope_diagnostic=allocation_envelope_diagnostic,
+            normal_solution_capture=normal_solution_capture,
         )
     except RuntimeError as exc:
         solve_runtime = time.perf_counter() - solve_start
@@ -5028,10 +6565,40 @@ def _solve_c0_configuration(
                     "allocation_envelope_endpoint",
                     "allocation_envelope_execution_hours",
                     "allocation_envelope_objective_value_mwh",
+                    "allocation_envelope_endpoint_accuracy_schema",
+                    "allocation_envelope_endpoint_incumbent_basis",
+                    "allocation_envelope_endpoint_best_bound_availability",
+                    "allocation_envelope_endpoint_best_bound_mwh",
+                    "allocation_envelope_endpoint_objective_bound_abs_gap_mwh",
+                    "allocation_envelope_endpoint_objective_bound_audit_status",
+                    "allocation_envelope_endpoint_bound_sense_status",
+                    "allocation_envelope_endpoint_relative_mip_gap_target",
+                    "allocation_envelope_endpoint_absolute_mip_gap_target_mwh",
+                    "allocation_envelope_endpoint_bound_comparison_epsilon_mwh",
+                    "allocation_envelope_endpoint_solver_options",
+                    "allocation_envelope_endpoint_solver_options_sha256",
                     "allocation_envelope_runtime_seconds",
                     "allocation_envelope_solver_status",
                     "allocation_envelope_termination_condition",
                     "allocation_envelope_mip_gap",
+                    "allocation_envelope_warmstart_solver_argument",
+                    "allocation_envelope_endpoint_solver_log_path",
+                    "allocation_envelope_endpoint_solver_log_sha256",
+                    "allocation_envelope_endpoint_pre_solve_model_path",
+                    "allocation_envelope_endpoint_pre_solve_model_sha256",
+                    "allocation_envelope_warm_start_status",
+                    "allocation_envelope_warm_start_assignment_count",
+                    "allocation_envelope_warm_start_variable_name_sha256",
+                    "allocation_envelope_warm_start_variable_schema_sha256",
+                    "allocation_envelope_warm_start_value_state_sha256",
+                    "allocation_envelope_warm_start_full_state_sha256",
+                    "allocation_envelope_warm_start_source_record_sha256",
+                    "allocation_envelope_warm_start_fixed_overwrite_count",
+                    "allocation_envelope_warm_start_max_constraint_violation",
+                    "allocation_envelope_warm_start_max_bound_violation",
+                    "allocation_envelope_warm_start_max_integrality_violation",
+                    "allocation_envelope_warm_start_audit_path",
+                    "allocation_envelope_warm_start_audit_sha256",
                     "allocation_envelope_cost_eur",
                     "allocation_envelope_cost_minus_primary_eur",
                     "allocation_envelope_primary_cost_best_bound_eur",
@@ -5058,6 +6625,38 @@ def _solve_c0_configuration(
                     "allocation_envelope_state_tolerance",
                     "allocation_envelope_solver_state_feasibility_tolerance",
                     "allocation_envelope_effective_state_tolerance",
+                    "allocation_envelope_normal_feasibility_oracle_status",
+                    "allocation_envelope_normal_feasibility_oracle_record_path",
+                    "allocation_envelope_normal_feasibility_oracle_record_sha256",
+                    "allocation_envelope_normal_solution_variable_count",
+                    "allocation_envelope_normal_solution_variable_name_sha256",
+                    "allocation_envelope_normal_solution_variable_schema_sha256",
+                    "allocation_envelope_normal_solution_variable_fixed_schema_sha256",
+                    "allocation_envelope_normal_solution_record_sha256",
+                    "allocation_envelope_endpoint_prefixed_checked_count",
+                    "allocation_envelope_oracle_temporarily_fixed_count",
+                    "allocation_envelope_endpoint_prefixed_overwrite_count",
+                    "allocation_envelope_endpoint_prefixed_max_value_residual",
+                    "allocation_envelope_endpoint_fixed_state_sha256_before",
+                    "allocation_envelope_endpoint_fixed_state_sha256_after",
+                    "allocation_envelope_deactivated_deadline_row",
+                    "allocation_envelope_iis_evidence_sha256",
+                    "allocation_envelope_oracle_only",
+                )
+                if key in cost_metadata
+            }
+        )
+    if normal_solution_capture is not None:
+        audit.update(
+            {
+                key: cost_metadata[key]
+                for key in (
+                    "normal_solution_capture_path",
+                    "normal_solution_capture_sha256",
+                    "normal_solution_variable_count",
+                    "normal_solution_variable_name_sha256",
+                    "normal_solution_variable_schema_sha256",
+                    "normal_solution_variable_fixed_schema_sha256",
                 )
             }
         )
@@ -5589,6 +7188,20 @@ def _solve_c0_configuration(
                 "caveat": "C0 static BF-BOF physical regression; controlled development assumptions only.",
             }
         )
+    if normal_solution_capture is not None:
+        audit.update(
+            {
+                key: cost_metadata[key]
+                for key in (
+                    "normal_solution_capture_path",
+                    "normal_solution_capture_sha256",
+                    "normal_solution_variable_count",
+                    "normal_solution_variable_name_sha256",
+                    "normal_solution_variable_schema_sha256",
+                    "normal_solution_variable_fixed_schema_sha256",
+                )
+            }
+        )
     return audit, constraint_rows, hourly_rows
 
 
@@ -5636,6 +7249,7 @@ def _solve_c1_configuration(
     deterministic_cost_policy: Mapping[str, Any] | None = None,
     wag_generation_yield_overrides: Mapping[str, float] | None = None,
     bf_electricity_intensity_scale: float = 1.0,
+    normal_solution_capture: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
     inputs = _build_c1_inputs(
         tables,
@@ -5727,6 +7341,7 @@ def _solve_c1_configuration(
             solver=solver,
             configuration_id="C1_phase1_BF_BOF_plus_DRP_EAF",
             deterministic_cost_policy=deterministic_cost_policy,
+            normal_solution_capture=normal_solution_capture,
         )
         if minimize_imported_slab:
             import_minimization_termination = str(result.solver.termination_condition)
@@ -6832,6 +8447,20 @@ def _solve_c1_configuration(
                 else "C1 DRP/EAF scoped physical regression only; retained BF-BOF WAG route not represented in this builder.",
             }
         )
+    if normal_solution_capture is not None:
+        audit.update(
+            {
+                key: cost_metadata[key]
+                for key in (
+                    "normal_solution_capture_path",
+                    "normal_solution_capture_sha256",
+                    "normal_solution_variable_count",
+                    "normal_solution_variable_name_sha256",
+                    "normal_solution_variable_schema_sha256",
+                    "normal_solution_variable_fixed_schema_sha256",
+                )
+            }
+        )
     return audit, constraint_rows, hourly_rows
 
 
@@ -6977,6 +8606,10 @@ def run_s44c_unified_physical_regression(
     c0_aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
     c0_full_site_energy_bridge: Mapping[str, float] | None = None,
     c0_allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
+    normal_solution_capture_by_configuration: Mapping[
+        str, Mapping[str, Any]
+    ]
+    | None = None,
 ) -> dict[str, Any]:
     start = time.perf_counter()
     timestamp = now_utc()
@@ -7122,6 +8755,13 @@ def run_s44c_unified_physical_regression(
             aggregate_generator_technical_interface=c0_aggregate_generator_technical_interface,
             full_site_energy_bridge=c0_full_site_energy_bridge,
             allocation_envelope_diagnostic=c0_allocation_envelope_diagnostic,
+            normal_solution_capture=(
+                normal_solution_capture_by_configuration.get(
+                    "C0_current_BF_BOF_reference"
+                )
+                if normal_solution_capture_by_configuration is not None
+                else None
+            ),
         )
         build_audits.append(c0_audit)
         constraint_audits.extend(c0_constraints)
@@ -7238,6 +8878,13 @@ def run_s44c_unified_physical_regression(
         bf_electricity_intensity_scale=resolved_bf_electricity_scales[
             "C1_phase1_BF_BOF_plus_DRP_EAF"
         ],
+        normal_solution_capture=(
+            normal_solution_capture_by_configuration.get(
+                "C1_phase1_BF_BOF_plus_DRP_EAF"
+            )
+            if normal_solution_capture_by_configuration is not None
+            else None
+        ),
     )
     build_audits.append(c1_audit)
     constraint_audits.extend(c1_constraints)

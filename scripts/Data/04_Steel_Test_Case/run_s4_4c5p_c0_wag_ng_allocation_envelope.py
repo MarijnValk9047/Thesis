@@ -29,6 +29,8 @@ def main() -> int:
     parser.add_argument("--scratch-root", default=None)
     parser.add_argument("--aggregate-only", action="store_true")
     parser.add_argument("--diagnostic-case-id", default=None)
+    parser.add_argument("--diagnostic-replan-index", type=int, default=None)
+    parser.add_argument("--oracle-only", action="store_true")
     args = parser.parse_args()
     if not args.forecast_run_root:
         parser.error("--forecast-run-root or STEEL_DA_FORECAST_RUN_ROOT is required")
@@ -38,6 +40,8 @@ def main() -> int:
         scratch_root=args.scratch_root,
         aggregate_only=args.aggregate_only,
         diagnostic_case_id=args.diagnostic_case_id,
+        diagnostic_replan_index=args.diagnostic_replan_index,
+        oracle_only=args.oracle_only,
     )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0 if summary["status"] in {"pass", "diagnostic_pass"} else 1

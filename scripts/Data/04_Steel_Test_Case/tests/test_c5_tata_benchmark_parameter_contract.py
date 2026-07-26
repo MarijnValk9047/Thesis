@@ -250,6 +250,14 @@ def test_baseline_freeze_hashes_and_overlay_policy():
     freeze = json.loads(FREEZE_PATH.read_text(encoding="utf-8"))
     assert freeze["baseline_status"] == "immutable"
     assert freeze["checkpoint"] == 8
+    reconciliation = freeze["post_freeze_reconciliation"]
+    assert (
+        reconciliation["accepted_diagnostic_lineage"]
+        == "steel_c5_wag_ng_allocation_envelope_v6_20260726"
+    )
+    assert reconciliation["absent_hook_baseline_behaviour_changed"] is False
+    assert reconciliation["physical_parameters_changed"] is False
+    assert reconciliation["candidate_promoted"] is False
     assert "remain may_move=false" in freeze["candidate_policy"]
     assert freeze["identifiability"]["effective_degrees_of_freedom"] == 0
     assert freeze["identifiability"]["calibration_observations"] == 0
@@ -292,6 +300,20 @@ def test_baseline_freeze_hashes_and_overlay_policy():
         path = ROOT / item["path"]
         assert path.is_file()
         payload = path.read_bytes()
+        if item.get("hash_policy") == "semantic_json_excluding_volatile_fields":
+            assert item["volatile_fields"] == ["timestamp_utc"]
+            semantic_payload = json.loads(payload.decode("utf-8"))
+            for field in item["volatile_fields"]:
+                assert field in semantic_payload
+                del semantic_payload[field]
+            canonical = json.dumps(
+                semantic_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+            assert hashlib.sha256(canonical).hexdigest() == item["semantic_sha256"]
+            continue
         assert len(payload) == item["bytes"]
         assert hashlib.sha256(payload).hexdigest() == item["sha256"]
 

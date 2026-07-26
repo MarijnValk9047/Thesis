@@ -1,10 +1,10 @@
-run_id: steel_c5_wag_ng_allocation_envelope_v3_20260725
+run_id: steel_c5_wag_ng_allocation_envelope_v6_20260726
 mode: c0_wag_ng_cost_optimal_allocation_envelope
 checkpoint_id: bounded_development_allocation_envelope_repair
 lineage_role: diagnostic/emulation sensitivity
 run_class: bounded deterministic DEVELOPMENT allocation-envelope repair
 output_policy: minimal
-output_root: data/03_Optimisation/runs/steel_c5_wag_ng_allocation_envelope_v3_20260725
+output_root: data/03_Optimisation/runs/steel_c5_wag_ng_allocation_envelope_v6_20260726
 retention_status: local
 git_eligible: false
 execution_authorized: true
@@ -13,7 +13,18 @@ experiment:
   physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
   mechanism_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_real_anchor_mechanism_experiment.yaml
   mechanism_result_root: data/03_Optimisation/runs/steel_c5_real_anchor_mechanism_experiment_v1_20260723
-  scratch_root: tmp/steel_c5_wag_ng_allocation_envelope_v3_20260725_cases
+  scratch_root: tmp/steel_c5_envelope_v6_cases
+  expected_parent_head: 373d0bbde6ae76466ce8ee76afdc4aa5b93f2e51
+  complete_normal_solution_schema: steel_complete_normal_solution_v2
+  normal_feasibility_oracle_schema: steel_normal_feasibility_oracle_v2
+  absolute_feasibility_tolerance: 1.0e-6
+  endpoint_solver_accuracy_schema: steel_endpoint_solver_accuracy_v1
+  endpoint_relative_mip_gap: 0.0
+  endpoint_absolute_mip_gap_mwh: 0.001
+  endpoint_bound_comparison_epsilon_mwh: 1.0e-9
+  endpoint_annual_bound_uncertainty_limit_mwh_y: 1.0
+  iis_evidence: data/03_Optimisation/runs/steel_c5_wag_ng_allocation_envelope_v4_20260725/iis_summary.json
+  iis_proven_duplicate_constraint: rolling_production_deadline[24]
   candidate_count: 2
   scenario_count: 2
   endpoint_count: 2

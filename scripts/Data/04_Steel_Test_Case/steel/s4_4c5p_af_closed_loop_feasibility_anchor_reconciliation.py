@@ -3654,6 +3654,19 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         and config.get("forecast_price_override_eur_per_mwh") in {None, ""}
     )
     raw_allocation_envelope = config.get("c0_allocation_envelope_diagnostic")
+    raw_normal_solution_capture = config.get("normal_solution_capture")
+    if raw_normal_solution_capture is not None and (
+        not isinstance(raw_normal_solution_capture, Mapping)
+        or raw_normal_solution_capture.get("enabled") is not True
+        or not raw_normal_solution_capture.get("directory")
+        or not isinstance(
+            raw_normal_solution_capture.get("provenance"), Mapping
+        )
+    ):
+        raise ClosedLoopFeasibilityError(
+            "Normal-solution capture requires enabled=true, a directory, and "
+            "complete provenance fingerprints."
+        )
     normal_schedule_by_key: dict[tuple[int, str], Mapping[str, Any]] = {}
     if raw_allocation_envelope is not None:
         if (
@@ -3667,6 +3680,33 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         if float(raw_allocation_envelope.get("state_tolerance", 1e-6)) != 1e-6:
             raise ClosedLoopFeasibilityError(
                 "C0 allocation-envelope state tolerance must remain 1e-6 model units."
+            )
+        if (
+            raw_allocation_envelope.get("endpoint_solver_accuracy_schema")
+            != "steel_endpoint_solver_accuracy_v1"
+            or float(raw_allocation_envelope.get("endpoint_relative_mip_gap", -1.0))
+            != 0.0
+            or float(
+                raw_allocation_envelope.get(
+                    "endpoint_absolute_mip_gap_mwh", -1.0
+                )
+            )
+            != 0.001
+            or float(
+                raw_allocation_envelope.get(
+                    "endpoint_bound_comparison_epsilon_mwh", -1.0
+                )
+            )
+            != 1e-9
+            or float(
+                raw_allocation_envelope.get(
+                    "endpoint_annual_bound_uncertainty_limit_mwh_y", -1.0
+                )
+            )
+            != 1.0
+        ):
+            raise ClosedLoopFeasibilityError(
+                "C0 allocation-envelope endpoint solver-accuracy contract changed."
             )
         raw_schedule = raw_allocation_envelope.get("normal_controller_schedule")
         schedule_hash = str(
@@ -3696,7 +3736,23 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             raise ClosedLoopFeasibilityError(
                 "Current-normal controller schedule contains duplicate keys."
             )
-    for replan_index in range(int(config["replan_count"])):
+    diagnostic_replan_index = config.get("diagnostic_replan_index")
+    oracle_only = bool(
+        raw_allocation_envelope is not None
+        and raw_allocation_envelope.get("oracle_only", False)
+    )
+    if diagnostic_replan_index is not None:
+        diagnostic_replan_index = int(diagnostic_replan_index)
+        if not 0 <= diagnostic_replan_index < int(config["replan_count"]):
+            raise ClosedLoopFeasibilityError(
+                "diagnostic_replan_index lies outside the frozen replan matrix."
+            )
+    replan_indices = (
+        (diagnostic_replan_index,)
+        if diagnostic_replan_index is not None
+        else range(int(config["replan_count"]))
+    )
+    for replan_index in replan_indices:
         if normal_schedule_by_key:
             schedule_rows = {
                 configuration: normal_schedule_by_key[
@@ -3958,8 +4014,74 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                             ]["executed_wag_generator_electricity_mwh"]
                         ),
                     },
+                    "normal_solution_record_path": str(
+                        raw_allocation_envelope[
+                            "normal_solution_records_by_replan"
+                        ][str(replan_index)]["path"]
+                    ),
+                    "normal_solution_record_sha256": str(
+                        raw_allocation_envelope[
+                            "normal_solution_records_by_replan"
+                        ][str(replan_index)]["sha256"]
+                    ),
+                    "normal_solution_expected_provenance": dict(
+                        raw_allocation_envelope[
+                            "normal_solution_records_by_replan"
+                        ][str(replan_index)]["provenance"]
+                    ),
+                    "oracle_directory": str(
+                        Path(
+                            str(
+                                raw_allocation_envelope[
+                                    "failure_evidence_directory"
+                                ]
+                            )
+                        )
+                        / f"oracle_r{replan_index:02d}"
+                    ),
                 }
                 if raw_allocation_envelope is not None
+                else None
+            ),
+            normal_solution_capture_by_configuration=(
+                {
+                    configuration: {
+                        "enabled": True,
+                        "path": str(
+                            Path(
+                                str(raw_normal_solution_capture["directory"])
+                            )
+                            / (
+                                f"normal_solution_replan_{replan_index:02d}__"
+                                f"{configuration}.json.gz"
+                            )
+                        ),
+                        "replan_index": replan_index,
+                        "controller_state": {
+                            "executed_hours_before": executed_hours_so_far,
+                            "start_overrides": dict(
+                                overrides.get(configuration, {})
+                            ),
+                            "cumulative_executed_before_t": cumulative[
+                                configuration
+                            ],
+                            "execution_block_hours": plan.execution_block_hours,
+                            "planning_horizon_hours": (
+                                plan.planning_horizon_hours
+                            ),
+                            "production_progress_contract": dict(
+                                progress_contract[
+                                    "state_by_configuration"
+                                ][configuration]
+                            ),
+                        },
+                        "provenance": dict(
+                            raw_normal_solution_capture["provenance"]
+                        ),
+                    }
+                    for configuration in CONFIGURATIONS
+                }
+                if raw_normal_solution_capture is not None
                 else None
             ),
             solver_time_limit_seconds=float(config.get("solver_time_limit_seconds", 120)),
@@ -3980,6 +4102,90 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             {"replan_index": replan_index, **row}
             for row in report["configuration_build_audit"]
         )
+        if diagnostic_replan_index is not None:
+            c0_oracle_audit = next(
+                row
+                for row in report["configuration_build_audit"]
+                if row["configuration_id"] == C0_CONFIGURATION
+            )
+            oracle_status = c0_oracle_audit.get(
+                "allocation_envelope_normal_feasibility_oracle_status"
+            )
+            resolved = {
+                **config,
+                "scenario_overrides_applied": dict(
+                    scenario_overrides or {}
+                ),
+            }
+            resolved_yaml = yaml.safe_dump(resolved, sort_keys=False)
+            (run_directory / "config_resolved.yaml").write_text(
+                resolved_yaml, encoding="utf-8"
+            )
+            (run_directory / "resolved_config.yaml").write_text(
+                resolved_yaml, encoding="utf-8"
+            )
+            _write_json(
+                run_directory / "input_manifest.json",
+                _input_manifest(config_file, resolved_config=resolved),
+            )
+            _write_json(
+                run_directory / "code_version.json",
+                {
+                    "git_commit": report["git_commit"],
+                    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+            _write_csv(
+                run_directory / "rolling_model_metrics.csv",
+                model_audit_rows,
+            )
+            summary = {
+                "run_id": config["run_id"],
+                "status": (
+                    "oracle_only_pass"
+                    if oracle_only and oracle_status == "pass"
+                    else "oracle_only_fail_closed"
+                    if oracle_only
+                    else "diagnostic_endpoint_pass"
+                    if c0_oracle_audit.get(
+                        "allocation_envelope_termination_condition"
+                    )
+                    == "optimal"
+                    else "diagnostic_endpoint_fail_closed"
+                ),
+                "diagnostic_replan_index": replan_index,
+                "oracle_status": oracle_status,
+                "endpoint_objective_solved": not oracle_only,
+                "endpoint_termination_condition": c0_oracle_audit.get(
+                    "allocation_envelope_termination_condition"
+                ),
+                "endpoint_objective_value_mwh": c0_oracle_audit.get(
+                    "allocation_envelope_objective_value_mwh"
+                ),
+                "normal_solution_variable_count": c0_oracle_audit.get(
+                    "allocation_envelope_normal_solution_variable_count"
+                ),
+                "deactivated_deadline_row": c0_oracle_audit.get(
+                    "allocation_envelope_deactivated_deadline_row"
+                ),
+                "oracle_record_path": c0_oracle_audit.get(
+                    "allocation_envelope_normal_feasibility_oracle_record_path"
+                ),
+                "oracle_record_sha256": c0_oracle_audit.get(
+                    "allocation_envelope_normal_feasibility_oracle_record_sha256"
+                ),
+            }
+            _write_json(run_directory / "run_summary.json", summary)
+            return {
+                "run_directory": run_directory,
+                "summary": summary,
+                "execution_rows": [],
+                "executed_hourly_rows": [],
+                "terminal_inventory_overrides_by_configuration": overrides,
+                "terminal_cumulative_production_t": cumulative,
+                "terminal_executed_hours": executed_hours_so_far,
+                "rolling_timestamp_rows": [rolling_timing_rows[replan_index]],
+            }
         if deterministic_cost_policy is not None:
             planned_cost_ledger = _procurement_cost_ledger(
                 report["hourly_rows"],
