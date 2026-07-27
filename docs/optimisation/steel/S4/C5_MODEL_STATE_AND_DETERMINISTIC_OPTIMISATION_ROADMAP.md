@@ -2,7 +2,7 @@
 
 ## Decision in one sentence
 
-Current gate: `phase2_athanasiadis_sale_sensitivity_complete_phase3_bounded_robustness_go`. Phase 2 is complete and independently reviewed PASS. The Athanasiadis sale sensitivity is retained only as a bounded diagnostic/emulation sensitivity, and no candidate was promoted. Phase 3 bounded robustness work is GO under separate authorization. No whole-period economic-uplift claim is permitted until terminal-inventory equivalence is established or a defensible terminal-value bridge is accepted. Bidding, settlement, ETS, stochasticity, CVaR and mFRR remain unauthorised.
+Current gate: `phase3_bounded_operation_route_robustness_complete_next_terminal_inventory_equivalence`. Phase 2 remains independently reviewed PASS and Phase 3 completed its separately authorized DEVELOPMENT audit with 6/6 accepted outcomes, 12/12 configuration trajectories and 84/84 attempted models. The free C1 route and 45-55% BOF-share band are feasible; the exact 3.4/6.75 BOF-share sensitivity is solver-proven infeasible in every C1 replan under both development weeks and is not promoted. No whole-period economic-uplift claim is permitted until terminal-inventory equivalence is established or a defensible terminal-value bridge is accepted. Bidding, settlement, ETS, stochasticity, CVaR and mFRR remain unauthorised.
 
 The fixed-reference deterministic procurement-cost path, pre-DAM
 operational-hardening validation, bounded VN25 development response and
@@ -773,6 +773,22 @@ remains `emulation_sensitivity_only` and nonpromoted. Results are weighted
 annual equivalents from representative held-out weeks, not an annual backtest.
 The next bounded thesis gate is terminal-inventory equivalence and a
 terminal-inventory value bridge before any economic-uplift claim.
+
+The bounded Phase-3 operation/route robustness audit
+`steel_c5_phase3_operation_route_robustness_v1_20260727` then used only the
+calm and volatile DEVELOPMENT weeks. It completed the fixed cap of six rolling
+cases, 12 C0/C1 trajectories and 84 models with no implementation failure.
+The free-route reference and the source-informed 45-55% BOF-share band passed
+both weeks. Their realised C1 BOF shares were approximately 50.75-50.82%, so
+the band did not materially displace the accepted endogenous route. Forcing
+the exact 50.3703704% BOF ratio made all seven C1 replans infeasible in both
+weeks while the paired C0 replans remained optimal; this is retained as a
+physical robustness finding, not a task failure or calibration target.
+BF6/BF7 central behaviour was reported, but BF capacity/rate perturbations
+were not run because the active runner exposes no permitted override without
+changing the model builder or canonical inputs. The run is diagnostic,
+nonpromoted and makes no economic-uplift claim. The next gate therefore
+remains terminal-inventory equivalence and a defensible terminal-value bridge.
 
 The subsequent bounded DEVELOPMENT-only C0 mechanism experiment keeps the
 accepted physical interface structurally invariant and leaves the held-out
