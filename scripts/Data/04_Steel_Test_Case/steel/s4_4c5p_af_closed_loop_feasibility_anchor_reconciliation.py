@@ -467,6 +467,7 @@ def _deterministic_cost_policy(
     cost_rows: Collection[Mapping[str, str]],
     *,
     horizon_hours: int,
+    nominal_forecast_horizon_hours: int | None = None,
     replan_index: int = 0,
     execution_block_hours: int = 24,
 ) -> dict[str, Any] | None:
@@ -496,10 +497,17 @@ def _deterministic_cost_policy(
             "grid_electricity_flat_nl", "development_central"
         )
     )
+    forecast_horizon_hours = int(
+        nominal_forecast_horizon_hours or horizon_hours
+    )
+    if forecast_horizon_hours < horizon_hours:
+        raise ClosedLoopFeasibilityError(
+            "The nominal forecast horizon cannot be shorter than the physical plan."
+        )
     electricity_price_slice = build_rolling_price_slice(
         price_series_id=price_series_id,
         replan_index=replan_index,
-        planning_horizon_hours=horizon_hours,
+        planning_horizon_hours=forecast_horizon_hours,
         execution_block_hours=execution_block_hours,
         flat_scenario_id=grid_scenario_id,
         external_series_path=config.get("electricity_price_series_path"),
@@ -514,6 +522,7 @@ def _deterministic_cost_policy(
             config.get("perfect_foresight_oracle", False)
         ),
     )
+    electricity_price_slice = electricity_price_slice[:horizon_hours]
     real_anchor_c0_cost_flow_ids = {
         "C0_NG_GENERATOR",
         "C0_NG_FIXED_FULL_SITE",
@@ -1630,6 +1639,91 @@ def _reference_definition(
     return definition_rows, c0_routing, bands("C1")
 
 
+def _campaign_progress_reference_routing(
+    routing: Mapping[str, Any] | None,
+    *,
+    definition_rows: Collection[Mapping[str, Any]],
+    configuration: str,
+    executed_rows: Collection[Mapping[str, Any]],
+    executed_hours_before: int,
+    deadline_hours: Collection[int],
+) -> dict[str, Any] | None:
+    """Convert local route bands to cumulative campaign-progress bands."""
+
+    if routing is None or routing.get("reference_validation_bands") is None:
+        return None if routing is None else dict(routing)
+    configuration_label = "C0" if configuration == C0_CONFIGURATION else "C1"
+    field_by_metric = {
+        C0_CONFIGURATION: {
+            "bof_liquid_steel": "C0_BOF_crude_steel_output_t",
+            "hsm_final_output": "C0_HSM_final_product_t",
+            "dsp_final_output": "C0_DSP_final_product_t",
+        },
+        C1_CONFIGURATION: {
+            "bof_liquid_steel": "C1_BOF_liquid_steel_output_t_h",
+            "eaf_liquid_steel": "C1_EAF_liquid_steel_output_t_h",
+            "hsm_final_output": "C1_HSM_final_product_output_t",
+            "dsp_final_output": "C1_DSP_final_product_output_t",
+            "imported_slab": "C1_imported_slab_to_HSM_t_h",
+        },
+    }[configuration]
+    definitions = {
+        str(row["metric"]): row
+        for row in definition_rows
+        if str(row.get("configuration")) == configuration_label
+    }
+    deadlines = sorted({int(value) for value in deadline_hours})
+    if not deadlines:
+        raise ClosedLoopFeasibilityError(
+            "Campaign-progress route bands require deadline hours."
+        )
+    rows = [
+        row for row in executed_rows
+        if row.get("configuration_id") == configuration
+    ]
+    final_bands: dict[str, dict[str, float]] = {}
+    deadline_bands: dict[str, dict[int, dict[str, float]]] = {}
+    for metric in routing["reference_validation_bands"]:
+        if metric not in definitions or metric not in field_by_metric:
+            raise ClosedLoopFeasibilityError(
+                f"Campaign-progress route definition is missing for {configuration}/{metric}."
+            )
+        definition = definitions[metric]
+        executed_value = sum(
+            float(row.get(field_by_metric[metric]) or 0.0) for row in rows
+        )
+        annual_lower_t = float(definition["annual_band_lower_mt_y"]) * 1_000_000.0
+        annual_upper_t = float(definition["annual_band_upper_mt_y"]) * 1_000_000.0
+        metric_deadlines: dict[int, dict[str, float]] = {}
+        for deadline in deadlines:
+            absolute_hour = int(executed_hours_before) + deadline
+            lower_t = max(
+                0.0,
+                annual_lower_t * absolute_hour / HOURS_PER_YEAR - executed_value,
+            )
+            upper_t = (
+                annual_upper_t * absolute_hour / HOURS_PER_YEAR - executed_value
+            )
+            if upper_t < lower_t - TOLERANCE_T:
+                raise ClosedLoopFeasibilityError(
+                    f"Executed {configuration}/{metric} progress is outside the "
+                    "remaining campaign band."
+                )
+            metric_deadlines[deadline] = {
+                "lower_t": lower_t,
+                "upper_t": max(lower_t, upper_t),
+            }
+        deadline_bands[metric] = metric_deadlines
+        final_bands[metric] = dict(metric_deadlines[deadlines[-1]])
+    resolved = dict(routing)
+    resolved["reference_validation_bands"] = final_bands
+    resolved["reference_deadline_bands"] = deadline_bands
+    resolved["reference_band_progress_policy"] = (
+        "cumulative_campaign_progress_subtract_executed_route_quantities"
+    )
+    return resolved
+
+
 def _downstream_origin_routing(
     config: Mapping[str, Any], *, horizon_hours: int, reference_bands: Mapping[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -1708,23 +1802,27 @@ def _scrap_supply_ledger(
         if deadline_hours is not None
         else range(execution_block_hours, horizon_hours, execution_block_hours)
     )
-    return {
+    ledger = {
         "site_total_scrap_supply_cap_t": annual["annual_site_scrap_cap_t_y"] * scale,
         "bof_scrap_supply_cap_t": annual["annual_bof_scrap_cap_t_y"] * scale,
         "eaf_scrap_supply_cap_t": annual["annual_eaf_scrap_cap_t_y"] * scale,
-        "site_total_scrap_supply_deadline_caps_t": {
+    }
+    if deadlines:
+        ledger.update({
+            "site_total_scrap_supply_deadline_caps_t": {
             deadline: annual["annual_site_scrap_cap_t_y"] * deadline / HOURS_PER_YEAR
             for deadline in deadlines
-        },
-        "bof_scrap_supply_deadline_caps_t": {
+            },
+            "bof_scrap_supply_deadline_caps_t": {
             deadline: annual["annual_bof_scrap_cap_t_y"] * deadline / HOURS_PER_YEAR
             for deadline in deadlines
-        },
-        "eaf_scrap_supply_deadline_caps_t": {
+            },
+            "eaf_scrap_supply_deadline_caps_t": {
             deadline: annual["annual_eaf_scrap_cap_t_y"] * deadline / HOURS_PER_YEAR
             for deadline in deadlines
-        },
-    }
+            },
+        })
+    return ledger
 
 
 def _user_authorized_emulation_overlays(
@@ -1957,13 +2055,77 @@ def _rolling_production_progress_contract(
     }
 
 
+def campaign_terminal_timestamp_plan(
+    timing: Mapping[str, Any],
+    *,
+    remaining_terminal_hours: int,
+) -> dict[str, Any]:
+    """Truncate a D-D+4 plan to a complete-day campaign endpoint."""
+
+    horizon = int(timing["planning_horizon_hours"])
+    remaining = int(remaining_terminal_hours)
+    resolved = dict(timing)
+    resolved["nominal_planning_horizon_hours"] = horizon
+    resolved["campaign_terminal_endpoint_active"] = 0 < remaining <= horizon
+    resolved["campaign_terminal_horizon_truncated"] = False
+    if remaining > horizon:
+        return resolved
+    if remaining <= 0:
+        raise ClosedLoopFeasibilityError(
+            "The campaign terminal must remain after the current replan start."
+        )
+    deadlines = [
+        int(value)
+        for value in timing["cumulative_deadline_hours"]
+        if int(value) <= remaining
+    ]
+    if not deadlines or deadlines[-1] != remaining:
+        raise ClosedLoopFeasibilityError(
+            "Campaign-terminal horizon truncation must end on a complete local "
+            "delivery-day boundary."
+        )
+    day_count = len(deadlines)
+    resolved.update(
+        {
+            "planning_horizon_hours": remaining,
+            "cumulative_deadline_hours": deadlines,
+            "local_delivery_dates": list(timing["local_delivery_dates"])[
+                :day_count
+            ],
+            "local_delivery_day_hours": list(
+                timing["local_delivery_day_hours"]
+            )[:day_count],
+            "campaign_terminal_horizon_truncated": remaining < horizon,
+        }
+    )
+    return resolved
+
+
 def _rolling_plans_from_config(
     config: Mapping[str, Any],
 ) -> tuple[list[Any], list[dict[str, Any]]]:
     """Resolve fixed or timestamp-derived rolling plans before any solve."""
 
     replan_count = int(config["replan_count"])
+    terminal_band_enabled = bool(
+        config.get("terminal_inventory_band_by_configuration")
+    )
+    expected_terminal_policy = (
+        "truncate_at_campaign_endpoint_and_replace_cyclic_inventory_equalities"
+    )
+    if terminal_band_enabled and config.get(
+        "terminal_inventory_horizon_policy"
+    ) != expected_terminal_policy:
+        raise ClosedLoopFeasibilityError(
+            "A terminal inventory band requires the governed horizon-truncation "
+            "and cyclic-replacement policy."
+        )
     if not bool(config.get("timestamped_dplus4_rolling_enabled", False)):
+        if terminal_band_enabled:
+            raise ClosedLoopFeasibilityError(
+                "Campaign-terminal horizon truncation is implemented only for "
+                "timestamp-derived D-D+4 plans."
+            )
         plan = build_rolling_production_quota_plan(
             planning_horizon_hours=int(config["planning_horizon_hours"]),
             execution_block_hours=int(config["execution_block_hours"]),
@@ -1999,6 +2161,8 @@ def _rolling_plans_from_config(
         )
     plans: list[Any] = []
     timing_rows: list[dict[str, Any]] = []
+    executed_hours_before = int(config.get("initial_executed_hours", 0))
+    terminal_hours_target = config.get("terminal_executed_hours_target")
     for replan_index in range(replan_count):
         forecast_rows = build_dplus4_forecast_slice(
             forecast_run_root=config.get("forecast_run_root"),
@@ -2007,7 +2171,24 @@ def _rolling_plans_from_config(
             replan_index=replan_index,
             planning_horizon_hours=None,
         )
-        timing = dplus4_timestamp_plan(forecast_rows)
+        nominal_timing = dplus4_timestamp_plan(forecast_rows)
+        timing = dict(nominal_timing)
+        timing["nominal_planning_horizon_hours"] = int(
+            nominal_timing["planning_horizon_hours"]
+        )
+        timing["campaign_terminal_endpoint_active"] = False
+        timing["campaign_terminal_horizon_truncated"] = False
+        if terminal_band_enabled:
+            if terminal_hours_target in {None, ""}:
+                raise ClosedLoopFeasibilityError(
+                    "A terminal inventory band requires terminal_executed_hours_target."
+                )
+            timing = campaign_terminal_timestamp_plan(
+                nominal_timing,
+                remaining_terminal_hours=(
+                    int(terminal_hours_target) - executed_hours_before
+                ),
+            )
         plan = build_timestamped_rolling_production_quota_plan(
             planning_horizon_hours=int(timing["planning_horizon_hours"]),
             execution_block_hours=int(timing["execution_block_hours"]),
@@ -2022,10 +2203,15 @@ def _rolling_plans_from_config(
                 "delivery_start_utc": forecast_rows[0][
                     "delivery_timestamp_utc"
                 ],
-                "delivery_end_utc": forecast_rows[-1][
+                "delivery_end_utc": forecast_rows[
+                    plan.planning_horizon_hours - 1
+                ][
                     "delivery_timestamp_utc"
                 ],
                 "planning_horizon_hours": plan.planning_horizon_hours,
+                "nominal_planning_horizon_hours": timing[
+                    "nominal_planning_horizon_hours"
+                ],
                 "execution_block_hours": plan.execution_block_hours,
                 "cumulative_deadline_hours": ";".join(
                     str(value)
@@ -2038,9 +2224,35 @@ def _rolling_plans_from_config(
                     str(value) for value in timing["local_delivery_day_hours"]
                 ),
                 "duration_basis": "actual_UTC_hours_by_local_delivery_day",
+                "campaign_terminal_endpoint_active": timing[
+                    "campaign_terminal_endpoint_active"
+                ],
+                "campaign_terminal_horizon_truncated": timing[
+                    "campaign_terminal_horizon_truncated"
+                ],
             }
         )
+        executed_hours_before += plan.execution_block_hours
     return plans, timing_rows
+
+
+def terminal_inventory_activation_hour(
+    *,
+    terminal_executed_hours_target: int,
+    executed_hours_so_far: int,
+    planning_horizon_hours: int,
+) -> int | None:
+    """Return the one-based in-plan campaign endpoint when it is reachable."""
+
+    terminal = int(terminal_executed_hours_target)
+    executed = int(executed_hours_so_far)
+    horizon = int(planning_horizon_hours)
+    if terminal <= 0 or executed < 0 or horizon <= 0:
+        raise ClosedLoopFeasibilityError(
+            "Terminal activation requires positive terminal/horizon hours and non-negative execution."
+        )
+    remaining = terminal - executed
+    return remaining if 0 < remaining <= horizon else None
 
 
 def _write_unsolved_run(
@@ -4088,6 +4300,35 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         for configuration in CONFIGURATIONS
     }
     cumulative = dict(initial_cumulative)
+    raw_terminal_inventory_band = config.get(
+        "terminal_inventory_band_by_configuration", {}
+    )
+    if not isinstance(raw_terminal_inventory_band, Mapping) or any(
+        not isinstance(values, Mapping)
+        for values in raw_terminal_inventory_band.values()
+    ):
+        raise ClosedLoopFeasibilityError(
+            "terminal_inventory_band_by_configuration must be a mapping of mappings."
+        )
+    terminal_inventory_band = {
+        str(configuration): {
+            str(state_id): {
+                str(bound_id): float(bound_value)
+                for bound_id, bound_value in dict(raw_bounds).items()
+            }
+            for state_id, raw_bounds in values.items()
+        }
+        for configuration, values in raw_terminal_inventory_band.items()
+    }
+    if terminal_inventory_band and config.get("terminal_executed_hours_target") in {None, ""}:
+        raise ClosedLoopFeasibilityError(
+            "A terminal inventory band requires terminal_executed_hours_target."
+        )
+    terminal_inventory_band_fingerprint = (
+        exact_input_fingerprint(terminal_inventory_band)
+        if terminal_inventory_band
+        else "not_configured"
+    )
     initial_executed_hours = int(config.get("initial_executed_hours", 0))
     if initial_executed_hours < 0:
         raise ClosedLoopFeasibilityError(
@@ -4302,6 +4543,27 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         )
         if str(config.get("execution_mode", "")).startswith("fixed_reference"):
             reference_deadlines = sorted(plan.cumulative_deadline_targets_t)
+            if bool(
+                rolling_timing_rows[replan_index].get(
+                    "campaign_terminal_endpoint_active", False
+                )
+            ):
+                c0_reference_routing = _campaign_progress_reference_routing(
+                    c0_reference_routing,
+                    definition_rows=current_reference_definition_rows,
+                    configuration=C0_CONFIGURATION,
+                    executed_rows=executed_hourly_rows,
+                    executed_hours_before=executed_hours_so_far,
+                    deadline_hours=reference_deadlines,
+                )
+                downstream_origin_routing = _campaign_progress_reference_routing(
+                    downstream_origin_routing,
+                    definition_rows=current_reference_definition_rows,
+                    configuration=C1_CONFIGURATION,
+                    executed_rows=executed_hourly_rows,
+                    executed_hours_before=executed_hours_so_far,
+                    deadline_hours=reference_deadlines,
+                )
             if c0_reference_routing is not None:
                 c0_reference_routing["reference_band_deadline_hours"] = (
                     reference_deadlines
@@ -4331,10 +4593,10 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             remaining_terminal_hours = int(terminal_hours_target) - int(
                 executed_hours_so_far
             )
-            exact_deadline_hour = (
-                remaining_terminal_hours
-                if 0 < remaining_terminal_hours <= plan.planning_horizon_hours
-                else None
+            exact_deadline_hour = terminal_inventory_activation_hour(
+                terminal_executed_hours_target=int(terminal_hours_target),
+                executed_hours_so_far=executed_hours_so_far,
+                planning_horizon_hours=plan.planning_horizon_hours,
             )
             terminal_exact = exact_deadline_hour is not None
             hard_exact_execution_target = (
@@ -4387,6 +4649,12 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             config,
             future_cost_boundary_contract,
             horizon_hours=plan.planning_horizon_hours,
+            nominal_forecast_horizon_hours=int(
+                rolling_timing_rows[replan_index].get(
+                    "nominal_planning_horizon_hours",
+                    plan.planning_horizon_hours,
+                )
+            ),
             replan_index=replan_index,
             execution_block_hours=plan.execution_block_hours,
         )
@@ -4523,6 +4791,16 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             rolling_production_exact_deadline_hour=exact_deadline_hour,
             rolling_production_exact_deadline_target_by_configuration_t=exact_deadline_targets,
             initial_inventory_overrides_by_configuration=overrides or None,
+            rolling_terminal_inventory_hour=(
+                exact_deadline_hour
+                if terminal_inventory_band and exact_deadline_hour is not None
+                else None
+            ),
+            rolling_terminal_inventory_bounds_by_configuration=(
+                terminal_inventory_band
+                if terminal_inventory_band and exact_deadline_hour is not None
+                else None
+            ),
             fix_c1_hybrid_schedule=c1_route_policy == "bottom_up_fixed_retained_route",
             c1_retained_route_policy=c1_route_policy,
             commitment_granularity=str(config.get("commitment_granularity", "hourly_binary")),
@@ -4929,6 +5207,11 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             )
             raise ClosedLoopFeasibilityError(
                 "Gate-1 C0 regressed during rolling execution; no handoff is valid: "
+                f"replan_index={replan_index}, "
+                f"executed_hours_before={executed_hours_so_far}, "
+                f"planning_horizon_hours={plan.planning_horizon_hours}, "
+                f"terminal_inventory_band_active={bool(terminal_inventory_band and exact_deadline_hour is not None)}, "
+                f"terminal_hour_in_plan={exact_deadline_hour}, "
                 f"build_status={c0_audit.get('build_status')}, "
                 f"solver_status={c0_audit.get('solver_status')}, "
                 f"termination={c0_audit.get('termination_condition')}, "
@@ -5014,6 +5297,19 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                         else "production_progress_then_represented_procurement_cost_then_physical_tie_break"
                         if deterministic_cost_policy is not None
                         else "rolling_production_progress_then_physical_tie_break"
+                    ),
+                    "terminal_inventory_band_active": bool(
+                        terminal_inventory_band
+                        and exact_deadline_hour is not None
+                    ),
+                    "terminal_inventory_band_hour": (
+                        exact_deadline_hour
+                        if terminal_inventory_band
+                        and exact_deadline_hour is not None
+                        else ""
+                    ),
+                    "terminal_inventory_band_fingerprint_sha256": (
+                        terminal_inventory_band_fingerprint
                     ),
                 }
             )

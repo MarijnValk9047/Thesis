@@ -23,6 +23,7 @@ from steel.s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation import (
     _annual_origin_ledger,
     _annual_c0_downstream_origin_ledger,
     _anchor_rows,
+    _campaign_progress_reference_routing,
     _downstream_origin_routing,
     _execution_material_residuals,
     _file_fingerprints,
@@ -49,6 +50,7 @@ from steel.s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation import (
     _procurement_cost_summaries,
     _validate_required_solver_family,
 )
+import steel.s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation as closed_loop
 from steel.validation_tolerance_policy import hourly_money_identity_record
 from steel.s4_4c_component_ontology import (
     FUTURE_DETERMINISTIC_COST_RESULT_FIELDS,
@@ -250,6 +252,47 @@ def test_gate2_cases_keep_zero_import_and_mer_cap_separate() -> None:
     assert "eaf_dsp_share" not in mer
 
 
+def test_campaign_progress_reference_bands_subtract_executed_route_output() -> None:
+    routing = {
+        "reference_validation_bands": {
+            "bof_liquid_steel": {"lower_t": 1.0, "upper_t": 2.0},
+        }
+    }
+    definitions = [
+        {
+            "configuration": "C0",
+            "metric": "bof_liquid_steel",
+            "annual_band_lower_mt_y": 7.0,
+            "annual_band_upper_mt_y": 7.1,
+        }
+    ]
+    executed = 7_000_000.0 * 48.0 / 8760.0 - 10.0
+    resolved = _campaign_progress_reference_routing(
+        routing,
+        definition_rows=definitions,
+        configuration="C0_current_BF_BOF_reference",
+        executed_rows=[
+            {
+                "configuration_id": "C0_current_BF_BOF_reference",
+                "C0_BOF_crude_steel_output_t": executed,
+            }
+        ],
+        executed_hours_before=48,
+        deadline_hours=[24, 48],
+    )
+
+    assert resolved is not None
+    first = resolved["reference_deadline_bands"]["bof_liquid_steel"][24]
+    final = resolved["reference_deadline_bands"]["bof_liquid_steel"][48]
+    assert first["lower_t"] == pytest.approx(
+        7_000_000.0 * 72.0 / 8760.0 - executed
+    )
+    assert final["upper_t"] == pytest.approx(
+        7_100_000.0 * 96.0 / 8760.0 - executed
+    )
+    assert resolved["reference_validation_bands"]["bof_liquid_steel"] == final
+
+
 def test_gate2_downstream_overrides_stay_inside_governed_source_ranges() -> None:
     routing = _downstream_origin_routing(
         {
@@ -297,6 +340,26 @@ def test_gate2_named_scrap_caps_convert_from_annual_to_rolling_horizon() -> None
         - 1_900_000.0 * 24 / 8760
     ) < 1e-9
     assert 168 not in ledger["site_total_scrap_supply_deadline_caps_t"]
+
+
+def test_single_execution_day_scrap_ledger_uses_only_static_horizon_caps() -> None:
+    ledger = _scrap_supply_ledger(
+        {
+            "scrap_supply_ledger": {
+                "annual_site_scrap_cap_t_y": 1_900_000.0,
+                "annual_bof_scrap_cap_t_y": 1_000_000.0,
+                "annual_eaf_scrap_cap_t_y": 1_800_000.0,
+            }
+        },
+        horizon_hours=24,
+        execution_block_hours=24,
+        deadline_hours=[24],
+    )
+    assert ledger is not None
+    assert "site_total_scrap_supply_deadline_caps_t" not in ledger
+    assert ledger["site_total_scrap_supply_cap_t"] == pytest.approx(
+        1_900_000.0 * 24 / 8760
+    )
 
 
 def test_gate3_boundary_ledger_keeps_residuals_and_mode_b_out_of_dispatch() -> None:
@@ -458,6 +521,41 @@ def test_procurement_cost_ledger_reconciles_component_route_and_configuration() 
     assert sum(float(item["cost_eur"]) for item in routes) == pytest.approx(
         summaries[0]["executed_procurement_cost_eur"]
     )
+
+
+def test_cost_policy_validates_full_forecast_then_uses_truncated_prefix(
+    monkeypatch,
+) -> None:
+    config = _config(
+        STEEL_ROOT / "configs" / "steel_hourly_da_dplus4_point_forecast_integration.yaml"
+    )
+    captured: dict[str, int] = {}
+
+    def fake_price_slice(**kwargs):
+        captured["planning_horizon_hours"] = int(
+            kwargs["planning_horizon_hours"]
+        )
+        return [
+            {"price_eur_per_mwh_e": float(hour)} for hour in range(120)
+        ]
+
+    monkeypatch.setattr(closed_loop, "build_rolling_price_slice", fake_price_slice)
+    policy = _deterministic_cost_policy(
+        config,
+        load_future_cost_boundary_contract(),
+        horizon_hours=96,
+        nominal_forecast_horizon_hours=120,
+        replan_index=3,
+    )
+    assert policy is not None
+    assert captured["planning_horizon_hours"] == 120
+    grid_flows = [
+        row for row in policy["flows"]
+        if row["price_id"] == "grid_electricity_flat_nl"
+    ]
+    assert grid_flows
+    assert all(len(row["price_eur_by_hour"]) == 96 for row in grid_flows)
+    assert all(row["price_eur_by_hour"][-1] == 95.0 for row in grid_flows)
 
 
 def test_gate3_anchor_family_summary_counts_primary_and_context_separately() -> None:

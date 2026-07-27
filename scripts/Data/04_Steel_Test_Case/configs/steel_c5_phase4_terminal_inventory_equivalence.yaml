@@ -1,0 +1,104 @@
+run_id: steel_c5_phase4_reachability_aware_terminal_band_v3_20260727
+mode: development_reachability_aware_terminal_band_cyclic_replacement
+checkpoint_id: phase4_reachability_aware_terminal_band_cyclic_replacement
+lineage_role: nonpromoted_corrected_child_of_phase4_v2_structural_diagnosis
+run_class: DEVELOPMENT_reachability_aware_terminal_band_cyclic_replacement_gate
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_phase4_reachability_aware_terminal_band_v3_20260727
+execution_authorized: true
+
+phase4:
+  physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
+  forecast_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_component_ontology/c5_hourly_da_dplus4_forecast_source_contract.yaml
+  forecast_run_root: ../Thesis/data/02_Forecasting/01_DA_prices/hourly_da/runs_lago_lear/20260706_024807_lago_lear_six_year_benchmark
+  phase3_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase3_operation_route_robustness.yaml
+  phase3_summary: data/03_Optimisation/runs/steel_c5_phase3_operation_route_robustness_v1_20260727/run_summary.json
+  phase4_v1_summary: data/03_Optimisation/runs/steel_c5_phase4_terminal_inventory_equivalence_v1_20260727/run_summary.json
+  phase4_v2_summary: data/03_Optimisation/runs/steel_c5_phase4_reachability_aware_terminal_band_v2_20260727/run_summary.json
+  scratch_root: tmp/steel_c5_phase4_reachability_aware_terminal_band_v3_20260727_cases
+  expected_rolling_case_count: 6
+  expected_target_selection_case_count: 2
+  expected_configuration_trajectory_count: 12
+  maximum_model_count: 84
+  replans_per_case: 7
+  held_out_periods_used: false
+  candidate_promoted: false
+  result_label: development_common_terminal_band_1pct_cyclic_replacement_cost_comparison
+  terminal_target_policy: price_insensitive_final_executed_hour_before_responsive_results
+  terminal_reachability_policy: activate_when_campaign_endpoint_enters_D_Dplus4_physical_horizon
+  terminal_inventory_horizon_policy: truncate_at_campaign_endpoint_and_replace_cyclic_inventory_equalities
+  terminal_band_fraction: 0.01
+  zero_target_policy: exact_zero
+  terminal_band_width_search_allowed: false
+  terminal_state_tolerance_policy:
+    policy_id: steel_unit_purpose_validation_tolerance
+    policy_version: v2_20260727
+    policy_fingerprint_sha256: 56b91f71ed9f4ac6268f0d6089a80e1c00a5b5712d60bdb8885fb8e4f20e63d3
+
+  development_periods:
+    - period_id: validation_2024-02-12
+      dataset_split: validation
+      period_role: development
+      frozen_forecast_start_origin_utc: '2024-02-11T07:00:00+00:00'
+    - period_id: validation_2024-07-01
+      dataset_split: validation
+      period_role: development
+      frozen_forecast_start_origin_utc: '2024-06-30T06:00:00+00:00'
+
+  strategies:
+    - strategy_id: price_insensitive_reference
+      price_field: y_pred
+      flat_price_eur_per_mwh: 80.0
+      perfect_foresight_oracle: false
+    - strategy_id: governed_dplus4_y_pred
+      price_field: y_pred
+      flat_price_eur_per_mwh:
+      perfect_foresight_oracle: false
+    - strategy_id: perfect_foresight_y_true_oracle
+      price_field: y_true
+      flat_price_eur_per_mwh:
+      perfect_foresight_oracle: true
+
+  accepted_central_boundary:
+    candidate_id: recovery_bg30_ng55
+    site_background_electricity_mwh_h_by_configuration:
+      C0_current_BF_BOF_reference: 108.56164383561644
+      C1_phase1_BF_BOF_plus_DRP_EAF: 0.0
+    ng_price_scenario_id: development_central
+    ng_price_eur_per_mwh_lhv: 55.0
+    wag_generation_yield_overrides_by_configuration: {}
+    named_process_electricity_intensity_scales_by_configuration: {}
+    first_order_co2_constant_mt_y_by_configuration:
+      C0_current_BF_BOF_reference: 0.0
+      C1_phase1_BF_BOF_plus_DRP_EAF: 0.0
+
+  recovery_interface:
+    c0_aggregate_generator_technical_interface:
+      enabled: true
+      electricity_efficiency: 0.345
+      total_fuel_volume_cap_nm3_h: 900000.0
+      electrical_capacity_mw: 770.0
+      natural_gas_lhv_mj_per_nm3: 35.8
+      export_allowed: false
+    c0_full_site_energy_bridge:
+      enabled: true
+      inferred_low_case_full_site_ng_floor_pj_y: 8.005
+      already_represented_fixed_ng_pj_y: 0.0
+      already_represented_fixed_ng_component_id: none_identified
+      already_represented_fixed_ng_derivation: explicit_zero_no_represented_fixed_full_site_ng_component_identified
+      flexible_other_site_heat_service_envelope_pj_y: 3.07
+      normal_case_flexible_ng_validation_reference_pj_y: 1.65
+
+  scope_lock:
+    free_c1_route_required: true
+    exact_route_cases_allowed: false
+    route_sensitivities_allowed: false
+    bf_capacity_variants_allowed: false
+    held_out_periods_allowed: false
+    market_bidding_or_settlement_allowed: false
+    export_or_sale_allowed: false
+    stochasticity_or_cvar_allowed: false
+    co2_or_ets_allowed: false
+    product_revenue_allowed: false
+    annualisation_allowed: false
+    maximum_narrow_repairs: 1

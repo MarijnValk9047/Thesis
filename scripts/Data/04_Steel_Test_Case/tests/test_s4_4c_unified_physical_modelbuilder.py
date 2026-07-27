@@ -79,6 +79,28 @@ def test_fixed_reference_deadlines_constrain_cumulative_quantity_not_hourly_prof
     assert value(model.test_reference_route_24h_upper.upper) == 264.0
     assert all(not variable.fixed for variable in model.route_output.values())
 
+    progress_model = ConcreteModel()
+    progress_model.TIME = RangeSet(0, 47)
+    progress_model.route_output = Var(
+        progress_model.TIME, domain=NonNegativeReals
+    )
+    _add_reference_cumulative_deadline_bands(
+        progress_model,
+        constraint_prefix="progress_reference",
+        hourly_expressions={"route": progress_model.route_output},
+        bands={"route": {"lower_t": 480.0, "upper_t": 528.0}},
+        deadline_hours=[24, 48],
+        horizon_hours=48,
+        explicit_deadline_bands={
+            "route": {
+                24: {"lower_t": 210.0, "upper_t": 230.0},
+                48: {"lower_t": 470.0, "upper_t": 500.0},
+            }
+        },
+    )
+    assert value(progress_model.progress_reference_route_24h_lower.lower) == 210.0
+    assert value(progress_model.progress_reference_route_48h_upper.upper) == 500.0
+
 
 def test_rolling_progress_is_one_block_deviation_objective_not_fixed_profile():
     model = ConcreteModel()

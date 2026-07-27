@@ -2,7 +2,7 @@
 
 ## Decision in one sentence
 
-Current gate: `phase3_bounded_operation_route_robustness_complete_next_terminal_inventory_equivalence`. Phase 2 remains independently reviewed PASS and Phase 3 completed its separately authorized DEVELOPMENT audit with 6/6 accepted outcomes, 12/12 configuration trajectories and 84/84 attempted models. The free C1 route and 45-55% BOF-share band are feasible; the exact 3.4/6.75 BOF-share sensitivity is solver-proven infeasible in every C1 replan under both development weeks and is not promoted. No whole-period economic-uplift claim is permitted until terminal-inventory equivalence is established or a defensible terminal-value bridge is accepted. Bidding, settlement, ETS, stochasticity, CVaR and mFRR remain unauthorised.
+Current gate: `phase4_reachability_aware_1pct_terminal_band_pass_next_governed_deterministic_response_interpretation`. Phase 2 remains independently reviewed PASS and Phase 3 completed its separately authorized DEVELOPMENT audit with 6/6 accepted outcomes, 12/12 configuration trajectories and 84/84 attempted models. Corrected Phase 4 freezes each DEVELOPMENT period's price-insensitive final executed-hour vector, uses an unsearched per-state +/-1% operational-equivalence band, truncates the look-ahead at the campaign endpoint, replaces conflicting cyclic endpoint equalities and carries cumulative route progress across replans. All 6/6 cases, 12/12 C0/C1 trajectories and 84/84 models pass with zero terminal-band excess and passing physical/accounting checks, so a bounded DEVELOPMENT represented-cost comparison is authorized. The free C1 route remains central and the exact 3.4/6.75 BOF-share sensitivity remains infeasible and nonpromoted. No annual, held-out, market-revenue or thesis-wide economic-uplift claim follows. Bidding, settlement, ETS, stochasticity, CVaR and mFRR remain unauthorised.
 
 The fixed-reference deterministic procurement-cost path, pre-DAM
 operational-hardening validation, bounded VN25 development response and
@@ -789,6 +789,61 @@ were not run because the active runner exposes no permitted override without
 changing the model builder or canonical inputs. The run is diagnostic,
 nonpromoted and makes no economic-uplift claim. The next gate therefore
 remains terminal-inventory equivalence and a defensible terminal-value bridge.
+
+The bounded Phase-4 DEVELOPMENT terminal-equivalence diagnostic
+`steel_c5_phase4_terminal_inventory_equivalence_v1_20260727` closes under
+outcome B. The calm price-insensitive reference completed all seven C0/C1
+replans and froze nine carried states at executed hour 167: coke, sinter, hot
+iron and cold slab for C0/C1, plus C1 DRI. The reference target residuals are
+exactly zero under the shared 1-t terminal-state policy. With identical frozen
+inputs and free C1 routing, adding only the final executed-hour target made the
+governed C0 model solver-proven infeasible; the target, production quota and
+physics were not relaxed. The oracle and second DEVELOPMENT period were not
+run after this structural comparability failure. No cost comparison, value
+captured, annualisation, held-out evaluation or promotion conclusion is
+authorized. Because inventories are unpriced in the represented procurement
+objective, the next gate is a source-backed, non-duplicated inventory-value
+bridge or a separately authorized strategy-neutral terminal contract; neither
+is currently accepted.
+
+The v2 follow-up is retained as a structural diagnostic: it activated the
+fixed 1% band at the first 120-hour-visible endpoint but left the builders'
+cyclic horizon-end inventory equalities active. At replan 2 this literally
+required inventories to equal their replan starts and simultaneously lie near
+the campaign target. The later cold-slab failure arose because independently
+horizon-scaled route bands were reset at each replan. Neither failure proves
+that the frozen band is physically unreachable.
+
+The corrected DEVELOPMENT gate
+`steel_c5_phase4_reachability_aware_terminal_band_v3_20260727` resolves both
+conflicts without widening or tuning the band. The price-insensitive run is
+both the pre-responsive target selector and reference comparator. Responsive
+plans remain ordinary D-D+4 plans while the endpoint is farther than five
+days away; once visible, their horizons end at the campaign endpoint (120,
+96, 72, 48 and 24 hours), the terminal band replaces cyclic inventory
+equalities, and route-output bounds are expressed as cumulative campaign
+progress net of already executed output. All six cases and 84/84 C0/C1 models
+are optimal; all 54 state comparisons pass with zero band excess and maximum
+absolute target deviation 121.048 t. Physical, accounting, activation and
+non-anticipativity checks pass.
+
+The authorized DEVELOPMENT cost comparison reports governed savings versus
+the price-insensitive reference of EUR 0.117m/0.259m (February C0/C1) and EUR
+0.544m/0.844m (July C0/C1). Governed value captured relative to the oracle is
+70.7-82.1%. These are represented-procurement results over two selected
+DEVELOPMENT weeks, not annualized uplift or held-out evidence. A value bridge
+is not required for this accepted 1% operational-equivalence comparison; it
+would be required only to assign monetary value to residual within-band state
+differences.
+
+For week, month and year campaigns, the same rolling design remains bounded:
+cumulative production and route progress use actual executed hours relative to
+the campaign quota, while terminal inventory control activates only when the
+endpoint enters the five-day physical horizon. The model therefore need not
+foresee the full month or year, but each executed block preserves the cumulative
+production/route position needed to finish the campaign. The next bounded gate
+is governed interpretation of this deterministic DEVELOPMENT response; no
+held-out, market, stochastic or promotion step is implied.
 
 The subsequent bounded DEVELOPMENT-only C0 mechanism experiment keeps the
 accepted physical interface structurally invariant and leaves the held-out

@@ -734,6 +734,35 @@ historical/unit-contract claims remain blocked by omitted VN25 operating
 features, the unresolved IJ01 CHP split and the BF-pellet boundary recorded in
 Decision 4K.
 
+### 11A. Reachability-aware 1% terminal bands are the accepted DEVELOPMENT comparability contract
+
+Phase-4 v1 and v2 froze the calm price-insensitive final carried-state vector
+before responsive results, but overlaid exact or banded endpoint constraints on
+the builders' existing cyclic horizon-end inventory equalities. Their governed
+C0 infeasibilities therefore diagnose contradictory endpoint policies, not a
+physically unreachable 1% band.
+
+The corrected run
+`steel_c5_phase4_reachability_aware_terminal_band_v3_20260727` keeps exact-zero
+targets and an unsearched +/-1% band for nonzero targets. When the campaign
+endpoint enters the D-D+4 look-ahead, the physical horizon ends at that
+campaign endpoint, the relevant cyclic inventory equalities are replaced by
+the frozen band, and cumulative BOF/EAF/HSM/DSP/import route bounds subtract
+already executed route output. This prevents a replan from promising route
+progress that its executed first day does not preserve.
+
+Both frozen DEVELOPMENT periods pass all six rolling cases, 12 C0/C1
+trajectories and 84/84 models. All nine carried-state families are inside the
+common band, maximum terminal-band excess is zero, and physical/accounting and
+non-anticipativity checks pass. The resulting represented-procurement cost
+table is authorized only as
+`development_common_terminal_band_1pct_cyclic_replacement_cost_comparison`.
+It is not annual evidence, a held-out result, or an economic-uplift/promotion
+claim. An inventory-value bridge is no longer required for this bounded Phase-4
+comparison, but would still be needed to monetize residual within-band
+inventory differences rather than treat the 1% corridor as operationally
+equivalent.
+
 ## Data And Cleanup Decisions
 
 ### 12. `data/01_cleaned/` is a separate policy stream

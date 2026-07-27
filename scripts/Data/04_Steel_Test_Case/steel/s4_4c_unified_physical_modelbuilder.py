@@ -5731,6 +5731,98 @@ def _add_rolling_production_progress_tracking(
     )
 
 
+def _add_rolling_terminal_inventory_band(
+    model: ConcreteModel,
+    *,
+    terminal_hour: int | None,
+    bounds_t: Mapping[str, Mapping[str, float]] | None,
+) -> None:
+    """Replace cyclic horizon closure with a frozen campaign-terminal band."""
+
+    if bounds_t is None:
+        return
+    if terminal_hour is None:
+        raise S44CModelBuilderError(
+            "A rolling terminal inventory band requires its in-horizon hour."
+        )
+    if terminal_hour <= 0 or terminal_hour > len(model.TIME):
+        raise S44CModelBuilderError(
+            "Rolling terminal inventory hour must lie inside the planning horizon."
+        )
+    if terminal_hour != len(model.TIME):
+        raise S44CModelBuilderError(
+            "A campaign-terminal inventory band must be applied at the effective "
+            "end of the truncated planning horizon."
+        )
+    expressions = {
+        "coke_inventory_t": "coke_inventory",
+        "sinter_inventory_t": "sinter_inventory",
+        "hot_iron_inventory_t": "hot_iron_inventory",
+        "cold_slab_inventory_t": "cold_slab_inventory",
+        "dri_inventory_t": "dri_inventory",
+    }
+    cyclic_constraints = {
+        "coke_inventory_t": "coke_terminal",
+        "sinter_inventory_t": "sinter_terminal",
+        "hot_iron_inventory_t": "hot_iron_terminal",
+        "cold_slab_inventory_t": "cold_slab_terminal",
+        "dri_inventory_t": "dri_terminal_equality",
+    }
+    unknown = set(bounds_t).difference(expressions)
+    if unknown:
+        raise S44CModelBuilderError(
+            f"Unsupported rolling terminal inventory state(s): {sorted(unknown)}."
+        )
+    target_index = int(terminal_hour) - 1
+    model.rolling_terminal_inventory_lower_bounds = ConstraintList()
+    model.rolling_terminal_inventory_upper_bounds = ConstraintList()
+    normalized: dict[str, dict[str, float]] = {}
+    replaced_cyclic_constraints: list[str] = []
+    for state_id, raw_bounds in sorted(bounds_t.items()):
+        attribute = expressions[state_id]
+        if not hasattr(model, attribute):
+            raise S44CModelBuilderError(
+                f"Rolling terminal state {state_id} is not available in this configuration."
+            )
+        if not isinstance(raw_bounds, Mapping):
+            raise S44CModelBuilderError(
+                f"Rolling terminal bounds for {state_id} must be a mapping."
+            )
+        lower_t = float(raw_bounds.get("lower_t", math.nan))
+        upper_t = float(raw_bounds.get("upper_t", math.nan))
+        target_t = float(raw_bounds.get("target_t", math.nan))
+        if (
+            not all(math.isfinite(value) for value in (lower_t, upper_t, target_t))
+            or lower_t < 0.0
+            or lower_t > target_t
+            or target_t > upper_t
+        ):
+            raise S44CModelBuilderError(
+                f"Invalid rolling terminal inventory band for {state_id}."
+            )
+        expression = getattr(model, attribute)[target_index]
+        cyclic_name = cyclic_constraints[state_id]
+        if hasattr(model, cyclic_name):
+            getattr(model, cyclic_name).deactivate()
+            replaced_cyclic_constraints.append(cyclic_name)
+        model.rolling_terminal_inventory_lower_bounds.add(
+            expression >= lower_t
+        )
+        model.rolling_terminal_inventory_upper_bounds.add(
+            expression <= upper_t
+        )
+        normalized[state_id] = {
+            "target_t": target_t,
+            "lower_t": lower_t,
+            "upper_t": upper_t,
+        }
+    model.rolling_terminal_inventory_target_hour = target_index
+    model.rolling_terminal_inventory_band = normalized
+    model.rolling_terminal_inventory_replaced_cyclic_constraints = tuple(
+        replaced_cyclic_constraints
+    )
+
+
 def _add_final_product_requirement(
     model: ConcreteModel,
     *,
@@ -5778,6 +5870,9 @@ def _add_reference_cumulative_deadline_bands(
     bands: Mapping[str, Mapping[str, float]],
     deadline_hours: Collection[int],
     horizon_hours: int,
+    explicit_deadline_bands: Mapping[
+        str, Mapping[int, Mapping[str, float]]
+    ] | None = None,
 ) -> None:
     """Scale horizon scenario bands to execution deadlines without hourly fixing."""
 
@@ -5799,17 +5894,29 @@ def _add_reference_cumulative_deadline_bands(
         lower = float(band["lower_t"])
         upper = float(band["upper_t"])
         for deadline in deadlines:
-            scale = deadline / horizon_hours
+            if explicit_deadline_bands is not None:
+                try:
+                    deadline_band = explicit_deadline_bands[band_id][deadline]
+                    deadline_lower = float(deadline_band["lower_t"])
+                    deadline_upper = float(deadline_band["upper_t"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise S44CModelBuilderError(
+                        "Explicit fixed-reference deadline bands are incomplete."
+                    ) from exc
+            else:
+                scale = deadline / horizon_hours
+                deadline_lower = lower * scale
+                deadline_upper = upper * scale
             cumulative = sum(component[t] for t in range(deadline))
             setattr(
                 model,
                 f"{constraint_prefix}_{band_id}_{deadline}h_lower",
-                Constraint(expr=cumulative >= lower * scale),
+                Constraint(expr=cumulative >= deadline_lower),
             )
             setattr(
                 model,
                 f"{constraint_prefix}_{band_id}_{deadline}h_upper",
-                Constraint(expr=cumulative <= upper * scale),
+                Constraint(expr=cumulative <= deadline_upper),
             )
 
 
@@ -7570,6 +7677,9 @@ def _build_c0_model(
                 bands=c0_reference_bands,
                 deadline_hours=c0_deadlines,
                 horizon_hours=inputs.horizon_hours,
+                explicit_deadline_bands=c0_downstream_reference_routing.get(
+                    "reference_deadline_bands"
+                ),
             )
     _add_final_product_requirement(
         model,
@@ -8377,6 +8487,9 @@ def _build_c1_hybrid_model(
                 bands=c1_reference_bands,
                 deadline_hours=c1_deadlines,
                 horizon_hours=inputs.horizon_hours,
+                explicit_deadline_bands=downstream_origin_routing.get(
+                    "reference_deadline_bands"
+                ),
             )
     _add_final_product_requirement(
         model,
@@ -8843,6 +8956,8 @@ def _solve_c0_configuration(
     rolling_production_exact_deadline_hour: int | None = None,
     rolling_production_exact_deadline_target_t: float | None = None,
     initial_inventory_overrides: Mapping[str, float] | None = None,
+    rolling_terminal_inventory_hour: int | None = None,
+    rolling_terminal_inventory_bounds_t: Mapping[str, Mapping[str, float]] | None = None,
     commitment_granularity: str = "hourly_binary",
     commitment_day_lengths: Collection[int] | None = None,
     solver_time_limit_seconds: float | None = None,
@@ -8906,6 +9021,11 @@ def _solve_c0_configuration(
             execution_lower_bound_t=rolling_production_progress_lower_bound_t,
             execution_upper_bound_t=rolling_production_progress_upper_bound_t,
         )
+    _add_rolling_terminal_inventory_band(
+        model,
+        terminal_hour=rolling_terminal_inventory_hour,
+        bounds_t=rolling_terminal_inventory_bounds_t,
+    )
     build_runtime = time.perf_counter() - build_start
     solver_name, solver = _select_solver()
     if solver is None:
@@ -10003,6 +10123,8 @@ def _solve_c1_configuration(
     rolling_production_exact_deadline_hour: int | None = None,
     rolling_production_exact_deadline_target_t: float | None = None,
     initial_inventory_overrides: Mapping[str, float] | None = None,
+    rolling_terminal_inventory_hour: int | None = None,
+    rolling_terminal_inventory_bounds_t: Mapping[str, Mapping[str, float]] | None = None,
     fix_c1_hybrid_schedule: bool = False,
     c1_retained_route_policy: str = "target_share",
     commitment_granularity: str = "hourly_binary",
@@ -10085,6 +10207,11 @@ def _solve_c1_configuration(
             execution_lower_bound_t=rolling_production_progress_lower_bound_t,
             execution_upper_bound_t=rolling_production_progress_upper_bound_t,
         )
+    _add_rolling_terminal_inventory_band(
+        model,
+        terminal_hour=rolling_terminal_inventory_hour,
+        bounds_t=rolling_terminal_inventory_bounds_t,
+    )
     build_runtime = time.perf_counter() - build_start
     solver_name, solver = _select_solver()
     if solver is None:
@@ -11350,6 +11477,11 @@ def run_s44c_unified_physical_regression(
     ]
     | None = None,
     initial_inventory_overrides_by_configuration: Mapping[str, Mapping[str, float]] | None = None,
+    rolling_terminal_inventory_hour: int | None = None,
+    rolling_terminal_inventory_bounds_by_configuration: Mapping[
+        str, Mapping[str, Mapping[str, float]]
+    ]
+    | None = None,
     fix_c1_hybrid_schedule: bool = False,
     c1_retained_route_policy: str = "target_share",
     commitment_granularity: str = "hourly_binary",
@@ -11541,6 +11673,14 @@ def run_s44c_unified_physical_regression(
                 if normal_solution_capture_by_configuration is not None
                 else None
             ),
+            rolling_terminal_inventory_hour=rolling_terminal_inventory_hour,
+            rolling_terminal_inventory_bounds_t=(
+                rolling_terminal_inventory_bounds_by_configuration.get(
+                    "C0_current_BF_BOF_reference"
+                )
+                if rolling_terminal_inventory_bounds_by_configuration is not None
+                else None
+            ),
         )
         build_audits.append(c0_audit)
         constraint_audits.extend(c0_constraints)
@@ -11664,6 +11804,14 @@ def run_s44c_unified_physical_regression(
             if normal_solution_capture_by_configuration is not None
             else None
         ),
+        rolling_terminal_inventory_hour=rolling_terminal_inventory_hour,
+        rolling_terminal_inventory_bounds_t=(
+            rolling_terminal_inventory_bounds_by_configuration.get(
+                "C1_phase1_BF_BOF_plus_DRP_EAF"
+            )
+            if rolling_terminal_inventory_bounds_by_configuration is not None
+            else None
+        ),
     )
     build_audits.append(c1_audit)
     constraint_audits.extend(c1_constraints)
@@ -11753,6 +11901,13 @@ def run_s44c_unified_physical_regression(
         ),
         "initial_inventory_overrides_by_configuration": {
             key: dict(value) for key, value in (initial_inventory_overrides_by_configuration or {}).items()
+        },
+        "rolling_terminal_inventory_hour": rolling_terminal_inventory_hour,
+        "rolling_terminal_inventory_bounds_by_configuration": {
+            key: dict(value)
+            for key, value in (
+                rolling_terminal_inventory_bounds_by_configuration or {}
+            ).items()
         },
         "fix_c1_hybrid_schedule": fix_c1_hybrid_schedule,
         "c1_retained_route_policy": c1_retained_route_policy,
