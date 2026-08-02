@@ -1,0 +1,51 @@
+run_id: steel_c6_fixed27_baseline_visual_review_v1
+mode: frozen_fixed27_non_final_human_plant_review
+output_policy: minimal
+run_class: diagnostic_validation
+lineage_role: human plant-behaviour review of the frozen fixed-27 non-final C6 baseline; not final economic evidence
+output_root: data/03_Optimisation/runs/steel_c6_fixed27_baseline_visual_review
+retention_status: ignored_local_governed_diagnostic
+git_eligible: false
+
+behavioural_config: scripts/Data/04_Steel_Test_Case/configs/steel_c6_behavioural_validation.yaml
+method_freeze: scripts/Data/04_Steel_Test_Case/configs/steel_c6_final_method_freeze_v1.yaml
+non_final_rolling_pass_summary: data/03_Optimisation/runs/steel_c6_path_feasibility_validation/20260802_non_final_rolling_week_epsilon002_v1/run_summary.json
+representative_config: scripts/Data/04_Steel_Test_Case/configs/steel_c6_representative_regime_counterfactual.yaml
+
+fixed_contract:
+  daily_eaf_heat_starts: 27
+  daily_eaf_heat_taps: 27
+  daily_eaf_liquid_steel_t: 8775.0
+  scenario_count: 10
+  economic_horizon_hours: 24
+  execution_hours: 24
+  imbalance_penalty_eur_per_mwh: 5000.0
+  economic_mip_gap: 0.002
+  solver_time_limit_seconds: 900
+  variable_daily_heat_counts: false
+  final_test_periods_read_or_solved: false
+  full_four_week_matrix_authorized: false
+
+allowed_cases:
+  - case_id: S1_C1_responsive
+    accepted_source_root: data/03_Optimisation/runs/steel_c6_path_feasibility_validation/20260802_plant_continue_s1_c1_responsive_epsilon002_v1
+  - case_id: S2_C1_responsive
+    accepted_source_root: data/03_Optimisation/runs/steel_c6_path_feasibility_validation/20260802_plant_continue_s2_c1_responsive_epsilon002_v1
+  - case_id: shadow__high_price__2025-09-09__C__C1__responsive
+    accepted_source_root: data/03_Optimisation/runs/steel_c6_path_feasibility_validation/20260802_shadow_high_price_c1_epsilon002_v2
+  - case_id: shadow__negative_low_price__2025-06-08__C__C1__responsive
+    accepted_source_root: data/03_Optimisation/runs/steel_c6_path_feasibility_validation/20260802_shadow_negative_low_c1_epsilon002_v1
+  - case_id: shadow__high_volatility__2025-05-10__A_hourly__C1__responsive
+    accepted_source_root: data/03_Optimisation/runs/steel_c6_path_feasibility_validation/20260802_shadow_high_volatility_hourly_c1_epsilon002_v1
+  - case_id: shadow__high_volatility__2025-05-10__B_qh_flat__C1__responsive
+    accepted_source_root: data/03_Optimisation/runs/steel_c6_path_feasibility_validation/20260802_shadow_high_volatility_qh_flat_c1_epsilon002_v1
+  - case_id: shadow__high_volatility__2025-05-10__C__C1__responsive
+    accepted_source_root: data/03_Optimisation/runs/steel_c6_path_feasibility_validation/20260802_shadow_high_volatility_shape_c1_epsilon002_v1
+
+output_expectation:
+  expected_file_count: 65
+  expected_approximate_size_mb: 20
+  expected_case_count: 7
+  expected_model_count: 30-55 including bounded path-separation models
+  expected_solver_tier_count: 70-110
+  png_dpi: 180
