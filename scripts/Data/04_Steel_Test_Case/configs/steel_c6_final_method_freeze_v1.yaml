@@ -1,0 +1,79 @@
+freeze_id: steel_c6_d_only_s10_path_feasible_final_method_v1
+freeze_date: '2026-08-02'
+status: ready_for_final_week_authorisation
+full_final_week_matrix_authorized: false
+final_week_execution_started: false
+
+method_identity:
+  scope: representative_mode_base_config_study_root_and_experiment_contract
+  execution_authorization_excluded: true
+  sha256: e34bdf490ffe800795b00423316e8c3c1618deb57006df0fba36513584c5d376
+  fixed_economic_mip_gap: 0.002
+  fixed_imbalance_penalty_eur_per_mwh: 5000.0
+  maximum_path_augmentation_rounds: 3
+  maximum_patterns_added_per_round: 1
+  output_policy: minimal
+
+frozen_sources:
+  phase6d_engine:
+    path: scripts/Data/04_Steel_Test_Case/steel/s4_4c6_phase6d_eaf_heat_state_one_day.py
+    sha256: 76998b925e8138e8ddb32bfcf1b098bf614283011e77af5e1f82e9522f5f5a02
+  behavioural_path_planner:
+    path: scripts/Data/04_Steel_Test_Case/steel/s4_4c6_behavioural_validation.py
+    sha256: 0cb4aececa63e0af2788b5491ee581fb964326962edc41d57138bef3143ead93
+  representative_executor:
+    path: scripts/Data/04_Steel_Test_Case/steel/s4_4c6_representative_regime_counterfactual.py
+    sha256: a1192dcc25b65ad9b58137c53444a2c17993de1f78e1b08177b219391d185da5
+  representative_cli:
+    path: scripts/Data/04_Steel_Test_Case/run_s4_4c6_representative_regime_counterfactual.py
+    sha256: b67b56e10551fce868a012c470018fb7d8589ca8b9faf640b35e1a6212990100
+  phase6d_config:
+    path: scripts/Data/04_Steel_Test_Case/configs/steel_c6_phase6d_eaf_heat_state_one_day.yaml
+    sha256: 494fcdb075a706ca506dff8ad1a1bf16d0bf4a39d27cd2ced637c5895bc96fd2
+  behavioural_config:
+    path: scripts/Data/04_Steel_Test_Case/configs/steel_c6_behavioural_validation.yaml
+    sha256: a73432bfb2d9a9853b29d35642d452bfc3e027ae20418088a8101557a5bf0539
+  representative_config_at_freeze:
+    path: scripts/Data/04_Steel_Test_Case/configs/steel_c6_representative_regime_counterfactual.yaml
+    sha256: ced949d9f1d93c3ce2fb93d0837e3ec35b63d17f630541beb2b8b5c8aa20b82e
+
+validation_evidence:
+  run_root: data/03_Optimisation/runs/steel_c6_path_feasibility_validation/20260802_non_final_rolling_week_epsilon002_v1
+  run_summary_sha256: e04f94350e7abbc8b772df6d08e7cb9fa379f26afc19600eae7957f0d8497954
+  rolling_results_sha256: 82707c98563aa41a7e8e014ccf71d763893d12dfff856e25097888e602ccae1f
+  comparisons_sha256: 776555c5bf5b6dbf8fcb22a111e0a04d3a13e339b0f0ddfd9657370257e7ee9e
+  physical_checks_sha256: b5ce2ae8665d90414433e967a5dde19c1f61c5ff652333bbac1cf36360174333
+  plant_checks_sha256: d0db39789068299e73c36e19bfb6bff18fb2628d30fac1c86992d06f48e5f88d
+  solver_diagnostics_sha256: e5fea661af60ae766372970d31b5d400b4a4db5a8b7c4f5f23a7ff08f8eb5204
+  solver_tier_progress_sha256: 4f195677ed4dce843651b01e543fc2b5b7db72c890c02e1f4d51c6fa9cae4b2d
+  feasibility_pattern_manifest_sha256: ae24f756bc4de6ba7e2ed14256ab18f8852a5d8b44f95745443bcf8f66458220
+  counterfactual_overlay_manifest_sha256: 0b479a1222108db95c940b1f2433f5db6a9aecc7ab9fc212bcccb35730329548
+  decision: PASS
+  trajectories: 42
+  experiments: 6
+  physical_and_financial_checks: 1848
+  plant_checks: 11
+  maximum_daily_imbalance_mwh: 2.0000716411232133e-6
+  production_arm_spread_t: 2.00001522898674e-6
+
+final_input_freeze:
+  selected_regime_weeks_sha256: df84f5837e38f5b927d31c2e338a536acdd1333071eedafe27a002c5b402c783
+  steel_experiment_manifest_sha256: 11b27335c451c52ea4245b3ee1f7b1260900b09da27979504edcf45a89d3f38e
+  maintenance_policy: maintenance_free_normal_operation_week
+  configurations: [C0, C1]
+  central_arms: [A_hourly, B_qh_flat, C_qh_shape]
+  scenario_count: 10
+  horizon_hours: 24
+  execution_hours: 24
+  benchmark_policies: [price_insensitive, true_pf]
+
+compute_preflight:
+  central_stochastic_experiments: 24
+  benchmark_experiments: 32
+  total_experiments: 56
+  rolling_day_trajectories: 392
+  observed_non_final_six_experiment_wall_minutes: 55.2
+  projected_total_wall_hours: 10-14
+  solver_time_limit_seconds_per_tier: 900
+  checkpoint_after_each_day: true
+  stop_fail_closed_on_emergency_recourse_or_unaccepted_solver_tier: true

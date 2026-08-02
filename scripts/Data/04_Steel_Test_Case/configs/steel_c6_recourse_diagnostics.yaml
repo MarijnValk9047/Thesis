@@ -1,0 +1,55 @@
+run_id: steel_c6_s0_c1_recourse_diagnostics_v1
+run_class: diagnostic_validation
+output_policy: minimal
+lineage_role: bounded pre-matrix C1 recourse cause isolation; not final regime evidence
+output_root: data/03_Optimisation/runs/steel_c6_recourse_diagnostics
+retention_status: local_ignored
+git_eligible: false
+
+behavioural_config: scripts/Data/04_Steel_Test_Case/configs/steel_c6_behavioural_validation.yaml
+parent_run_root: data/03_Optimisation/runs/steel_c6_behavioural_validation/20260801_pre_matrix_behavioural_gate_v1
+prior_bounded_diagnostic_root: data/03_Optimisation/runs/steel_c6_recourse_diagnostics/20260801_s0_c1_recourse_diagnostics_v1
+pre_fix_diagnostic_root: data/03_Optimisation/runs/steel_c6_recourse_diagnostics/20260801_s0_c1_recourse_diagnostics_v2
+reusable_s10_plan_root: data/03_Optimisation/runs/steel_c6_recourse_diagnostics/20260801_s0_c1_recourse_diagnostics_v2
+case_id: S0_C1_responsive
+profile_id: S0_flat_reference
+configuration: C1
+policy: responsive
+
+diagnostic_contract:
+  scenario_counts: [10, 30]
+  economic_horizon_hours: 24
+  physical_horizon_hours: 48
+  execution_hours: 24
+  market_granularity: quarterhour
+  market_time_step_hours: 0.25
+  physical_time_step_hours: 0.25
+  exact_clearing_test: true
+  nearest_complete_scenario_control: true
+  quantity_envelope_clip_test: true
+  minimum_absolute_recourse_test: true
+  iis_diagnostics: true
+  reuse_cached_plan: true
+  cache_full_plan_locally: true
+  retry_s30_optimal_planning_after_documented_time_limit: false
+  solver_seed: 0
+  solver_time_limit_seconds: 900
+  mip_gap_limit: 0.001
+  integer_feasibility_tolerance: 1.0e-9
+
+forbidden_scope:
+  final_regime_weeks: true
+  heldout_or_final_recalibration: true
+  physical_bound_relaxation: true
+  yield_or_production_requirement_change: true
+  canonical_imbalance: true
+  emergency_import: true
+  intraday_market: true
+  robust_bid_curve_promotion: true
+  settlement_or_economic_objective_change: true
+
+outputs:
+  expected_file_count: 17
+  expected_approximate_size_mb: 8
+  retain_lp_or_mps: false
+  output_policy: minimal

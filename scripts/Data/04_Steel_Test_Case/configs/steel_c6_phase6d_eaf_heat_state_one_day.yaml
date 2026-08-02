@@ -1,0 +1,90 @@
+run_id: steel_phase6d_eaf_heat_state_one_day_a01_20260731
+mode: one_day_eaf_heat_state_hourly_qh_parity_validation
+output_policy: diagnostics
+run_class: diagnostic_validation
+lineage_role: one-day EAF heat-state implementation and hourly/QH parity validation, not long-run economic evaluation
+output_root: data/03_Optimisation/runs/steel_phase6d_eaf_heat_state_one_day_a01_20260731
+retention_status: local_ignored
+git_eligible: false
+
+phase6d:
+  physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
+  phase4_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase4_terminal_inventory_equivalence.yaml
+  terminal_target_contract: data/03_Optimisation/runs/steel_c5_phase4_reachability_aware_terminal_band_v3_20260727/target_state_contract.json
+  terminal_target_source_period: validation_2024-02-12
+  phase5g_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5g_final_deterministic_freeze.yaml
+  phase5k_boundary_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5k_final_user_authorized_boundary_contract/final_boundary_contract.csv
+  phase5k_wag_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5k_final_user_authorized_boundary_contract/wag_carrier_source_audit.csv
+  forecast_root: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03
+  model_id: shared_internal_qh_eaf_heat_state
+  granularity: hourly
+  time_step_hours: 0.25
+  market_time_step_hours_by_granularity:
+    hourly: 1.0
+    quarterhour: 0.25
+  planning_horizon_hours: 120
+  execution_hours: 24
+  solver_time_limit_seconds: 900
+  planning_physical_tiebreak_mode: full_physical_tiebreak
+  mip_gap_limit: 0.001
+  economic_mip_gap_limit: 0.002
+  delivery_date: '2026-04-27'
+  forecast_origin_policy: D_minus_1_08_00_Europe_Amsterdam
+  actuals_use: clearing_settlement_and_isolated_pf_only
+  true_pf_objective_scope: executed_D_cost_within_full_D_Dplus4_feasibility_horizon
+  c1_non_eaf_availability_policy: inherit_phase6b_phase6c_endogenous_commitment
+  gate_a:
+    c0_regression_policies:
+      hourly: [H-point]
+      quarterhour: [QH-point]
+    c1_policies:
+      hourly: [H-point, price-insensitive, true-PF]
+      quarterhour: [QH-point, price-insensitive, true-PF]
+  gate_b:
+    run_only_after_gate_a_pass: true
+    c1_policies:
+      hourly: [H-S10]
+      quarterhour: [QH-S10]
+  bid_grid_ids:
+    hourly: steel_phase6d_hourly_shared_qh_eaf_bid_grid_v1
+    quarterhour: steel_phase6d_qh_shared_qh_eaf_bid_grid_v1
+  bid_grid_eur_per_mwh:
+    [-500, -5, 25, 50, 55, 80, 90, 110, 130, 155, 159.420290, 175, 210, 245, 375, 3000]
+  eaf_heat_state:
+    active: true
+    heat_size_t_liquid_steel: 325.0
+    total_qh_steps: 3
+    melting_qh_steps: 2
+    tapping_qh_steps: 1
+    arc_electricity_mwh_per_t_liquid_steel: 0.4222222222
+    secondary_electricity_mwh_per_t_liquid_steel: 0.031
+    design_liquid_steel_rate_t_h: 458.0
+    quantization_allowance_t: 162.5
+    normal_operation_day_no_planned_maintenance: true
+    weekly_taphole_maintenance_hours_documented_not_active: 8
+    annual_maintenance_days_documented_not_active: 14
+    maintenance_intervals: []
+  safe_performance_methods:
+    start_only_binary_formulation: true
+    states_as_expressions: true
+    invalid_horizon_and_maintenance_starts_prefixed_zero: true
+    remove_legacy_eaf_day_binary: true
+    lexicographic_incumbent_warm_start: true
+    previous_replan_warm_start_when_exact_mapping: true
+    persistent_gurobi_interface: investigated_not_enabled_for_cloned_scenario_blocks
+    heuristic_price_pruning: false
+  legacy_hourly_run_root: data/03_Optimisation/runs/steel_phase6b_hourly_da_bid_clear_redispatch_a03_20260730
+  legacy_qh_run_root: data/03_Optimisation/runs/steel_phase6c_qh_da_bid_clear_redispatch_a01_20260730
+  checkpoint_policy: one_atomic_checkpoint_per_market_configuration_policy
+  forbidden_scope:
+    other_plant_discreteness: true
+    eaf_overpower: true
+    eaf_mfrr_activation: true
+    intra_heat_power_optimisation: true
+    cvar: true
+    export: true
+    ets: true
+    product_revenue: true
+    emergency_import: true
+    imbalance_market: true
+    annualisation: true

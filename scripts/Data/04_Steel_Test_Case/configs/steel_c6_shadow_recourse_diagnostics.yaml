@@ -1,0 +1,50 @@
+run_id: steel_c6_shadow_recourse_diagnostics_v1
+run_class: diagnostic_validation
+output_policy: minimal
+lineage_role: bounded non-final shadow C1 recourse path-splicing diagnosis; not final regime evidence
+output_root: data/03_Optimisation/runs/steel_c6_recourse_diagnostics
+retention_status: local_ignored
+git_eligible: false
+
+behavioural_config: scripts/Data/04_Steel_Test_Case/configs/steel_c6_behavioural_validation.yaml
+parent_run_root: data/03_Optimisation/runs/steel_c6_behavioural_validation/20260801_pre_matrix_behavioural_gate_v2_canonical_bid
+case_id: shadow__typical_calm__2025-03-02__C__C1__responsive
+day_id: shadow__typical_calm__2025-03-02
+delivery_day: '2025-03-02'
+regime_role: typical_calm
+arm: C_qh_shape
+configuration: C1
+policy: responsive
+
+diagnostic_contract:
+  scenario_count: 10
+  economic_horizon_hours: 24
+  physical_horizon_hours: 48
+  execution_hours: 24
+  market_granularity: quarterhour
+  exact_clearing_test: true
+  nearest_complete_scenario_control: true
+  quantity_envelope_test: true
+  minimum_absolute_recourse_test: true
+  iis_diagnostics: true
+  cache_full_plan_locally: true
+  solver_seed: 0
+  solver_time_limit_seconds: 900
+  mip_gap_limit: 0.001
+  integer_feasibility_tolerance: 1.0e-9
+
+forbidden_scope:
+  final_regime_weeks: true
+  S30_replanning: true
+  physical_bound_relaxation: true
+  yield_or_production_requirement_change: true
+  canonical_imbalance: true
+  emergency_import: true
+  robust_bid_curve_promotion: true
+  settlement_or_economic_objective_change: true
+
+outputs:
+  expected_file_count: 14
+  expected_approximate_size_mb: 4
+  retain_lp_or_mps: false
+  output_policy: minimal

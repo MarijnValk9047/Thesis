@@ -1,0 +1,61 @@
+run_id: steel_c6_physical_tiebreak_runtime_audit_v1
+mode: c1_qh_planning_physical_tiebreak_runtime_equivalence
+output_policy: minimal
+run_class: diagnostic_validation
+lineage_role: runtime and semantic-equivalence evidence only, not economic evidence
+output_root: data/03_Optimisation/runs/steel_c6_physical_tiebreak_runtime
+representative_config: scripts/Data/04_Steel_Test_Case/configs/steel_c6_representative_regime_counterfactual.yaml
+frozen_case:
+  week_id: high_prices__2025-01-13
+  week_start: '2025-01-13'
+  arm: B_qh_flat
+  configuration: C1
+  scenario_count: 10
+  economic_horizon_hours: 24
+  physical_horizon_hours: 48
+  execution_hours: 24
+  policy: QH-S10
+  initial_state: empty_frozen_rolling_state
+  maintenance_policy: maintenance_free_normal_operation_week
+solver:
+  seed: 0
+  time_limit_seconds: 900
+  mip_gap: 0.001
+  integer_feasibility_tolerance: 1.0e-9
+variants:
+  V0: full_physical_tiebreak
+  V1: expected_cost_incumbent
+  V2: handoff_state_tiebreak
+  V3: execution_window_tiebreak
+  V4: native_gurobi_hierarchy
+primary_repeats:
+  V0: 1
+  V1: 3
+  V2: 1
+  V3: 1
+  V4: 1
+non_executable_variants:
+  V5:
+    status: not_admissible_without_proof
+    reason: continuous expected-cost and state objectives have no proven positive minimum increment, so no finite composite weight can guarantee the frozen lexicographic tolerances
+tolerances:
+  production_progress_t: 1.0e-6
+  expected_cost_eur: 0.01
+  physical_value: 1.0e-6
+  bid_volume_mwh: 1.0e-6
+  settlement_eur: 0.01
+promotion:
+  minimum_median_planning_runtime_reduction_fraction: 0.30
+  requires_two_day_rolling: true
+  requires_qh_shape_price_response: true
+excluded:
+  central_56_run: true
+  physical_bound_changes: true
+  binary_relaxation: true
+  future_price_tail: true
+  methodology_promotion_before_equivalence: true
+evidence_runs:
+  primary_v0_v1: 20260801_high_prices_c1_qh_flat_v0_v1_a02
+  followup_v2_v3: 20260801_high_prices_c1_qh_flat_v2_v3_a03
+  native_v4: 20260801_high_prices_c1_qh_flat_v4_a04
+  final_summary: 20260801_physical_tiebreak_runtime_audit_final_v4

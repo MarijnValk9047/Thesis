@@ -1,0 +1,234 @@
+run_id: steel_c6_behavioural_validation_v1
+mode: pre_matrix_behavioural_and_economic_rationality_validation
+output_policy: minimal
+run_class: diagnostic_validation
+lineage_role: pre-matrix behavioural and economic-rationality validation, not final regime evidence
+output_root: data/03_Optimisation/runs/steel_c6_behavioural_validation
+path_feasibility_output_root: data/03_Optimisation/runs/steel_c6_path_feasibility_validation
+retention_status: local_ignored
+git_eligible: false
+
+reusable_planning_cache:
+  S0_C1_responsive: data/03_Optimisation/runs/steel_c6_recourse_diagnostics/20260801_s0_c1_recourse_diagnostics_v3/plan_s10.json.gz
+
+representative_config: scripts/Data/04_Steel_Test_Case/configs/steel_c6_representative_regime_counterfactual.yaml
+source_cards:
+  - data/03_Optimisation/inputs/assets/steel/source_cards/F18_athanasiadis_tata_ijmuiden_thesis.md
+  - data/03_Optimisation/inputs/assets/steel/source_cards/F19_badarinath_stochastic_bidding_framework.md
+
+frozen_contract:
+  planning_physical_tiebreak_mode: expected_cost_incumbent
+  planning_physical_tiebreak_solve_performed: false
+  bid_signature_symmetry_breaking: true
+  planning_solver_execution_mode: sequential_pyomo
+  gurobi_performance_options:
+    MIPFocus: 1
+  redispatch_physical_tiebreak_solve_performed: true
+  execution_recourse:
+    active: true
+    penalty_eur_per_mwh: 5000.0
+    settlement_semantics: artificial_symmetric_absolute_deviation_penalty
+    e_program_compliance_claim_requires_zero_imbalance: true
+  forecast_horizon: D_only
+  scenario_count: 10
+  risk_policy: risk_neutral
+  price_insensitive_comparison_basis: frozen_flat80_dispatch_revalued_on_common_s10_without_replanning
+  cvar_gamma: 0.0
+  economic_horizon_hours: 24
+  execution_hours: 24
+  physical_horizon_hours: 48
+  internal_physics_grid: quarterhour
+  maintenance_policy: maintenance_free_normal_operation_day
+  weekly_eaf_maintenance_active: false
+  annual_outage_active: false
+  solver_seed: 0
+  mip_gap_limit: 0.001
+  economic_mip_gap_limit: 0.002
+  integer_feasibility_tolerance: 1.0e-9
+  solver_time_limit_seconds: 900
+  output_policy: minimal
+  path_feasibility_augmentation:
+    active: true
+    lineage_role: validation_derived_feasibility_only
+    acceptance_contract: canonical_bid_step_rank_mask_by_lead_position
+    maximum_augmentation_rounds: 3
+    maximum_patterns_added_per_round: 1
+    bid_selection_mode: expected_cost_incumbent
+    unused_bid_step_fill: analytical_zero_if_reconstruction_preserved
+    additional_full_canonical_bid_milp_allowed: false
+    economic_scenario_binary_incumbent_fix_required: false
+    parent_round_restricted_bridge_active: true
+    parent_round_bridge_fixed_scope: economic_scenario_binaries_only
+    parent_round_bridge_final_result_eligible: false
+    parent_round_bridge_preservation_constraint_allowed: false
+    parent_round_bridge_requires_full_expected_cost_resolve: true
+    probability_allowed: false
+    expected_cost_weight_allowed: false
+    raw_shadow_price_transport_allowed: false
+    final_test_period_source_allowed: false
+    allowed_source_classes: [development_shadow, controlled_synthetic_validation]
+    controlled_synthetic_profiles_frozen_before_solve: true
+    controlled_synthetic_pattern_application_scope: same_profile_development_only
+    exact_zero_imbalance_required: true
+  forbidden_scope:
+    D_plus_1_to_D_plus_4: true
+    S30: true
+    CVaR: true
+    mFRR: true
+    ETS: true
+    export: true
+    product_revenue: true
+    emergency_import: true
+    imbalance_optimisation: false
+    annual_maintenance_or_outage: true
+    annualisation: true
+
+final_test_periods:
+  - {role: high_volatility, start: '2024-11-04', end: '2024-11-10'}
+  - {role: typical_winter, start: '2024-12-02', end: '2024-12-08'}
+  - {role: high_prices, start: '2025-01-13', end: '2025-01-19'}
+  - {role: typical_summer, start: '2025-07-14', end: '2025-07-20'}
+
+shadow_selection:
+  development_start: '2024-10-01'
+  development_end: '2025-09-30'
+  regime_order: [typical_calm, high_price, high_volatility, negative_low_price]
+  minimum_pairwise_separation_days: 28
+  final_period_buffer_days: 28
+  require_previous_week_naive_outside_final_periods: true
+  exclude_dst_days: true
+  interpolation_allowed: false
+  typical_feature_columns:
+    - mean_price_eur_per_mwh
+    - std_price_eur_per_mwh
+    - iqr_price_eur_per_mwh
+    - p05_p95_range_eur_per_mwh
+    - mean_abs_ramp_eur_per_mwh
+    - negative_qh_share
+  volatility_feature_columns:
+    - std_price_eur_per_mwh
+    - iqr_price_eur_per_mwh
+    - p05_p95_range_eur_per_mwh
+    - mean_abs_ramp_eur_per_mwh
+    - negative_qh_share
+  high_price_decile: 0.90
+  high_volatility_decile: 0.90
+
+non_final_rolling_week:
+  week_id: validation_week_2025-06-16
+  week_start: '2025-06-16'
+  week_end: '2025-06-22'
+  selection_rule: earliest_complete_monday_sunday_after_three_frozen_shadow_sources
+  minimum_prior_shadow_source_count: 3
+  require_every_feasibility_pattern_source_before_week: true
+  configurations: [C0, C1]
+  arms: [A_hourly, B_qh_flat, C_qh_shape]
+  scenario_count: 10
+  horizon_hours: 24
+  execution_hours: 24
+  day_count: 7
+  maintenance_policy: maintenance_free_normal_operation_week
+  final_test_period_overlap_allowed: false
+  output_policy: minimal
+
+shape_overlay:
+  random_seed: 20260731
+  mean_preservation_tolerance: 1.0e-10
+  counterfactual: true
+  historical_qh_claim_allowed: false
+
+synthetic:
+  scenario_residual_source_date: '2025-03-03'
+  actual_residual_source_date: '2025-04-07'
+  residuals_centered_within_day: true
+  common_random_numbers: true
+  point_profiles_eur_per_mwh:
+    S0_flat_reference: [160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160]
+    S1_low_high_step: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 220, 220, 220, 220, 220, 220, 220, 220, 220, 220, 220, 220]
+    S2_mirrored_step: [220, 220, 220, 220, 220, 220, 220, 220, 220, 220, 220, 220, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100]
+    S3_negative_price_valley: [-100, -100, -100, -100, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212, 212]
+  cases:
+    - {case_id: S0_C0_responsive, profile_id: S0_flat_reference, configuration: C0, policy: responsive}
+    - {case_id: S0_C1_responsive, profile_id: S0_flat_reference, configuration: C1, policy: responsive}
+    - {case_id: S1_C0_responsive, profile_id: S1_low_high_step, configuration: C0, policy: responsive}
+    - {case_id: S1_C0_price_insensitive, profile_id: S1_low_high_step, configuration: C0, policy: price_insensitive}
+    - {case_id: S1_C1_responsive, profile_id: S1_low_high_step, configuration: C1, policy: responsive}
+    - {case_id: S1_C1_price_insensitive, profile_id: S1_low_high_step, configuration: C1, policy: price_insensitive}
+    - {case_id: S2_C1_responsive, profile_id: S2_mirrored_step, configuration: C1, policy: responsive}
+    - {case_id: S3_C1_responsive, profile_id: S3_negative_price_valley, configuration: C1, policy: responsive}
+    - {case_id: S4_C1_true_pf, profile_id: S1_low_high_step, configuration: C1, policy: true_pf}
+  optional_ng_cross_check:
+    active: false
+    reason: no_source_faithful_runtime_ng_price_variant_in_frozen_interface
+
+directional_hypotheses:
+  numerical_source_calibration_targets_allowed: false
+  positive_economic_effect_required: false
+  c0_expected_response: limited_price_response_and_stable_continuous_chain
+  c1_expected_response: material_eaf_or_dri_or_import_shift_under_large_controlled_spread
+  dri_metric: hourly_price_correlated_with_hourly_change_in_dri_inventory_not_level
+  bf_utilisation_denominator: own_represented_interval_capacity
+  material_response_threshold: max_1_mwh_per_day_or_0.1_percent_of_relevant_daily_energy
+
+plant_eligibility_contract:
+  determined_before_solve: true
+  materiality_threshold: max_1_mwh_per_day_or_0.1_percent_of_relevant_daily_energy
+  eaf_requires_c1_responsive_nonflat_profile: true
+  drp_buffer_requires_eligible_eaf_timing: true
+  route_substitution_authorized: false
+  route_substitution_not_applicable_reason: frozen_one_day_route_quota_contract_does_not_prove_substitution_headroom
+  vn25_efficiency: 0.345
+  named_ng_price_eur_per_mwh_lhv: 55.0
+  vn25_requires_break_even_crossing_and_c1_responsive_mode: true
+  boiler_and_flare_follow_vn25_wag_allocation_eligibility: true
+  not_applicable_must_be_pre_solve: true
+
+phase0_evidence:
+  - prerequisite_id: hourly_qh_flat_parity
+    root: data/03_Optimisation/runs/steel_phase6d_eaf_heat_state_one_day_a01_20260731
+    artifact: validation_checks.csv
+    accepted_check_id: flat_price_shared_eaf_physics
+  - prerequisite_id: split_horizon_24e48p
+    root: data/03_Optimisation/runs/steel_c6_representative_regime_split_horizon_gate/20260731_split_horizon_24e48p_gate_v5
+    artifact: run_summary.json
+    accepted_status: pass
+  - prerequisite_id: v1_runtime_reproducibility
+    root: data/03_Optimisation/runs/steel_c6_physical_tiebreak_runtime/20260801_physical_tiebreak_runtime_audit_final_v4
+    artifact: audit_conclusion.json
+    accepted_variant: V1
+  - prerequisite_id: objective_reconstruction
+    root: data/03_Optimisation/runs/steel_c6_representative_regime_counterfactual/20260731_c0_objective_reconstruction_v1
+    artifact: run_summary.json
+    accepted_status: pass
+  - prerequisite_id: settlement_reconstruction
+    root: data/03_Optimisation/runs/steel_phase6d_eaf_heat_state_one_day_a01_20260731
+    artifact: validation_checks.csv
+    accepted_check_id: pay_as_cleared_settlement_identity
+  - prerequisite_id: c0_winter_abc_executor
+    root: data/03_Optimisation/runs/steel_c6_representative_regime_counterfactual/20260731_c0_winter_abc_validation_v2
+    artifact: run_summary.json
+    accepted_status: pass
+  - prerequisite_id: physical_terminal_handoff
+    root: data/03_Optimisation/runs/steel_c6_representative_regime_split_horizon_gate/20260731_split_horizon_24e48p_gate_v5
+    artifact: validation_checks.csv
+    accepted_all_checks: true
+
+gate:
+  money_tolerance_eur: 0.01
+  energy_tolerance_mwh: 1.0e-5
+  material_tolerance_t: 1.0e-5
+  probability_tolerance: 1.0e-10
+  overlay_tolerance: 1.0e-10
+  inventory_tolerance_t: 1.0e-5
+  production_progress_tolerance_t: 1.0e-6
+  response_absolute_threshold_mwh: 1.0
+  response_relative_threshold: 0.001
+  fail_closed_shadow_after_synthetic: true
+  known_blocker_minimum_imbalance_mwh: 4.787436617887835
+  known_blocker_reproduction_tolerance_mwh: 1.0e-5
+
+outputs:
+  expected_file_count: 15
+  expected_approximate_size_mb: 2
+  generated_interval_exports: false
+  plots_default: false
