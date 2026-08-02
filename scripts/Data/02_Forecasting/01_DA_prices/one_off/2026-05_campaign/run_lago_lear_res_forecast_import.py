@@ -302,6 +302,7 @@ def run_import(args: argparse.Namespace) -> tuple[list[dict[str, Any]], list[dic
                     break
                 break
 
+            target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_bytes(payload)
             status_rows.append(
                 {

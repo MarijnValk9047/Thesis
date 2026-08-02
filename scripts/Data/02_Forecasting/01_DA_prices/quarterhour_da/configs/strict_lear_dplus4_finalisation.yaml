@@ -1,0 +1,35 @@
+timeline:
+  train_start_local_date: "2025-10-01"
+  validation_start_local_date: "2026-02-01"
+  evaluation_start_local_date: "2026-03-18"
+  requested_end_local_date: "2026-07-31"
+
+hourly_anchor:
+  model_id: lear_lago_direct_dplus4_strict_no_future_1092
+  window_days: 1092
+  horizon: D_Dplus4
+  forecast_origin_local_time: "08:00 on D-1"
+
+quarterhour_extension:
+  model_id: qh-fs1__mean_shape__hourly_anchor__lear_strict
+  grouping:
+    - local_hour_of_day
+    - quarter_index
+    - weekend_flag
+  zero_mean_within_hour: true
+  fit_policy: causal_walk_forward
+
+scenarios:
+  raw_count: 400
+  final_count: 30
+  nested_count: 10
+  level_scales: [1.00, 1.15, 1.30, 1.45, 1.60]
+  shape_scales: [0.75, 1.00, 1.25, 1.50]
+  protected_tail_share: 0.20
+  probability_policy: empirical_cluster_mass
+  random_seed: 20260729
+
+outputs:
+  output_policy: full
+  run_class: full
+  lineage_role: thesis-candidate generated evaluation

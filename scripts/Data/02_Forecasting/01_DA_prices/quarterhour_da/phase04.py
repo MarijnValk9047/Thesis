@@ -287,7 +287,9 @@ def _fit_mean_shape(train_table: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
 
 def _predict_mean_shape(state: dict[str, Any], eval_table: pd.DataFrame) -> np.ndarray:
-    working = eval_table[["local_hour_of_day", "quarter_index", "weekend_flag"]].copy()
+    # Merges below create a positional RangeIndex. Normalise the input index as
+    # well so that fallback masks remain aligned after callers filter rows.
+    working = eval_table[["local_hour_of_day", "quarter_index", "weekend_flag"]].reset_index(drop=True)
     merged = working.merge(state["with_weekend"], on=["local_hour_of_day", "quarter_index", "weekend_flag"], how="left")
     missing_mask = merged["delta_pred"].isna()
     if missing_mask.any():

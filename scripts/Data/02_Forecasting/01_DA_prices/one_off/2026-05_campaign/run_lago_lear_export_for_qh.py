@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import sys
 import time
@@ -12,7 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[6]
 PACKAGE_ROOT = REPO_ROOT / "scripts" / "Data" / "02_Forecasting" / "01_DA_prices"
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
@@ -90,10 +91,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bridge-market-area", type=str, default=DEFAULT_MARKET_AREA)
     parser.add_argument("--window-days", type=int, default=DEFAULT_MODEL_WINDOW_DAYS)
     parser.add_argument("--x2-policy", type=str, default="res_forecast_if_available")
+    parser.add_argument(
+        "--staged-cleaned-root",
+        type=str,
+        default="",
+        help="Optional explicit cleaned-data root; avoids relying on a repository-local legacy staging tree.",
+    )
+    parser.add_argument(
+        "--horizon-policy-csv",
+        type=str,
+        default="",
+        help="Optional explicit D..D+4 feature-availability policy CSV.",
+    )
     parser.add_argument("--allow-official-cleaned-fallback", action="store_true")
     parser.add_argument("--checkpoint-flush-rows", type=int, default=500)
     parser.add_argument("--no-parquet", action="store_true")
     parser.add_argument("--log-every-rows", type=int, default=250)
+    parser.add_argument("--n-jobs", type=int, default=1, help="Independent Strict LEAR fits to run concurrently.")
     return parser.parse_args()
 
 
@@ -176,7 +190,12 @@ def _apply_origin_limit(grid: pd.DataFrame, max_origins: int | None) -> pd.DataF
     return grid[grid["forecast_origin_utc"].isin(keep)].copy()
 
 
-def _resolve_horizon_policy_csv() -> Path:
+def _resolve_horizon_policy_csv(explicit_path: str = "") -> Path:
+    if str(explicit_path or "").strip():
+        candidate = (REPO_ROOT / Path(str(explicit_path))).resolve()
+        if not candidate.exists():
+            raise FileNotFoundError(f"Explicit horizon policy CSV not found: {candidate}")
+        return candidate
     search_root = REPO_ROOT / "data" / "02_Forecasting" / "01_DA_prices" / "hourly_da" / "runs_lago_lear"
     candidates = sorted(
         search_root.glob("settings_availability_audit_*/horizon_allowed_feature_policy.csv"),
@@ -776,6 +795,7 @@ def _fit_predict_rows(
     checkpoint_flush_rows: int,
     log_every_rows: int,
     estimate_only: bool,
+    n_jobs: int = 1,
 ) -> dict[str, Any]:
     by_group: dict[tuple[int, int], pd.DataFrame] = {}
     for (lead_day, target_hour_local), part in matrix.groupby(["lead_day", "target_hour_local"], dropna=False):
@@ -797,6 +817,83 @@ def _fit_predict_rows(
     min_days = int(config.min_training_days_by_window.get(int(window_days), 1))
     eval_rows = eval_rows.copy()
     eval_rows["origin_ns_i64"] = eval_rows["forecast_origin_utc"].astype("int64")
+
+    if int(n_jobs) > 1 and not estimate_only:
+        def _worker(row: Any) -> dict[str, Any]:
+            origin_utc = pd.Timestamp(row.forecast_origin_utc)
+            target_utc = pd.Timestamp(row.target_timestamp_utc)
+            lead_day = int(row.lead_day)
+            common = {
+                "forecast_origin_utc": origin_utc,
+                "target_timestamp_utc": target_utc,
+                "lead_day": lead_day,
+                "dataset_split": str(getattr(row, "dataset_split", "unknown")),
+                "target_hour_local": int(getattr(row, "target_hour_local", -1)),
+            }
+            if _key_tuple(origin_utc, target_utc, lead_day) in already_done:
+                return {"status": "already_done", "origin": origin_utc}
+            pool = by_group.get((lead_day, int(row.target_hour_local)))
+            if pool is None or pool.empty:
+                return {"status": "skip", "origin": origin_utc, "detail": {**common, "skip_reason": "export_skip_pool_empty", "missing_feature": "", "source_stage": "export_predict_loop", "diagnostic_detail": "No training pool for (lead_day,target_hour_local) group."}}
+            cutoff = int(np.searchsorted(pool["origin_ns_i64"].to_numpy(dtype=np.int64), int(getattr(row, "origin_ns_i64")), side="left"))
+            if cutoff <= 0:
+                return {"status": "skip", "origin": origin_utc, "detail": {**common, "skip_reason": "export_skip_no_history_before_origin", "missing_feature": "", "source_stage": "export_predict_loop", "diagnostic_detail": "No historical rows in group before forecast origin."}}
+            train = pool.iloc[:cutoff]
+            if int(train["forecast_origin_utc"].nunique()) < min_days:
+                return {"status": "skip", "origin": origin_utc, "detail": {**common, "skip_reason": "export_skip_min_training_days", "missing_feature": "", "source_stage": "export_predict_loop", "diagnostic_detail": f"Unique origin days in train < min_days={min_days}."}}
+            y_train = pd.to_numeric(train["y_true"], errors="coerce")
+            valid = y_train.notna()
+            X_train = train.loc[valid, feature_cols]
+            y_train = y_train.loc[valid]
+            if X_train.empty:
+                return {"status": "skip", "origin": origin_utc, "detail": {**common, "skip_reason": "export_skip_empty_train_after_y_filter", "missing_feature": "", "source_stage": "export_predict_loop", "diagnostic_detail": "Training rows removed after y_true notna filter."}}
+            X_test = pd.DataFrame([{column: getattr(row, column) for column in feature_cols}])
+            model = LagoLearModel(x2_missing_policy=config.x2_missing_policy)
+            model.fit(X_train, y_train)
+            if model.pipeline is None:
+                return {"status": "skip", "origin": origin_utc, "detail": {**common, "skip_reason": "export_skip_model_pipeline_none", "missing_feature": "", "source_stage": "export_predict_loop", "diagnostic_detail": "Model fit completed without pipeline."}}
+            prediction = {
+                "forecast_origin_utc": origin_utc,
+                "target_timestamp_utc": target_utc,
+                "lead_day": lead_day,
+                "y_pred": float(model.predict(X_test)[0]),
+                "model": model_name,
+                "model_family": MODEL_FAMILY,
+                "dataset_split": common["dataset_split"],
+            }
+            return {"status": "prediction", "origin": origin_utc, "prediction": prediction, "fit_time": float(model.fit_time_sec), "predict_time": float(model.predict_time_sec)}
+
+        with ThreadPoolExecutor(max_workers=int(n_jobs), thread_name_prefix="strict_lear") as executor:
+            for idx, outcome in enumerate(executor.map(_worker, eval_rows.itertuples(index=False)), start=1):
+                completed_rows += 1
+                completed_origins.add(pd.Timestamp(outcome["origin"]))
+                if outcome["status"] == "prediction":
+                    pending_rows_buffer.append(outcome["prediction"])
+                    fit_time_total += float(outcome["fit_time"])
+                    predict_time_total += float(outcome["predict_time"])
+                elif outcome["status"] == "skip":
+                    skipped_rows += 1
+                    skipped_detail_rows.append(outcome["detail"])
+                if predictions_csv_path is not None and len(pending_rows_buffer) >= max(1, int(checkpoint_flush_rows)):
+                    _append_rows_csv(predictions_csv_path, pending_rows_buffer, list(pending_rows_buffer[0].keys()))
+                    pending_rows_buffer = []
+                if idx % max(1, int(log_every_rows)) == 0 or idx == total_rows:
+                    _write_json(progress_path, _progress_payload(started=started, completed_rows=completed_rows, total_rows=total_rows, completed_origins=len(completed_origins), total_origins=total_origins, current_origin=pd.Timestamp(outcome["origin"]), stage="running"))
+        if predictions_csv_path is not None and pending_rows_buffer:
+            _append_rows_csv(predictions_csv_path, pending_rows_buffer, list(pending_rows_buffer[0].keys()))
+        _write_json(progress_path, _progress_payload(started=started, completed_rows=completed_rows, total_rows=total_rows, completed_origins=len(completed_origins), total_origins=total_origins, current_origin=None, stage="done"))
+        return {
+            "elapsed_seconds": float(time.perf_counter() - started),
+            "completed_rows": int(completed_rows),
+            "total_rows": int(total_rows),
+            "completed_origins": int(len(completed_origins)),
+            "total_origins": int(total_origins),
+            "skipped_rows": int(skipped_rows),
+            "fit_time_total_sec": float(fit_time_total),
+            "predict_time_total_sec": float(predict_time_total),
+            "skipped_detail_rows": skipped_detail_rows,
+            "n_jobs": int(n_jobs),
+        }
 
     for idx, row in enumerate(eval_rows.itertuples(index=False), start=1):
         origin_utc = pd.Timestamp(row.forecast_origin_utc)
@@ -1034,9 +1131,15 @@ def main() -> int:
     start_local_date = min(date(2022, 1, 1), min_target_local - timedelta(days=max_window_days + 14))
     end_exclusive_local_date = max_target_local + timedelta(days=1)
 
+    staged_cleaned_root = (
+        (REPO_ROOT / Path(str(args.staged_cleaned_root))).resolve()
+        if str(args.staged_cleaned_root or "").strip()
+        else LagoLearBenchmarkConfig().staged_cleaned_root
+    )
     config = LagoLearBenchmarkConfig(
         benchmark_start_local_date=start_local_date,
         benchmark_end_exclusive_local_date=end_exclusive_local_date,
+        staged_cleaned_root=staged_cleaned_root,
         allow_official_cleaned_fallback=bool(args.allow_official_cleaned_fallback),
         x2_policy="res_forecast_if_available",
         x2_missing_policy="impute_training_median",
@@ -1070,6 +1173,8 @@ def main() -> int:
         "bridge_source": str(args.bridge_source),
         "bridge_path": str(args.bridge_path or ""),
         "bridge_market_area": str(args.bridge_market_area),
+        "staged_cleaned_root": str(staged_cleaned_root),
+        "horizon_policy_csv_argument": str(args.horizon_policy_csv or ""),
     }
     _write_json(paths.export_config_json, export_config)
     stage_grid_seconds = float(time.perf_counter() - stage_started)
@@ -1102,7 +1207,7 @@ def main() -> int:
     x2_primary, _ = _choose_x2_frames(exogenous, str(args.x2_policy))
     if x2_primary.empty:
         raise ValueError("x2 generation forecast frame is empty; cannot build LEAR_STRICT matrix.")
-    horizon_policy_csv = _resolve_horizon_policy_csv()
+    horizon_policy_csv = _resolve_horizon_policy_csv(str(args.horizon_policy_csv or ""))
     stage_data_seconds = float(time.perf_counter() - stage_started)
 
     if args.check_only:
@@ -1218,6 +1323,7 @@ def main() -> int:
         checkpoint_flush_rows=int(args.checkpoint_flush_rows),
         log_every_rows=max(1, int(args.log_every_rows)),
         estimate_only=False,
+        n_jobs=max(1, int(args.n_jobs)),
     )
 
     if not paths.predictions_csv.exists():

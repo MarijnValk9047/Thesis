@@ -513,6 +513,67 @@ def parse_raw_xml_directory(raw_root: Path, region: str) -> tuple[pd.DataFrame, 
     return frame, file_summaries, parse_errors
 
 
+def expand_a03_variable_blocks(frame: pd.DataFrame, *, expected_minutes: int) -> pd.DataFrame:
+    """Expand ENTSO-E A03 variable blocks; this is source parsing, not interpolation."""
+
+    if frame.empty or "curve_type" not in frame.columns:
+        result = frame.copy()
+        result["a03_variable_block_expanded"] = False
+        result["a03_source_block_start_utc"] = pd.NaT
+        result["a03_expansion_method"] = "not_applicable"
+        return result
+    working = frame.copy()
+    for column in ("timestamp_utc", "period_start_utc", "period_end_utc"):
+        working[column] = pd.to_datetime(working[column], utc=True, errors="coerce")
+    a03_mask = working["curve_type"].astype(str).str.upper().eq("A03")
+    a03 = working[a03_mask].copy()
+    other = working[~a03_mask].copy()
+    other["a03_variable_block_expanded"] = False
+    other["a03_source_block_start_utc"] = pd.NaT
+    other["a03_expansion_method"] = "not_applicable"
+    if a03.empty:
+        return other.sort_values("timestamp_utc").reset_index(drop=True)
+    group_candidates = [
+        "source_path",
+        "document_id",
+        "timeseries_index",
+        "period_index",
+        "period_start_utc",
+        "period_end_utc",
+        "resolution_minutes",
+    ]
+    group_columns = [column for column in group_candidates if column in a03.columns]
+    if not {"period_start_utc", "period_end_utc"}.issubset(group_columns):
+        raise ValueError("A03 expansion requires period_start_utc and period_end_utc")
+    expanded_rows: list[dict[str, Any]] = []
+    step = pd.Timedelta(minutes=int(expected_minutes))
+    for _, group in a03.groupby(group_columns, dropna=False, sort=False):
+        ordered = group.dropna(subset=["timestamp_utc", "period_start_utc", "period_end_utc"]).sort_values("timestamp_utc")
+        if ordered.empty:
+            continue
+        period_start = pd.Timestamp(ordered["period_start_utc"].iloc[0])
+        period_end = pd.Timestamp(ordered["period_end_utc"].iloc[0])
+        records = ordered.to_dict(orient="records")
+        for index, source_row in enumerate(records):
+            block_start = pd.Timestamp(source_row["timestamp_utc"])
+            block_end = pd.Timestamp(records[index + 1]["timestamp_utc"]) if index + 1 < len(records) else period_end
+            if block_start < period_start or block_end > period_end or block_end <= block_start:
+                raise ValueError(f"Invalid A03 block interval {block_start}..{block_end} within {period_start}..{period_end}")
+            for timestamp in pd.date_range(block_start, block_end, freq=step, inclusive="left"):
+                row = dict(source_row)
+                row["a03_source_position"] = source_row.get("position")
+                row["timestamp_utc"] = timestamp
+                row["position"] = int((timestamp - period_start) / step) + 1
+                row["a03_variable_block_expanded"] = bool(timestamp != block_start)
+                row["a03_source_block_start_utc"] = block_start
+                row["a03_expansion_method"] = "official_curve_type_a03_forward_block"
+                expanded_rows.append(row)
+    expanded = pd.DataFrame(expanded_rows)
+    result = pd.concat([other, expanded], ignore_index=True, sort=False)
+    sort_columns = [column for column in ("timestamp_utc", "created_datetime_utc") if column in result.columns]
+    return result.sort_values(sort_columns, na_position="last").reset_index(drop=True)
+
+
 def build_delivery_day_coverage(quarterly_frame: pd.DataFrame, timezone: str) -> pd.DataFrame:
     if quarterly_frame.empty:
         return pd.DataFrame(
@@ -625,6 +686,7 @@ def rebuild_clean_quarterly_dataset(
             & (raw_frame["timestamp_utc"] <= max_timestamp_utc)
         ].copy()
         quarterly_raw = raw_frame[raw_frame["resolution_minutes"] == QUARTERLY_STEP_MINUTES].copy()
+        quarterly_raw = expand_a03_variable_blocks(quarterly_raw, expected_minutes=QUARTERLY_STEP_MINUTES)
         quarterly_raw, duplicate_rows_removed = DA_CLEANING.split_duplicate_stats(quarterly_raw)
         quarterly_raw = DA_CLEANING.clip_to_max_timestamp(quarterly_raw, max_timestamp_utc=max_timestamp_utc)
         quarterly_fix = DA_CLEANING.apply_missing_datapoint_fix(
@@ -674,6 +736,9 @@ def rebuild_clean_quarterly_dataset(
         "xml_files_parsed": int(len(file_summaries)),
         "xml_parse_errors": int(len(parse_errors)),
         "quarterly_rows_before_fix": int(quarterly_fix.summary["rows_before_fix"]),
+        "a03_variable_block_expanded_points": int(
+            quarterly_raw.get("a03_variable_block_expanded", pd.Series(dtype=bool)).fillna(False).sum()
+        ),
         "quarterly_rows_after_fix": int(quarterly_fix.summary["rows_after_fix"]),
         "missing_datapoints_before_fix": int(quarterly_fix.summary["missing_datapoints_before_fix"]),
         "interpolated_points_count": int(quarterly_fix.summary["interpolated_points_count"]),

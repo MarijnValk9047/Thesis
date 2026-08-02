@@ -1,0 +1,119 @@
+study_id: donly_qh_four_regime_study_v1_20260731
+method_status: user_authorized_implementation
+
+forecast_family_audit:
+  frozen_main_model: lear_lago_direct_dplus4_strict_no_future_1092
+  selection_reopened: false
+  fallback_on_strict_failure: false
+  accepted_run_root: data/02_Forecasting/01_DA_prices/scenario_evaluation/representative_regime_study/family_audit/20260731_donly_family_audit_s10_s30_v3
+  frozen_sources:
+    strict:
+      path: data/02_Forecasting/01_DA_prices/hourly_da/repair_runs/20260522_210021_lear_strict_donly_support_repair/hourly_lear_strict_donly_1092_full_support_anchor.parquet
+      source_model: null
+      public_model_id: lear_lago_direct_dplus4_strict_no_future_1092
+    lear_fs3:
+      path: data/02_Forecasting/01_DA_prices/hourly_da/runs/20260426_151547_lear_fs3_combo_pruned_candidate_benchmark/predictions_long.parquet
+      source_model: lear_fs3_combo_promoted
+      public_model_id: lear_fs3_combo_pruned_candidate
+    xgboost_fs3:
+      path: data/02_Forecasting/01_DA_prices/hourly_da/runs/20260426_153605_xgboost_fs3_combo_pruned_candidate_benchmark/predictions_long.parquet
+      source_model: xgboost_fs3_combo_promoted
+      public_model_id: xgboost_fs3_combo_pruned_candidate
+  scenario_policy:
+    method: strict_coupled_residual_paths_raw_to_s30_to_nested_s10
+    calibration_split: validation
+    evaluation_split: test
+    raw_count: 400
+    parent_count: 30
+    final_count: 10
+    protected_tail_share: 0.20
+    probability_policy: empirical_cluster_mass
+    level_scales: [1.00, 1.15, 1.30, 1.45, 1.60]
+    random_seed: 20260731
+  naive_policy: same_local_hour_seven_days_earlier_DST_aware
+  dst_policy: native_23_25_hour_days_reported_but_excluded_from_scenario_common_support_without_interpolation
+
+shape_overlay:
+  method: additive_mean_preserving
+  equation: quarterhour_price = hourly_anchor_price + quarterhour_delta
+  strict_qh_run_root: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03
+  random_seed: 20260731
+  mean_preservation_tolerance: 1.0e-10
+  counterfactual: true
+  historical_qh_2024_2025_claim: false
+  observed_validation_includes_minus_500: true
+  h2_non_extreme_economic_week_excludes_minus_500: true
+
+week_selection:
+  test_start: '2024-10-01'
+  test_end: '2025-09-30'
+  complete_week_policy: monday_through_sunday_168_hours_no_interpolation
+  required_rolling_lookahead_days_after_week: 4
+  minimum_separation_days: 28
+  provisional_candidates:
+    typical_winter: '2025-01-13'
+    high_prices: '2025-02-10'
+    high_volatility: '2025-05-12'
+    typical_summer: '2025-08-18'
+  selection_frozen_before_optimisation: true
+
+steel_experiment:
+  physical_prerequisite:
+    run_summary: data/03_Optimisation/runs/steel_phase6d_eaf_heat_state_one_day_a01_20260731/run_summary.json
+    failures: data/03_Optimisation/runs/steel_phase6d_eaf_heat_state_one_day_a01_20260731/failures.csv
+    repair_policy: implementation_or_contract_errors_only_no_physical_bound_widening
+  c1_split_horizon_prerequisite:
+    available: true
+    evidence_run: data/03_Optimisation/runs/steel_c6_representative_regime_split_horizon_gate/20260731_split_horizon_24e48p_gate_v5
+    decision: c1_split_horizon_prerequisite_pass
+    economic_horizon_hours: 24
+    physical_horizon_hours: 48
+    tail_price_information: none
+    tail_market_binding: false
+    tail_executed_or_settled: false
+    physical_bound_changes: none
+  internal_physics_grid: quarterhour
+  configurations: [C0, C1]
+  maintenance_policy: maintenance_free_normal_operation_week
+  weekly_eaf_maintenance_active: false
+  annual_outage_active: false
+  central:
+    horizon_hours: 24
+    execution_hours: 24
+    scenario_count: 10
+    risk_policy: risk_neutral
+    arms: [A_hourly, B_qh_flat, C_qh_shape]
+    benchmarks: [price_insensitive, true_perfect_foresight]
+  horizon_sensitivity_hours: [24, 48, 72, 96, 120]
+  scenario_count_sensitivity: [10, 30]
+  long_horizon_forecast_support:
+    available: false
+    policy: require_causally_available_strict_D_to_Dplus4_artifact_no_stitched_future_D_only_forecasts
+  solver_time_limit_seconds: 900
+  runtime_fields: [wall_seconds, timeout_status, mip_gap, variable_count, binary_count, constraint_count]
+  forbidden_scope: [mFRR, CVaR, ETS, export, product_revenue, emergency_import, imbalance_optimisation, annualisation]
+
+h2_mechanism_test:
+  purpose: economic_mechanism_interpretation_only
+  runs:
+    - observed_qh_preselected_non_extreme_week
+    - counterfactual_typical_winter_bridge
+  horizon_sweep: false
+  scenario_count_sweep: false
+  positive_economic_effect_required: false
+
+outputs:
+  family_audit:
+    root: data/02_Forecasting/01_DA_prices/scenario_evaluation/representative_regime_study/family_audit
+    expected_file_count: 16
+    expected_approximate_size_mb: 30
+    output_policy: minimal
+    run_class: diagnostic_validation
+    lineage_role: frozen three-family D-only S10 fairness audit, not model reselection
+  study_preparation:
+    root: data/02_Forecasting/01_DA_prices/scenario_evaluation/representative_regime_study/study_preparation
+    expected_file_count: 15
+    expected_approximate_size_mb: 20
+    output_policy: minimal
+    run_class: thesis_candidate_counterfactual_representative_period
+    lineage_role: frozen four-regime counterfactual input and experiment manifest, not economic result
