@@ -1,0 +1,63 @@
+run_id: steel_c5_phase5k_final_user_authorized_boundary_freeze_v1_20260729
+mode: terminal_aware_final_user_authorized_boundary_freeze_gate
+checkpoint_id: phase5k_final_user_authorized_boundary_freeze
+lineage_role: canonical thesis-critical represented-boundary freeze evidence
+run_class: terminal_aware_final_user_authorized_boundary_freeze_gate
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_phase5k_final_user_authorized_boundary_freeze_v1_20260729
+retention_status: local_ignored
+git_eligible: false
+
+phase5k:
+  expected_parent_head: d565ff94a45328750ecee6c2e2818eaa6e6eb616
+  phase5g_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5g_final_deterministic_freeze.yaml
+  phase5j_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5j_wag_electricity_closure.yaml
+  phase5j_case_cache: tmp/steel_c5_phase5j_wag_electricity_closure_v1_20260728_cases
+  phase5j_held_out_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5j_wag_electricity_closure_contract/fresh_held_out_period_contract.csv
+  source_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5e_source_backed_anchor_contract/source_backed_annual_service_contract.csv
+  phase5g_overlap_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5g_final_freeze_contract/source_service_overlap_contract.csv
+  component_reference: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5i_electricity_only_contract/validation_component_reference.csv
+  wag_carrier_audit_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5k_final_user_authorized_boundary_contract/wag_carrier_source_audit.csv
+  final_boundary_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5k_final_user_authorized_boundary_contract/final_boundary_contract.csv
+  held_out_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5k_final_user_authorized_boundary_contract/fresh_held_out_period_contract.csv
+  scratch_root: tmp/steel_c5_phase5k_final_user_authorized_boundary_freeze_v1_20260729_cases
+  expected_validation_models: 56
+  expected_heldout_models: 56
+  expected_period_count: 4
+  expected_replans_per_period: 7
+  physical_balance_tolerance_mwh: 0.0001
+  component_exceedance_tolerance_pj: 0.000001
+  ng_combustion_factor_kg_co2_per_gj: 56.1
+  common_ng_residual_pj_y: 7.0
+  common_co2_grid_mt_y: [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+  predeclared_common_co2_mt_y: 2.0
+  direct_wag_source_totals_pj_y:
+    C0: 52.9
+    C1: 25.1
+  electricity_anchor_error_limits:
+    C0: 0.11
+    C1: 0.05
+  co2_anchor_error_limit: 0.055
+  flare_reporting_reference_pj_y:
+    C0: 1.0
+    C1: 0.3
+  flare_material_worsening_tolerance_pj_y: 0.05
+  policy:
+    user_authorized_methodological_flexibility: true
+    c0_uniform_wag_fallback_active: true
+    c1_wag_yields_changed: false
+    common_absolute_ng_service_across_configurations: true
+    common_absolute_co2_residual_across_configurations: true
+    residual_co2_reporting_only: true
+    residual_co2_in_cost_or_ets: false
+    residual_steam_active: false
+    export_allowed: false
+    legacy_ng_bridges_active: false
+    hsm_policy_changed: false
+    production_physics_changed: false
+    adaptive_parameter_sweep_allowed: false
+    heldout_reselection_allowed: false
+    flare_is_reporting_warning_not_hard_freeze_gate: true
+  decision_on_pass: user_authorized_represented_boundary_deterministic_model_frozen_for_phase6
+  decision_on_fail: phase5k_physical_or_accounting_gate_failed_model_not_frozen
+  next_gate_on_pass: rerun_phase6a_on_phase5k_boundary_before_phase6b

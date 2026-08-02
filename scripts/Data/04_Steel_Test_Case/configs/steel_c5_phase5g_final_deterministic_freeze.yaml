@@ -1,0 +1,116 @@
+run_id: steel_c5_phase5g_final_deterministic_freeze_v1_20260728
+mode: terminal_aware_deterministic_final_freeze_gate
+checkpoint_id: phase5g_baseload_integration_and_final_deterministic_freeze
+lineage_role: canonical C5 final-freeze evidence
+run_class: terminal_aware_deterministic_final_freeze_gate
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_phase5g_final_deterministic_freeze_v1_20260728
+retention_status: local_ignored
+git_eligible: false
+
+phase5g:
+  expected_parent_head: d565ff94a45328750ecee6c2e2818eaa6e6eb616
+  source_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5e_source_backed_anchor_contract/source_backed_annual_service_contract.csv
+  overlap_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5g_final_freeze_contract/source_service_overlap_contract.csv
+  selected_baseload_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5g_final_freeze_contract/selected_site_baseload_contract.csv
+  source_card: data/03_Optimisation/inputs/assets/steel/source_cards/WD07_Tata_MER_Energy_CO2_Balance_2025.md
+  heracless_source_card: data/03_Optimisation/inputs/assets/steel/source_cards/WD02_Tata_MER_Heracless_Energy_Topology.md
+  parent_phase5b_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5b_c0_export_sensitivity.yaml
+  frozen_period_selection_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_source_emulation_validation.yaml
+  scratch_root: tmp/steel_c5_phase5g_final_deterministic_freeze_v1_20260728_cases
+  selection_preview_root: tmp/steel_c5_phase5g_final_deterministic_freeze_v1_20260728_selection
+  frozen_terminal_target_source_period: validation_2024-02-12
+  expected_periods_per_split: 4
+  expected_replans_per_period: 7
+  expected_models_per_stage: 56
+  expected_total_models: 168
+  hours_per_year: 8760
+  percentage_grid: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  validation_periods:
+    - period_id: validation_2024-07-29
+      dataset_split: validation
+      frozen_forecast_start_origin_utc: '2024-07-28T06:00:00+00:00'
+      split_weight: 0.553191489362
+      terminal_executed_hours: 168
+    - period_id: validation_2023-10-23
+      dataset_split: validation
+      frozen_forecast_start_origin_utc: '2023-10-22T06:00:00+00:00'
+      split_weight: 0.148936170213
+      terminal_executed_hours: 169
+    - period_id: validation_2024-07-01
+      dataset_split: validation
+      frozen_forecast_start_origin_utc: '2024-06-30T06:00:00+00:00'
+      split_weight: 0.106382978723
+      terminal_executed_hours: 168
+    - period_id: validation_2024-02-12
+      dataset_split: validation
+      frozen_forecast_start_origin_utc: '2024-02-11T07:00:00+00:00'
+      split_weight: 0.191489361702
+      terminal_executed_hours: 168
+  held_out_periods:
+    - period_id: test_2025-09-08
+      dataset_split: test
+      frozen_forecast_start_origin_utc: '2025-09-07T06:00:00+00:00'
+      split_weight: 0.413043478261
+      terminal_executed_hours: 168
+    - period_id: test_2024-10-21
+      dataset_split: test
+      frozen_forecast_start_origin_utc: '2024-10-20T06:00:00+00:00'
+      split_weight: 0.391304347826
+      terminal_executed_hours: 169
+    - period_id: test_2024-12-09
+      dataset_split: test
+      frozen_forecast_start_origin_utc: '2024-12-08T07:00:00+00:00'
+      split_weight: 0.021739130435
+      terminal_executed_hours: 168
+    - period_id: test_2025-01-13
+      dataset_split: test
+      frozen_forecast_start_origin_utc: '2025-01-12T07:00:00+00:00'
+      split_weight: 0.173913043478
+      terminal_executed_hours: 168
+  hsm_source_mix_policy_by_configuration:
+    C0_current_BF_BOF_reference:
+      basis: qra_reference_volumetric_design_flow_45_ng_55_cog
+      ng_volume_fraction: 0.45
+      cog_volume_fraction: 0.55
+      ng_lhv_mj_per_nm3: 37.5
+      cog_lhv_mj_per_nm3: 18.5
+      block_hours: 24
+      energy_share_tolerance_fraction: 0.0
+      displace_from_c0_fixed_ng_bridge: false
+    C1_phase1_BF_BOF_plus_DRP_EAF:
+      basis: qra_heracless_volumetric_design_flow_80_ng_20_cog
+      ng_volume_fraction: 0.80
+      cog_volume_fraction: 0.20
+      ng_lhv_mj_per_nm3: 37.5
+      cog_lhv_mj_per_nm3: 18.5
+      block_hours: 24
+      energy_share_tolerance_fraction: 0.0
+      displace_from_c0_fixed_ng_bridge: false
+  policy:
+    legacy_c0_fixed_bridge_active: false
+    legacy_c0_flexible_heat_bridge_active: false
+    aggregate_c0_generator_active: true
+    external_export_allowed: false
+    residual_dispatch_allowed: false
+    annual_values_used_as_hourly_constraints: false
+    baseload_observed_hourly_profile: false
+    baseload_price_responsive: false
+    baseload_shared_carrier_percentage_across_configurations: true
+    wag_substitution_for_ng_baseload: false
+    held_out_reselection_allowed: false
+    market_bidding_allowed: false
+    stochasticity_or_cvar_allowed: false
+  gates:
+    dynamic_balance_tolerance_mwh: 0.0001
+    production_tolerance_t: 1.0
+    constant_baseload_tolerance_mwh: 0.000001
+    annual_identity_tolerance_pj: 0.000001
+    percentage_tolerance: 0.000000001
+    dri_ng_split_tolerance_mwh: 0.000001
+    dri_total_ng_gj_per_t: 9.9
+    dri_electricity_gj_per_t: 0.3
+    ng_combustion_factor_kg_co2_per_gj: 56.1
+    dri_planned_availability_range: [0.9096, 0.9425]
+    eaf_planned_availability_range: [0.9142, 0.9525]
+    vn25_ij01_operating_time_context: [0.85, 0.15]

@@ -1,0 +1,69 @@
+run_id: steel_c5_phase5h_four_residual_final_selection_gate_v1_20260728
+mode: terminal_aware_dependency_aware_four_residual_freeze_gate
+checkpoint_id: phase5h_four_residual_effect_and_final_selection_gate
+lineage_role: canonical C5 Phase-5H freeze evidence
+run_class: terminal_aware_dependency_aware_four_residual_freeze_gate
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_phase5h_four_residual_final_selection_gate_v1_20260728
+retention_status: local_ignored
+git_eligible: false
+
+phase5h:
+  expected_parent_head: d565ff94a45328750ecee6c2e2818eaa6e6eb616
+  phase5g_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5g_final_deterministic_freeze.yaml
+  source_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5e_source_backed_anchor_contract/source_backed_annual_service_contract.csv
+  phase5g_overlap_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5g_final_freeze_contract/source_service_overlap_contract.csv
+  overlap_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5h_four_residual_contract/four_residual_overlap_contract.csv
+  steam_evidence_gate: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5h_four_residual_contract/steam_residual_evidence_gate.csv
+  fresh_held_out_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5h_four_residual_contract/fresh_held_out_period_contract.csv
+  selected_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5h_four_residual_contract/four_residual_candidate_contract.csv
+  scratch_root: tmp/steel_c5_phase5h_four_residual_final_selection_gate_v1_20260728_cases
+  expected_replans_per_period: 7
+  expected_models_per_physical_case: 56
+  maximum_campaign_models: 1680
+  hours_per_year: 8760
+  percentage_grid: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  validation_periods:
+    - period_id: validation_2024-07-29
+      dataset_split: validation
+      frozen_forecast_start_origin_utc: '2024-07-28T06:00:00+00:00'
+      split_weight: 0.553191489362
+      terminal_executed_hours: 168
+    - period_id: validation_2023-10-23
+      dataset_split: validation
+      frozen_forecast_start_origin_utc: '2023-10-22T06:00:00+00:00'
+      split_weight: 0.148936170213
+      terminal_executed_hours: 169
+    - period_id: validation_2024-07-01
+      dataset_split: validation
+      frozen_forecast_start_origin_utc: '2024-06-30T06:00:00+00:00'
+      split_weight: 0.106382978723
+      terminal_executed_hours: 168
+    - period_id: validation_2024-02-12
+      dataset_split: validation
+      frozen_forecast_start_origin_utc: '2024-02-11T07:00:00+00:00'
+      split_weight: 0.191489361702
+      terminal_executed_hours: 168
+  prohibited_previously_opened_held_out_periods:
+    - test_2025-09-08
+    - test_2024-10-21
+    - test_2024-12-09
+    - test_2025-01-13
+  policy:
+    all_four_required_for_promotion: true
+    steam_branch_fail_closed_without_maximum: true
+    continue_electricity_ng_co2_diagnostics_after_steam_failure: true
+    phase5g_failed_baseload_active: false
+    legacy_ng_bridge_active: false
+    residual_ng_wag_substitutable: false
+    residual_co2_dispatchable: false
+    residual_co2_in_cost_or_ets: false
+    annual_value_is_varying_hourly_profile: false
+    held_out_reselection_allowed: false
+    production_physics_changes_allowed: false
+    wag_yield_changes_allowed: false
+    market_logic_allowed: false
+  ng_combustion_factor_kg_co2_per_gj: 56.1
+  component_exceedance_tolerance_pj: 0.000001
+  decision_on_pass: four_residual_contract_validated_deterministic_model_frozen_for_phase6
+  decision_on_fail: four_residual_gate_failed_residual_layer_not_promoted

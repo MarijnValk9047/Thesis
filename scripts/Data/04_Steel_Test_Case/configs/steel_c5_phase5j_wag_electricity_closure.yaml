@@ -1,0 +1,46 @@
+run_id: steel_c5_phase5j_wag_electricity_closure_v1_20260728
+mode: terminal_aware_wag_electricity_closure_freeze_gate
+checkpoint_id: phase5j_corrected_generator_cost_and_electricity_closure
+lineage_role: canonical C5 corrected WAG-electricity freeze evidence
+run_class: terminal_aware_wag_electricity_closure_freeze_gate
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_phase5j_wag_electricity_closure_v1_20260728
+retention_status: local_ignored
+git_eligible: false
+
+phase5j:
+  expected_parent_head: d565ff94a45328750ecee6c2e2818eaa6e6eb616
+  phase5g_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5g_final_deterministic_freeze.yaml
+  phase5h_source_pool: data/03_Optimisation/runs/steel_c5_phase5h_four_residual_final_selection_gate_v1_20260728/source_service_pool.csv
+  selected_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5j_wag_electricity_closure_contract/electricity_only_baseload_contract.csv
+  held_out_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5j_wag_electricity_closure_contract/fresh_held_out_period_contract.csv
+  component_reference: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5i_electricity_only_contract/validation_component_reference.csv
+  phase5g_overlap_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5g_final_freeze_contract/source_service_overlap_contract.csv
+  source_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5e_source_backed_anchor_contract/source_backed_annual_service_contract.csv
+  scratch_root: tmp/steel_c5_phase5j_wag_electricity_closure_v1_20260728_cases
+  expected_period_count: 4
+  expected_models: 56
+  selected_electricity_share: 0.90
+  component_exceedance_tolerance_pj: 0.000001
+  physical_balance_tolerance_mwh: 0.0001
+  heldout_electricity_error_limit:
+    C0: 0.11
+    C1: 0.05
+  heldout_flare_limit_pj_y:
+    C0: 1.0
+    C1: 0.30
+  policy:
+    no_reselection_after_heldout: true
+    generator_ng_cost_active_without_legacy_bridge: true
+    legacy_phase5d_ng_bridges_active: false
+    residual_ng_active: false
+    residual_steam_active: false
+    residual_direct_co2_active: false
+    export_allowed: false
+    hsm_policy_changed: false
+    wag_yields_changed: false
+    production_physics_changed: false
+    baseload_price_responsive: false
+    exact_anchor_closure_required: false
+  decision_on_pass: corrected_wag_electricity_boundary_deterministic_model_frozen_for_phase6
+  decision_on_fail: phase5j_heldout_gate_failed_previous_freeze_reopened

@@ -1,0 +1,46 @@
+run_id: steel_c5_phase5i_electricity_only_heldout_freeze_v1_20260728
+mode: terminal_aware_electricity_only_heldout_freeze_gate
+checkpoint_id: phase5i_electricity_only_fresh_heldout_freeze
+lineage_role: canonical C5 represented-boundary freeze evidence
+run_class: terminal_aware_electricity_only_heldout_freeze_gate
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_phase5i_electricity_only_heldout_freeze_v1_20260728
+retention_status: local_ignored
+git_eligible: false
+
+phase5i:
+  expected_parent_head: d565ff94a45328750ecee6c2e2818eaa6e6eb616
+  phase5g_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5g_final_deterministic_freeze.yaml
+  phase5h_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5h_four_residual_effect_gate.yaml
+  phase5h_checkpoint: data/03_Optimisation/runs/steel_c5_phase5h_four_residual_final_selection_gate_v1_20260728/checkpoint_decision.json
+  phase5h_source_pool: data/03_Optimisation/runs/steel_c5_phase5h_four_residual_final_selection_gate_v1_20260728/source_service_pool.csv
+  held_out_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5h_four_residual_contract/fresh_held_out_period_contract.csv
+  selected_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5i_electricity_only_contract/electricity_only_baseload_contract.csv
+  component_reference: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5i_electricity_only_contract/validation_component_reference.csv
+  phase5g_overlap_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5g_final_freeze_contract/source_service_overlap_contract.csv
+  source_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5e_source_backed_anchor_contract/source_backed_annual_service_contract.csv
+  scratch_root: tmp/steel_c5_phase5i_electricity_only_heldout_freeze_v1_20260728_cases
+  expected_period_count: 4
+  expected_replans_per_period: 7
+  expected_models: 56
+  selected_electricity_share: 0.10
+  hours_per_year: 8760
+  component_exceedance_tolerance_pj: 0.000001
+  physical_balance_tolerance_mwh: 0.0001
+  policy:
+    no_reselection_after_heldout: true
+    phase5g_failed_baseload_active: false
+    legacy_phase5d_ng_bridges_active: false
+    residual_ng_active: false
+    residual_steam_active: false
+    residual_direct_co2_active: false
+    export_allowed: false
+    hsm_policy_changed: false
+    wag_yields_changed: false
+    production_physics_changed: false
+    baseload_price_responsive: false
+    full_site_digital_twin_claim: false
+    exact_annual_anchor_replication_claim: false
+    ets_ready_claim: false
+  decision_on_pass: represented_boundary_deterministic_model_frozen_for_phase6
+  decision_on_fail: electricity_only_heldout_gate_failed_model_not_frozen

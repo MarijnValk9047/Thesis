@@ -1,0 +1,52 @@
+run_id: steel_c5_phase5e_source_backed_anchor_closure_v1_20260727
+mode: source_backed_annual_service_accounting_with_frozen_dynamic_validation
+checkpoint_id: phase5e_source_backed_anchor_closure
+lineage_role: Phase 5E source-backed annual closure and dynamic decision evidence
+run_class: deterministic annual accounting reconstruction plus DEVELOPMENT dynamic validation
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_phase5e_source_backed_anchor_closure_v1_20260727
+retention_status: local_ignored
+git_eligible: false
+
+phase5e:
+  expected_parent_head: d565ff94a45328750ecee6c2e2818eaa6e6eb616
+  source_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5e_source_backed_anchor_contract/source_backed_annual_service_contract.csv
+  source_card: data/03_Optimisation/inputs/assets/steel/source_cards/WD07_Tata_MER_Energy_CO2_Balance_2025.md
+  parent_phase5b_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5b_c0_export_sensitivity.yaml
+  parent_phase5c_badarinath: data/03_Optimisation/runs/steel_c5_phase5c_source_mechanism_adjudication_v1_20260727/badarinath_metric_reproduction.csv
+  scratch_root: tmp/steel_c5_phase5e_source_backed_anchor_closure_v1_20260727_cases
+  periods:
+    - period_id: validation_2024-02-12
+      dataset_split: validation
+      period_role: development
+      frozen_forecast_start_origin_utc: '2024-02-11T07:00:00+00:00'
+    - period_id: validation_2024-07-01
+      dataset_split: validation
+      period_role: development
+      frozen_forecast_start_origin_utc: '2024-06-30T06:00:00+00:00'
+  policy:
+    annual_service_accounts_enter_dispatch: false
+    annual_service_accounts_enter_cost: false
+    external_export_allowed: false
+    changes_physics: false
+    changes_prices: false
+    changes_terminal_bands: false
+    changes_production_targets: false
+    parameter_calibration_performed: false
+    held_out_periods_used: false
+    phase5d_policy_promoted: false
+  gates:
+    primary_anchor_relative_tolerance: 0.05
+    minimum_named_share_per_carrier: 0.60
+    maximum_unallocated_share_per_carrier: 0.40
+    balance_tolerance_pj_y: 0.05
+    dynamic_balance_tolerance: 0.0001
+    production_tolerance_t: 1.0
+    dri_ng_intensity_gj_lhv_per_t: 9.9
+    dri_ng_intensity_tolerance_gj_per_t: 0.000001
+    july_requires_february_pass: true
+    primary_carriers_for_coverage: [natural_gas, electricity, scope1_co2]
+    secondary_wag_electricity_anchors_twh_y:
+      C0: 2.528
+      C1: 1.23
+
