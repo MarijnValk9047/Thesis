@@ -181,6 +181,26 @@ This matters for later optimisation interpretation:
 - exploratory optimisation can proceed with caveats;
 - final robust risk claims should not ignore these caveats.
 
+The canonical observed-support Strict LEAR D--D+4 finalisation is now the run
+`20260729_strict_lear_dplus4_full_a03`. It couples the unchanged hourly Strict
+LEAR anchor to the causal QH mean-shape model and exports probability-weighted,
+nested 30- and 10-scenario sets on 116 common evaluation origins from 18 March
+through 19 July 2026. All hard artifact, timing, probability, nesting, DST, and
+hourly/QH parity contracts pass. Evaluation p05--p95 coverage remains below
+85%, so the artifacts are optimization-ready but not evidence of calibrated
+risk coverage. The compact method and results record is
+`docs/forecasting/strict_lear_hourly_qh_dplus4_finalisation.md`.
+
+The accepted family-audit evidence
+`20260731_donly_family_audit_s10_s30_v3` records runner hash
+`07e97dbf7b464ff4f9dcbcf6f36863b2d324af42ff09088ce62f7c2d48b8c644`
+and config hash
+`ae9cd3974673c4af669fb6b1ee469522ec94cc2ed05ac46f199e3b0bb698f9a2`.
+The later accepted v11 preparation embeds the family-run summary hash, but the
+exact historical runner and resolved-config snapshots for those two hashes are
+not present in the current workspace. The audit remains accepted generated
+evidence; exact source/config replay of that historical invocation is limited.
+
 ## Stage 6: Hydrogen Optimisation — Historical Methodological Reference
 
 Hydrogen was the earlier optimisation frontier and remains a reusable
@@ -271,3 +291,81 @@ In practice:
 - large run folders, exports, solver logs, and generated tables should stay outside Git;
 - important historical attempts should be summarised before their scattered artifacts are ignored or archived;
 - `data/01_cleaned/` requires a separate tracked-data policy rather than bulk cleanup.
+
+## Strict LEAR 2026 Hydrogen Horizon/Granularity Evaluation
+
+The 2026 hydrogen comparison is a new thesis-candidate generated-evaluation
+lineage. It reuses the frozen Strict LEAR model selection and canonical coupled
+hourly/QH D--D+4 artifacts. A causal 2026 D-only support export is classified
+as an extension of the selected model, not a new selection run.
+
+Canonical code, config, tests, and the compact method record belong in Git.
+The D-only forecast/scenario exports, input-slice caches, rolling optimizer
+runs, solver outputs, dispatch tables, and broad comparison tables are
+generated local output under governed run roots and remain ignored. The old
+307-day runs in the sibling repository are read-only historical evidence and
+must never be overwritten or merged into the new common-support results.
+
+Accepted generated-evaluation run:
+`20260729_strict_lear_horizon_granularity_full_a01`. Its compact governance
+record reports `complete` with all solver, oracle, carryover, quota, and
+settlement gates passing. The archived 300-second QH/30 convergence attempt is
+diagnostic evidence; the accepted primary QH/30 policy is the uniform
+900-second rerun with unchanged model/data inputs and MIP gap. Broad result
+tables, figures, dispatch, solver metrics, and forecasts remain generated
+local artifacts. Their headline interpretation is maintained in
+`docs/optimisation/STRICT_LEAR_HYDROGEN_HORIZON_GRANULARITY_COMPARISON.md`.
+
+The H2 mechanism run `20260731_h2_mechanism_s10_v3` preserves its generated
+outputs and forecast-input hashes. Its input manifest records config hash
+`8428faeb481446f5435d5a6b15e39c4bea421ac898420ed75437732106f0ab72`,
+whereas the current config hashes to
+`a37e2f410b2980dbdc6ae4f38887801dd4a74ed28d33c8e9c6d6e617996ebbe8`;
+no resolved config or source snapshot with the historical hash was found.
+Consequently, the run remains accepted mechanism evidence, but exact config
+replay from the present source tree is limited.
+
+## Non-canonical performance evidence -- 2026-07-30
+
+The following artifacts are diagnostic performance evidence and do not replace
+the accepted Strict LEAR hydrogen comparison or deterministic steel baseline:
+
+- `data/03_Hydrogen_Test_Case/performance_benchmarks/20260730_optimized_equivalent_a01/`
+  -- three consecutive origins, runtime median/p95, 96/96 realised-ledger
+  parity; QH speed targets not met.
+- `data/03_Hydrogen_Test_Case/performance_benchmarks/20260730_optimized_equivalent_objective_parity_a02/`
+  -- one-origin solver-objective/status gate; 40/40 checks pass, including
+  eight zero-difference objective comparisons.
+- `data/03_Optimisation/performance_benchmarks/20260730_optimized_equivalent_a02/`
+  -- active deterministic steel two-replan fixture; 56/56 physical-ledger
+  checks pass exactly and both configurations remain within the 10% runtime
+  non-regression boundary.
+
+All three use `output_policy = audit`, `run_class = diagnostic_performance` and
+`lineage_role = non-canonical performance evidence`. Golden baselines dated
+2026-07-20 and 2026-07-29 remain read-only and authoritative for research
+results.
+
+## Phase 6B hourly stochastic steel engineering validation -- 2026-07-30
+
+Canonical source consists of the Phase-6B runner, shared steel market module,
+frozen YAML config, targeted tests and
+`docs/optimisation/steel/S4/C6_PHASE6B_HOURLY_STOCHASTIC_DA_BID_CLEAR_REDISPATCH_GATE.md`.
+These wrap the frozen Phase-5K boundary and the read-only Strict LEAR D--D+4
+point/S10 artifacts; they do not create or retune forecasting evidence.
+
+Accepted generated evidence is
+`steel_phase6b_hourly_da_bid_clear_redispatch_a03_20260730`, classified as
+`diagnostic_validation` and `thesis-candidate implementation validation, not
+economic evaluation`. The governed run and compact comparison bundle remain
+ignored local outputs. All 256 checks and 156 solves pass. A03 is numerically
+identical to a02 and supersedes it only because a03 includes `fixture_id` in
+every consolidated market/result key. Earlier v1/a02 attempts are non-canonical
+implementation diagnostics and must not be cited as final evidence.
+
+The lineage validates only an hourly one-day and seven-day engineering chain:
+forecast/scenarios, scenario-independent bid curve, realised D clearing, exact
+physical redispatch, settlement and complete inventory/production/route state
+handoff. It is not a long-run economic evaluation, historical QH backtest,
+annual simulation or authorization for QH, CVaR, mFRR, export, ETS or product
+revenue. Phase 6A remains read-only historical quantity-only bridge evidence.

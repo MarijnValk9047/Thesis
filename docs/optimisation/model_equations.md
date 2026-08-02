@@ -32,6 +32,12 @@ This is the foundation underneath bidding, clearing, and redispatch work.
 
 ## 1A. Steel physical and fixed-reference deterministic-cost contract
 
+The editable thesis-facing formulation is maintained in
+`docs/optimisation/steel/S4/methodology/`. That working set defines the core
+physical MILP once, gives every symbol a domain and unit, records parameter
+sources, and treats deterministic DA, stochastic, CVaR and mFRR as delta-only
+extensions. This file remains a compact cross-workstream roadmap.
+
 The active C0/C1 steel formulation has a separately executable price-free
 physical mode and an accepted fixed-reference represented-procurement-cost
 mode. For each rolling solve both enforce hard cumulative final-product quotas,
@@ -162,9 +168,11 @@ sum_(t < B) final_product[r,t] - next_block_target[r]
 minimise progress_surplus[r] + progress_deficit[r]
 ```
 
-The objective order is represented procurement cost, production-progress
-deviation, then the existing physical inventory tie-break. The cost optimum is
-preserved within EUR 0.01 and the progress optimum within numerical tolerance.
+The active objective order is production-progress deviation, represented
+procurement cost, then the existing physical inventory tie-break. The progress
+optimum is preserved within numerical tolerance and the cost optimum within
+EUR 0.01. This is one lexicographic objective, implemented through sequential
+solves with optimum-preservation constraints.
 This does not fix hourly output or route shares. With flat prices the seven
 executed blocks now annualise to 6.75 Mt/y; the former 6.78375-Mt/y result is a
 superseded diagnostic of repeatedly resetting the first-block timing choice.
@@ -278,13 +286,65 @@ The current important distinction is:
 - CVaR exists as an implemented branch;
 - it is not yet the hardened command-centre default path.
 
-## 7. What This File Does Not Claim
+## 7. Phase 6C Quarter-Hour Steel DA Formulation
+
+Phase 6C reuses the Phase-6B bid--clear--redispatch formulation on an explicit
+time grid. Let `dt` be the interval duration in hours, `H` the physical horizon
+in hours and `T = H / dt` the number of model intervals. The accepted QH gate
+uses `dt = 0.25`, `H = 120`, `T = 480`, with 24 hours/96 intervals executed per
+replan. The hourly implementation remains the `dt = 1` special case.
+
+Physical flows are interval quantities, not hourly rates:
+
+```text
+x_interval[t] = x_rate[t] * dt
+inventory[t] = inventory[t-1] + inflow_interval[t] - outflow_interval[t]
+interval_cost[t] = price_EUR_per_MWh[t] * grid_import_MWh[t]
+```
+
+Hourly capacity, fixed electricity/NG/steam/CO2 services and other rate bounds
+are multiplied by `dt` exactly once. A rate ramp `R` is imposed on reconstructed
+rates and is therefore equivalent to:
+
+```text
+abs(x_interval[t] / dt - x_interval[t-1] / dt) <= R * dt
+abs(x_interval[t] - x_interval[t-1]) <= R * dt^2
+```
+
+Daily commitment remains one binary per local delivery day. Throughput,
+inventories, carriers and energy flows are interval decisions. A 24-hour HSM
+source-mix block becomes 96 QH intervals; production, route and generator/scrap
+deadlines are translated from elapsed physical hours to aligned interval
+indices. Historical fixed-hour calendars fail explicitly for `dt != 1`.
+
+For each QH timestamp and bid-grid step `b`, the first-stage incremental
+purchase bid `q[t,b]` is common to all scenarios. Scenario `s` clears:
+
+```text
+grid_import[s,t] = sum(q[t,b] for b >= scenario_price[s,t])
+```
+
+After submission, realised QH prices clear D with the same `bid >= actual`
+rule. Redispatch fixes executed grid import to cleared MWh exactly; DA
+settlement is `cleared_MWh * actual_EUR_per_MWh` and is excluded from the
+separate non-grid represented procurement-cost term. Only D is executed and
+settled. Actuals remain isolated from QH-point, QH-S10 and price-insensitive
+bidding; configuration-matched true PF is an oracle benchmark only.
+
+The week-end terminal bands are copied unchanged from accepted hourly Phase
+6B. The last replans truncate to 96/72/48/24 physical hours, corresponding to
+384/288/192/96 intervals. State handoff records elapsed physical hours and
+executed intervals separately. No QH-specific start, minimum-load, outage,
+CHP or plant ramp parameter is invented.
+
+## 8. What This File Does Not Claim
 
 This file does not claim that:
 
 - the current code implements every later thesis phase already;
 - all scenario inputs are thesis-final;
-- current quarter-hour or `D_plus_4` paths are already the optimisation default;
+- the validated bounded QH week is a long-run optimisation default or annual
+  economic evaluation;
 - the current equations here are the final thesis notation.
 
 It is a roadmap document for repository structure and modelling intent.

@@ -241,3 +241,26 @@ A table should be promoted into the Git-facing documentation layer only when it 
 - interpretable without opening a run folder;
 - tied to a stable metric definition;
 - useful for thesis writing or future repo governance.
+
+## 9. Phase 6C Hourly/QH Common-Support Table
+
+The Phase-6C table is a bounded seven-day comparison for 27 April through
+3 May 2026. Each row is one configuration and matched strategy. It must report:
+
+- hourly and QH realised represented cost;
+- DA settlement and other represented procurement cost separately;
+- signed and absolute QH-minus-hourly EUR difference and signed percentage;
+- savings versus the granularity-matched price-insensitive benchmark;
+- regret versus configuration- and granularity-matched true PF;
+- cleared/imported MWh and volume-weighted paid price;
+- final-product tonnes, cumulative route totals and final inventories;
+- QH mean, p95 and maximum within-hour import range in MW;
+- total solver seconds, maximum variable/binary/constraint counts and MIP gap.
+
+`represented cost` is the only permitted cost label. The table must not be
+annualised and must not report profit, revenue uplift or total Tata-site cost.
+The hourly/QH delta combines QH price signals with QH physical flexibility; it
+does not identify forecast-shape value separately. QH-S10 must carry the
+warning that evaluation p05--p95 coverage is 74.27%, so it is not a calibrated
+90% risk set. Missing plant-specific QH operating parameters make flexibility
+an upper-bound development result.
