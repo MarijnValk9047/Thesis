@@ -1,4 +1,5 @@
 run_id: steel_closed_loop_feasibility_anchor_reconciliation_v1
+performance_mode: optimized_equivalent
 planning_horizon_hours: 168
 execution_block_hours: 24
 replan_count: 3

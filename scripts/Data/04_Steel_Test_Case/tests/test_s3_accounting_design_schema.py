@@ -114,8 +114,8 @@ def test_s3_accounting_design_surfaces_exist_and_validate():
     assert payload["s3_approved_input_csv_rows"] == 0
     assert payload["s3_approved_input_bad_rows"] == 0
     assert payload["source_evidence_files_checked"] == 5
-    assert payload["steel_source_card_rows_checked"] == 29
-    assert payload["steel_candidate_parameter_evidence_rows_checked"] == 82
+    assert payload["steel_source_card_rows_checked"] == 31
+    assert payload["steel_candidate_parameter_evidence_rows_checked"] == 129
     assert payload["steel_source_to_parameter_policy_rows_checked"] == 11
     assert payload["steel_evidence_status_vocabulary_rows_checked"] == 13
     assert payload["steel_evidence_duplicate_key_policy_rows_checked"] == 7
@@ -307,8 +307,8 @@ def test_steel_source_evidence_bootstrap_surfaces_exist_and_validate():
 
     payload = validate_steel_source_evidence(bundle)
     assert payload["source_evidence_directory_present"] is True
-    assert payload["steel_source_card_rows_checked"] == 29
-    assert payload["steel_candidate_parameter_evidence_rows_checked"] == 82
+    assert payload["steel_source_card_rows_checked"] == 31
+    assert payload["steel_candidate_parameter_evidence_rows_checked"] == 129
     assert payload["steel_source_orphan_reference_count"] == 0
     assert payload["steel_candidate_approved_or_executable_rows"] == 0
 

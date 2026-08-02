@@ -1,0 +1,59 @@
+run_id: steel_c5_phase5b_c0_export_sensitivity_v2_20260727
+mode: governed_c0_no_export_export_development_pair
+checkpoint_id: phase5b_c0_export_structural_sensitivity
+lineage_role: Phase 5B decision evidence
+run_class: governed DEVELOPMENT paired structural sensitivity
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_phase5b_c0_export_sensitivity_v2_20260727
+retention_status: local_ignored
+git_eligible: false
+
+phase5b:
+  expected_parent_head: d565ff94a45328750ecee6c2e2818eaa6e6eb616
+  phase4_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase4_terminal_inventory_equivalence.yaml
+  phase4_summary: data/03_Optimisation/runs/steel_c5_phase4_reachability_aware_terminal_band_v3_20260727/run_summary.json
+  phase4_target_contract: data/03_Optimisation/runs/steel_c5_phase4_reachability_aware_terminal_band_v3_20260727/target_state_contract.json
+  phase5a_candidate_decision: data/03_Optimisation/runs/steel_c5_phase5a_integrated_anchor_reconciliation_v1_20260727/phase5b_candidate_decision.json
+  forecast_run_root: ../Thesis/data/02_Forecasting/01_DA_prices/hourly_da/runs_lago_lear/20260706_024807_lago_lear_six_year_benchmark
+  scratch_root: tmp/steel_c5_phase5b_c0_export_sensitivity_v2_20260727_cases
+  expected_case_count: 4
+  expected_model_count: 56
+  replans_per_case: 7
+  held_out_periods_used: false
+  material_threshold_twh_e_y: 0.015014
+  current_wag_electricity_gap_twh_e_y: 0.300283
+  ng_export_breakeven_eur_per_mwh_e: 159.42029
+  terminal_band_fraction: 0.01
+  validation_tolerance_policy:
+    policy_id: steel_unit_purpose_validation_tolerance
+    policy_version: v2_20260727
+    policy_fingerprint_sha256: 56b91f71ed9f4ac6268f0d6089a80e1c00a5b5712d60bdb8885fb8e4f20e63d3
+
+  development_periods:
+    - period_id: validation_2024-02-12
+      dataset_split: validation
+      period_role: development
+      frozen_forecast_start_origin_utc: '2024-02-11T07:00:00+00:00'
+    - period_id: validation_2024-07-01
+      dataset_split: validation
+      period_role: development
+      frozen_forecast_start_origin_utc: '2024-06-30T06:00:00+00:00'
+
+  policies:
+    - policy_id: accepted_no_export_comparator
+      sale_enabled: false
+    - policy_id: athanasiadis_sale_enabled
+      sale_enabled: true
+      price_basis: same_governed_y_pred_as_import
+      revenue_scope: gross_grid_export_only
+      floor_cap_premium_spread_or_settlement: false
+
+  frozen_interface:
+    configuration_id: C0_current_BF_BOF_reference
+    generator_carriers: [BFG, COG, BOFG, named_NG]
+    generator_electricity_efficiency: 0.345
+    shared_generator_electrical_capacity_mw: 770.0
+    shared_generator_volume_cap_nm3_h: 900000.0
+    carrier_mixing_allowed: false
+    residual_energy_allowed: false
+    central_model_export_allowed: false

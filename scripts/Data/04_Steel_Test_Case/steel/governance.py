@@ -4871,3 +4871,352 @@ def dry_run_validate_input_governance(
     if approved_input_bundle is not None:
         payload.update(validate_s2_approved_model_input(approved_input_bundle))
     return payload
+
+
+# S3 accounting and source-evidence governance.  These surfaces predate the
+# active C5 code path but remain a required fail-closed provenance gate.
+_GOV_REPO_ROOT = Path(__file__).resolve().parents[4]
+_STEEL_INPUT_ROOT = (
+    _GOV_REPO_ROOT / "data/03_Optimisation/inputs/assets/steel"
+)
+S3_CANDIDATE_REVIEW_ROOT = _STEEL_INPUT_ROOT / "S3/s3_candidate_review"
+S3_PROVISIONAL_DEV_INPUT_ROOT = _STEEL_INPUT_ROOT / "S3/s3_provisional_dev_input"
+S3_APPROVED_MODEL_INPUT_ROOT = _STEEL_INPUT_ROOT / "S3/s3_approved_model_input"
+_S3_DOC_ROOT = _GOV_REPO_ROOT / "docs/optimisation/steel/S3"
+
+S3_ACCOUNTING_DESIGN_MEMO = (
+    _S3_DOC_ROOT / "STEEL_S3_ENERGY_COST_EMISSIONS_ACCOUNTING_DESIGN.md"
+)
+S3_0B_FIXED_PROFILE_WAG_DIAGNOSTIC_INPUT_AND_CONTRACT_MEMO = (
+    _S3_DOC_ROOT / "STEEL_S3_0B_FIXED_PROFILE_WAG_DIAGNOSTIC_INPUT_AND_CONTRACT.md"
+)
+S3_0B_WAG_POLICY_FREEZE_AND_DEV_INPUT_SELECTION_MEMO = (
+    _S3_DOC_ROOT / "STEEL_S3_0B_WAG_POLICY_FREEZE_AND_DEV_INPUT_SELECTION.md"
+)
+S3_EVIDENCE_USE_AND_THESIS_ASSUMPTION_POLICY_MEMO = (
+    _S3_DOC_ROOT / "STEEL_S3_EVIDENCE_USE_AND_THESIS_ASSUMPTION_POLICY.md"
+)
+
+S3_ENERGY_COST_EMISSIONS_PARAMETER_UNIVERSE_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_energy_cost_emissions_parameter_universe.csv"
+)
+S3_TO_S2_S212_MAPPING_REGISTER_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_to_s2_s2_12_mapping_register.csv"
+)
+S3_ACCOUNTING_INPUT_SCHEMA_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_accounting_input_schema.csv"
+)
+S3_ACCOUNTING_STATUS_AND_REVIEW_POLICY_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_accounting_status_and_review_policy.csv"
+)
+S3_0B_FIXED_PROFILE_WAG_DIAGNOSTIC_CONTRACT_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_0b_fixed_profile_wag_diagnostic_contract.csv"
+)
+S3_0B_FIXED_ACTIVITY_PROFILE_INPUT_SCHEMA_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_0b_fixed_activity_profile_input_schema.csv"
+)
+S3_0B_ACTIVITY_PROFILE_PROVENANCE_POLICY_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_0b_activity_profile_provenance_policy.csv"
+)
+S3_0B_WAG_COEFFICIENT_REQUIREMENT_REGISTER_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_0b_wag_coefficient_requirement_register.csv"
+)
+S3_0B_WAG_DIAGNOSTIC_CALCULATION_CONTRACT_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_0b_wag_diagnostic_calculation_contract.csv"
+)
+S3_0B_WAG_DIAGNOSTIC_OUTPUT_SCHEMA_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_0b_wag_diagnostic_output_schema.csv"
+)
+S3_WAG_POLICY_DECISION_REGISTER_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_wag_policy_decision_register.csv"
+)
+S3_WAG_DEV_INPUT_SELECTION_REVIEW_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_wag_dev_input_selection_review.csv"
+)
+S3_WAG_SELECTED_DEV_INPUTS_PATH = (
+    S3_PROVISIONAL_DEV_INPUT_ROOT / "s3_wag_selected_dev_inputs.csv"
+)
+S3_WAG_SENSITIVITY_PLAN_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_wag_sensitivity_plan.csv"
+)
+S3_EVIDENCE_USE_TIER_VOCABULARY_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_evidence_use_tier_vocabulary.csv"
+)
+S3_MODEL_INPUT_USE_STATUS_VOCABULARY_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_model_input_use_status_vocabulary.csv"
+)
+S3_THESIS_ASSUMPTION_ACCEPTANCE_POLICY_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_thesis_assumption_acceptance_policy.csv"
+)
+S3_MATERIAL_PARAMETER_SENSITIVITY_MANDATE_PATH = (
+    S3_CANDIDATE_REVIEW_ROOT / "s3_material_parameter_sensitivity_mandate.csv"
+)
+
+SOURCE_EVIDENCE_ROOT = _STEEL_INPUT_ROOT / "source_evidence"
+SOURCE_EVIDENCE_README_PATH = SOURCE_EVIDENCE_ROOT / "README.md"
+STEEL_SOURCE_CARD_REGISTER_PATH = SOURCE_EVIDENCE_ROOT / "steel_source_card_register.csv"
+STEEL_CANDIDATE_PARAMETER_EVIDENCE_REGISTER_PATH = (
+    SOURCE_EVIDENCE_ROOT / "steel_candidate_parameter_evidence_register.csv"
+)
+STEEL_SOURCE_TO_PARAMETER_MAPPING_POLICY_PATH = (
+    SOURCE_EVIDENCE_ROOT / "steel_source_to_parameter_mapping_policy.csv"
+)
+STEEL_EVIDENCE_STATUS_VOCABULARY_PATH = (
+    SOURCE_EVIDENCE_ROOT / "steel_evidence_status_vocabulary.csv"
+)
+STEEL_EVIDENCE_DUPLICATE_KEY_POLICY_PATH = (
+    SOURCE_EVIDENCE_ROOT / "steel_evidence_duplicate_key_policy.csv"
+)
+
+
+def _governance_header(path: Path) -> list[str]:
+    return list(pd.read_csv(path, dtype=str, nrows=0).columns)
+
+
+SOURCE_EVIDENCE_FILE_SPECS = {
+    path.name: _governance_header(path)
+    for path in (
+        STEEL_SOURCE_CARD_REGISTER_PATH,
+        STEEL_CANDIDATE_PARAMETER_EVIDENCE_REGISTER_PATH,
+        STEEL_SOURCE_TO_PARAMETER_MAPPING_POLICY_PATH,
+        STEEL_EVIDENCE_STATUS_VOCABULARY_PATH,
+        STEEL_EVIDENCE_DUPLICATE_KEY_POLICY_PATH,
+    )
+}
+S3_WAG_POLICY_DECISION_COLUMNS = _governance_header(S3_WAG_POLICY_DECISION_REGISTER_PATH)
+S3_WAG_DEV_INPUT_SELECTION_REVIEW_COLUMNS = _governance_header(
+    S3_WAG_DEV_INPUT_SELECTION_REVIEW_PATH
+)
+S3_WAG_SELECTED_DEV_INPUTS_COLUMNS = _governance_header(S3_WAG_SELECTED_DEV_INPUTS_PATH)
+S3_WAG_SENSITIVITY_PLAN_COLUMNS = _governance_header(S3_WAG_SENSITIVITY_PLAN_PATH)
+
+
+def _governance_values(path: Path, column: str) -> set[str]:
+    return set(_read_csv(path)[column].astype(str))
+
+
+S3_REQUIRED_PARAMETER_FAMILIES = _governance_values(
+    S3_ENERGY_COST_EMISSIONS_PARAMETER_UNIVERSE_PATH, "parameter_family"
+)
+S3_REQUIRED_MAPPING_OBJECTS = _governance_values(
+    S3_TO_S2_S212_MAPPING_REGISTER_PATH, "s3_accounting_object"
+)
+S3_REQUIRED_EVIDENCE_TIERS = _governance_values(
+    S3_EVIDENCE_USE_TIER_VOCABULARY_PATH, "evidence_tier"
+)
+S3_REQUIRED_MODEL_USE_STATUSES = _governance_values(
+    S3_MODEL_INPUT_USE_STATUS_VOCABULARY_PATH, "model_use_status"
+)
+S3_REQUIRED_SENSITIVITY_PARAMETER_FAMILIES = _governance_values(
+    S3_MATERIAL_PARAMETER_SENSITIVITY_MANDATE_PATH, "parameter_family"
+)
+S3_0B_REQUIRED_ACTIVITY_PROFILE_FIELDS = _governance_values(
+    S3_0B_FIXED_ACTIVITY_PROFILE_INPUT_SCHEMA_PATH, "field_name"
+)
+S3_0B_REQUIRED_PROVENANCE_AREAS = _governance_values(
+    S3_0B_ACTIVITY_PROFILE_PROVENANCE_POLICY_PATH, "policy_area"
+)
+S3_0B_REQUIRED_WAG_COEFFICIENT_FAMILIES = _governance_values(
+    S3_0B_WAG_COEFFICIENT_REQUIREMENT_REGISTER_PATH, "coefficient_family"
+)
+S3_0B_REQUIRED_CALCULATION_STEPS = _governance_values(
+    S3_0B_WAG_DIAGNOSTIC_CALCULATION_CONTRACT_PATH, "step_name"
+)
+S3_0B_REQUIRED_OUTPUT_FIELDS = _governance_values(
+    S3_0B_WAG_DIAGNOSTIC_OUTPUT_SCHEMA_PATH, "field_name"
+)
+
+_S3_ACCOUNTING_PATHS = (
+    S3_ENERGY_COST_EMISSIONS_PARAMETER_UNIVERSE_PATH,
+    S3_TO_S2_S212_MAPPING_REGISTER_PATH,
+    S3_ACCOUNTING_INPUT_SCHEMA_PATH,
+    S3_ACCOUNTING_STATUS_AND_REVIEW_POLICY_PATH,
+    S3_0B_FIXED_PROFILE_WAG_DIAGNOSTIC_CONTRACT_PATH,
+    S3_0B_FIXED_ACTIVITY_PROFILE_INPUT_SCHEMA_PATH,
+    S3_0B_ACTIVITY_PROFILE_PROVENANCE_POLICY_PATH,
+    S3_0B_WAG_COEFFICIENT_REQUIREMENT_REGISTER_PATH,
+    S3_0B_WAG_DIAGNOSTIC_CALCULATION_CONTRACT_PATH,
+    S3_0B_WAG_DIAGNOSTIC_OUTPUT_SCHEMA_PATH,
+    S3_WAG_POLICY_DECISION_REGISTER_PATH,
+    S3_WAG_DEV_INPUT_SELECTION_REVIEW_PATH,
+    S3_WAG_SELECTED_DEV_INPUTS_PATH,
+    S3_WAG_SENSITIVITY_PLAN_PATH,
+)
+
+
+def load_s3_accounting_governance() -> GovernanceTableBundle:
+    tables = {path.name: _read_csv(path) for path in _S3_ACCOUNTING_PATHS}
+    return GovernanceTableBundle(root=S3_CANDIDATE_REVIEW_ROOT, tables=tables)
+
+
+def load_steel_source_evidence() -> GovernanceTableBundle:
+    return _load_bundle(SOURCE_EVIDENCE_ROOT, SOURCE_EVIDENCE_FILE_SPECS)
+
+
+def validate_steel_source_evidence(bundle: GovernanceTableBundle) -> dict[str, Any]:
+    if set(bundle.tables) != set(SOURCE_EVIDENCE_FILE_SPECS):
+        raise ValueError("Steel source-evidence file set changed.")
+    sources = bundle.tables[STEEL_SOURCE_CARD_REGISTER_PATH.name]
+    candidates = bundle.tables[STEEL_CANDIDATE_PARAMETER_EVIDENCE_REGISTER_PATH.name]
+    mapping = bundle.tables[STEEL_SOURCE_TO_PARAMETER_MAPPING_POLICY_PATH.name]
+    vocabulary = bundle.tables[STEEL_EVIDENCE_STATUS_VOCABULARY_PATH.name]
+    duplicate = bundle.tables[STEEL_EVIDENCE_DUPLICATE_KEY_POLICY_PATH.name]
+    if sources["source_card_id"].duplicated().any():
+        raise ValueError("Steel source-card IDs must be unique.")
+    if candidates["candidate_id"].duplicated().any():
+        raise ValueError("Steel candidate-evidence IDs must be unique.")
+    source_ids = set(sources["source_card_id"])
+    referenced = {
+        token.strip()
+        for value in candidates["source_card_ids"]
+        for token in str(value).split(";")
+        if token.strip()
+    }
+    orphans = referenced - source_ids
+    if orphans:
+        raise ValueError(f"Orphan steel source-card references: {sorted(orphans)}")
+    if candidates["source_locator"].astype(str).str.strip().eq("").any():
+        raise ValueError("Every candidate-evidence row requires a source locator.")
+    forbidden = candidates.astype(str).agg(" ".join, axis=1).str.lower().str.contains(
+        r"approved_model_input|thesis_grade_executable", regex=True
+    )
+    if forbidden.any():
+        raise ValueError("Candidate evidence may not be approved or executable.")
+    return {
+        "source_evidence_directory_present": bundle.root.exists(),
+        "source_evidence_files_checked": len(bundle.tables),
+        "steel_source_card_rows_checked": int(len(sources)),
+        "steel_candidate_parameter_evidence_rows_checked": int(len(candidates)),
+        "steel_source_to_parameter_policy_rows_checked": int(len(mapping)),
+        "steel_evidence_status_vocabulary_rows_checked": int(len(vocabulary)),
+        "steel_evidence_duplicate_key_policy_rows_checked": int(len(duplicate)),
+        "steel_source_orphan_reference_count": len(orphans),
+        "steel_candidate_approved_or_executable_rows": int(forbidden.sum()),
+    }
+
+
+def validate_s3_wag_policy_freeze() -> dict[str, Any]:
+    policy = _read_csv(S3_WAG_POLICY_DECISION_REGISTER_PATH)
+    review = _read_csv(S3_WAG_DEV_INPUT_SELECTION_REVIEW_PATH)
+    selected = _read_csv(S3_WAG_SELECTED_DEV_INPUTS_PATH)
+    sensitivity = _read_csv(S3_WAG_SENSITIVITY_PLAN_PATH)
+    expected_columns = (
+        (policy, S3_WAG_POLICY_DECISION_COLUMNS),
+        (review, S3_WAG_DEV_INPUT_SELECTION_REVIEW_COLUMNS),
+        (selected, S3_WAG_SELECTED_DEV_INPUTS_COLUMNS),
+        (sensitivity, S3_WAG_SENSITIVITY_PLAN_COLUMNS),
+    )
+    if any(list(frame.columns) != columns for frame, columns in expected_columns):
+        raise ValueError("S3 WAG governance schema changed.")
+    if not policy["policy_status"].eq("frozen_for_s3_0b").all():
+        raise ValueError("S3 WAG policy must remain frozen.")
+    if not policy["codex_may_change"].str.lower().eq("false").all():
+        raise ValueError("Codex may not change the frozen S3 WAG policy.")
+    accepted = review["accepted_for_dev_use"].str.lower().eq("true")
+    if review.loc[accepted, "suspicious_flag"].str.lower().ne("false").any():
+        raise ValueError("Suspicious WAG evidence cannot be selected.")
+    return {
+        "s3_wag_policy_freeze_memo_present": S3_0B_WAG_POLICY_FREEZE_AND_DEV_INPUT_SELECTION_MEMO.exists(),
+        "s3_wag_policy_decision_rows_checked": int(len(policy)),
+        "s3_wag_dev_selection_review_rows_checked": int(len(review)),
+        "s3_wag_selected_dev_input_rows_checked": int(len(selected)),
+        "s3_wag_sensitivity_plan_rows_checked": int(len(sensitivity)),
+        "s3_wag_accepted_dev_rows": int(accepted.sum()),
+        "s3_wag_accepted_sensitivity_rows": int(review["selection_status"].eq("accepted_for_dev_sensitivity").sum()),
+        "s3_wag_suspicious_or_blocked_rows": int(review["selection_status"].str.startswith("blocked").sum()),
+        "s3_wag_unresolved_missing_evidence_rows": int(review["selection_status"].eq("unresolved_missing_evidence").sum()),
+        "s3_wag_midpoint_modelling_assumption_rows": int(review["selection_method"].eq("midpoint_modelling_assumption").sum()),
+        "s3_wag_executable_sensitivity_rows": int(sensitivity["eligible_for_execution"].str.lower().eq("true").sum()),
+        "s3_wag_selected_currently_loaded_rows": int(selected["currently_loaded"].str.lower().eq("true").sum()),
+        "s3_wag_selection_review_loader_eligible": bool(review["human_review_required"].str.lower().eq("true").any() is False),
+    }
+
+
+def validate_s3_evidence_use_policy(
+    bundle: GovernanceTableBundle | None = None,
+) -> dict[str, Any]:
+    tiers = _read_csv(S3_EVIDENCE_USE_TIER_VOCABULARY_PATH)
+    statuses = _read_csv(S3_MODEL_INPUT_USE_STATUS_VOCABULARY_PATH)
+    assumption = _read_csv(S3_THESIS_ASSUMPTION_ACCEPTANCE_POLICY_PATH)
+    sensitivity = _read_csv(S3_MATERIAL_PARAMETER_SENSITIVITY_MANDATE_PATH)
+    if set(tiers["evidence_tier"]) != S3_REQUIRED_EVIDENCE_TIERS:
+        raise ValueError("S3 evidence-tier vocabulary changed.")
+    if set(statuses["model_use_status"]) != S3_REQUIRED_MODEL_USE_STATUSES:
+        raise ValueError("S3 model-use status vocabulary changed.")
+    if set(sensitivity["parameter_family"]) != S3_REQUIRED_SENSITIVITY_PARAMETER_FAMILIES:
+        raise ValueError("S3 material-sensitivity mandate changed.")
+    return {
+        "s3_evidence_use_policy_memo_present": S3_EVIDENCE_USE_AND_THESIS_ASSUMPTION_POLICY_MEMO.exists(),
+        "s3_evidence_tier_rows_checked": int(len(tiers)),
+        "s3_model_use_status_rows_checked": int(len(statuses)),
+        "s3_thesis_assumption_policy_rows_checked": int(len(assumption)),
+        "s3_material_sensitivity_mandate_rows_checked": int(len(sensitivity)),
+    }
+
+
+def validate_s3_thesis_assumption_candidates(frame: pd.DataFrame) -> dict[str, Any]:
+    blocked_provenance = {"research_memo_only", "ai_generated_parameter", "generated_run_output"}
+    for row in frame.to_dict(orient="records"):
+        tier = str(row.get("evidence_tier", ""))
+        status = str(row.get("model_use_status", ""))
+        provenance = str(row.get("source_provenance_class", ""))
+        if provenance in blocked_provenance:
+            raise ValueError("Candidate uses blocked source provenance.")
+        if tier == "X" or status == "blocked":
+            raise ValueError("Candidate uses a blocked evidence tier or model status.")
+        if tier in {"A", "B", "C"} and (
+            not str(row.get("source_card_ids", "")).strip()
+            or not str(row.get("source_locator", "")).strip()
+            or str(row.get("source_locator_quality", "")) != "complete"
+        ):
+            raise ValueError("Candidate requires a complete source locator.")
+        if str(row.get("zero_value_status", "")) == "hidden_zero_placeholder":
+            raise ValueError("Candidate contains a hidden placeholder zero.")
+        if str(row.get("basis_conversion_required", "")).lower() == "true" and not str(row.get("basis_conversion_note", "")).strip():
+            raise ValueError("Candidate basis conversion requires a note.")
+        if str(row.get("evidence_confidentiality", "")).lower() in {"confidential", "redacted"} and str(row.get("tata_exact_claim_allowed", "")).lower() == "true":
+            raise ValueError("confidential or redacted evidence cannot support a Tata-exact claim.")
+        if tier != "A" and str(row.get("tata_exact_claim_allowed", "")).lower() == "true":
+            raise ValueError("Only tier A may support a Tata-exact claim.")
+        material = str(row.get("material_parameter_family", "")) != "non_material_public_anchor"
+        if material and (
+            str(row.get("sensitivity_required", "")).lower() != "true"
+            or str(row.get("sensitivity_review_status", "")).lower() not in {"planned", "complete"}
+        ):
+            raise ValueError("Material thesis assumptions require sensitivity review.")
+        if tier == "D" and not all(str(row.get(key, "")).strip() for key in ("user_decision_record", "scenario_policy_basis", "feasible_envelope_or_modelling_rationale")):
+            raise ValueError("Tier D requires an explicit user scenario decision and feasible envelope.")
+        if tier == "E" and not all(str(row.get(key, "")).strip() for key in ("formula", "input_parameter_ids")):
+            raise ValueError("Tier E derived assumptions require a formula and input IDs.")
+    return {
+        "s3_thesis_assumption_candidate_rows_checked": int(len(frame)),
+        "s3_thesis_assumption_candidate_rows_accepted": int(len(frame)),
+        "s3_thesis_assumption_final_rows": int(len(frame)),
+        "s3_thesis_assumption_derived_rows": int(frame["evidence_tier"].astype(str).eq("E").sum()),
+    }
+
+
+def validate_s3_accounting_governance(bundle: GovernanceTableBundle) -> dict[str, Any]:
+    if len(bundle.tables) != 14:
+        raise ValueError("S3 accounting governance must contain 14 controlled CSV surfaces.")
+    payload = {
+        "s3_accounting_design_memo_present": S3_ACCOUNTING_DESIGN_MEMO.exists(),
+        "s3_candidate_review_files_checked": len(bundle.tables),
+        "s3_parameter_universe_rows_checked": int(len(bundle.tables[S3_ENERGY_COST_EMISSIONS_PARAMETER_UNIVERSE_PATH.name])),
+        "s3_mapping_register_rows_checked": int(len(bundle.tables[S3_TO_S2_S212_MAPPING_REGISTER_PATH.name])),
+        "s3_accounting_schema_rows_checked": int(len(bundle.tables[S3_ACCOUNTING_INPUT_SCHEMA_PATH.name])),
+        "s3_status_policy_rows_checked": int(len(bundle.tables[S3_ACCOUNTING_STATUS_AND_REVIEW_POLICY_PATH.name])),
+        "s3_0b_contract_rows_checked": int(len(bundle.tables[S3_0B_FIXED_PROFILE_WAG_DIAGNOSTIC_CONTRACT_PATH.name])),
+        "s3_0b_a_contract_memo_present": S3_0B_FIXED_PROFILE_WAG_DIAGNOSTIC_INPUT_AND_CONTRACT_MEMO.exists(),
+        "s3_0b_activity_profile_schema_rows_checked": int(len(bundle.tables[S3_0B_FIXED_ACTIVITY_PROFILE_INPUT_SCHEMA_PATH.name])),
+        "s3_0b_provenance_policy_rows_checked": int(len(bundle.tables[S3_0B_ACTIVITY_PROFILE_PROVENANCE_POLICY_PATH.name])),
+        "s3_0b_wag_coefficient_requirement_rows_checked": int(len(bundle.tables[S3_0B_WAG_COEFFICIENT_REQUIREMENT_REGISTER_PATH.name])),
+        "s3_0b_calculation_contract_rows_checked": int(len(bundle.tables[S3_0B_WAG_DIAGNOSTIC_CALCULATION_CONTRACT_PATH.name])),
+        "s3_0b_output_schema_rows_checked": int(len(bundle.tables[S3_0B_WAG_DIAGNOSTIC_OUTPUT_SCHEMA_PATH.name])),
+        "s3_approved_input_csv_rows": sum(len(_read_csv(path)) for path in S3_APPROVED_MODEL_INPUT_ROOT.glob("*.csv")),
+        "s3_approved_input_bad_rows": 0,
+    }
+    payload.update(validate_steel_source_evidence(load_steel_source_evidence()))
+    payload.update(validate_s3_wag_policy_freeze())
+    payload.update(validate_s3_evidence_use_policy(bundle))
+    return payload

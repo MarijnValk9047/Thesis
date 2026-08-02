@@ -4,6 +4,7 @@ import csv
 import json
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 from pyomo.environ import ConcreteModel, Constraint, NonNegativeReals, RangeSet, Var, value
 
@@ -218,15 +219,20 @@ def test_s4_4c_constraint_audit_includes_implemented_and_blocked_families():
 
 
 def test_s4_4c_writes_parseable_reports():
+    report_dir = (
+        TEST_CASE_DIR.parents[2] / "tmp" / "s4_4c_report_contract_fixtures"
+        / uuid4().hex
+    )
     run_s44c_unified_physical_regression(
-        run_id="pytest_s44c_write", write_report=True, **_active_regression_kwargs()
+        run_id="pytest_s44c_write", write_report=True, report_dir=report_dir,
+        **_active_regression_kwargs()
     )
 
-    report = json.loads(DEFAULT_REPORT_JSON_PATH.read_text(encoding="utf-8"))
-    gate = json.loads(DEFAULT_STAGE_GATE_JSON_PATH.read_text(encoding="utf-8"))
-    build_rows = _read_csv(DEFAULT_BUILD_AUDIT_CSV_PATH)
-    constraint_rows = _read_csv(DEFAULT_CONSTRAINT_AUDIT_CSV_PATH)
-    hourly_rows = _read_csv(DEFAULT_HOURLY_CSV_PATH)
+    report = json.loads((report_dir / DEFAULT_REPORT_JSON_PATH.name).read_text(encoding="utf-8"))
+    gate = json.loads((report_dir / DEFAULT_STAGE_GATE_JSON_PATH.name).read_text(encoding="utf-8"))
+    build_rows = _read_csv(report_dir / DEFAULT_BUILD_AUDIT_CSV_PATH.name)
+    constraint_rows = _read_csv(report_dir / DEFAULT_CONSTRAINT_AUDIT_CSV_PATH.name)
+    hourly_rows = _read_csv(report_dir / DEFAULT_HOURLY_CSV_PATH.name)
 
     assert report["hourly_da_price_taking_active"] is False
     assert gate["product_revenue_active"] is False

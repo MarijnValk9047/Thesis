@@ -1,0 +1,24 @@
+run_id: steel_c5_phase5b_breakthrough_tests_v1_20260727
+mode: phase5b_c0_resource_capped_export_breakthrough_tests
+checkpoint_id: phase5b_breakthrough_physical_oracle_gate
+lineage_role: Phase 5B follow-up decision evidence
+run_class: bounded deterministic DEVELOPMENT physical upper-bound diagnostic
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c5_phase5b_breakthrough_tests_v1_20260727
+retention_status: local_ignored
+git_eligible: false
+
+breakthrough:
+  parent_phase5b_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5b_c0_export_sensitivity.yaml
+  scratch_root: tmp/steel_c5_phase5b_breakthrough_tests_v1_20260727_cases
+  first_gate_period_id: validation_2024-02-12
+  second_period_id: validation_2024-07-01
+  physical_oracle_mode: phase5b_physical_wag_upper_bound_v1
+  clean_economic_mode: phase5b_clean_economic_export_v1
+  material_threshold_twh_e_y: 0.015014
+  gross_import_cap_basis: executed_no_export_comparator_by_replan
+  named_ng_cap_basis: executed_no_export_comparator_by_replan
+  emissions_costs_added: false
+  export_price_floor_added: false
+  physics_changed: false
+  held_out_periods_used: false

@@ -295,6 +295,7 @@ def build_dplus4_forecast_slice(
     price_field: str = "y_pred",
     perfect_foresight_oracle: bool = False,
     source_contract_path: str | Path = DPLUS4_SOURCE_CONTRACT_PATH,
+    realised_price_gap_patch_by_timestamp_utc: Mapping[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Load one frozen D-D+4 origin for operation or a labelled oracle.
 
@@ -353,8 +354,35 @@ def build_dplus4_forecast_slice(
             ("forecast_origin_utc", "=", origin),
         ],
     )
+    source_rows = table.to_pylist()
+    gap_patch = dict(realised_price_gap_patch_by_timestamp_utc or {})
+    if gap_patch:
+        if price_field != "y_true" or not perfect_foresight_oracle:
+            raise PriceSeriesInterfaceError(
+                "A realised-price gap supplement is allowed only for the explicit y_true oracle."
+            )
+        normalised_patch: dict[str, float] = {}
+        for timestamp, value in gap_patch.items():
+            key = _timestamp(str(timestamp)).isoformat()
+            price = float(value)
+            if not math.isfinite(price):
+                raise PriceSeriesInterfaceError("Realised-price gap supplements must be finite.")
+            normalised_patch[key] = price
+        patched_rows: list[dict[str, Any]] = []
+        for source in source_rows:
+            row = dict(source)
+            delivery = row["target_timestamp_utc"]
+            if not isinstance(delivery, datetime):
+                delivery = _timestamp(str(delivery))
+            else:
+                delivery = delivery.astimezone(timezone.utc)
+            key = delivery.isoformat()
+            if row.get("y_true") is None and key in normalised_patch:
+                row["y_true"] = normalised_patch[key]
+            patched_rows.append(row)
+        source_rows = patched_rows
     selected = _validate_dplus4_rows(
-        table.to_pylist(), contract=contract, dataset_split=dataset_split,
+        source_rows, contract=contract, dataset_split=dataset_split,
         origin=origin, expected_horizon_hours=planning_horizon_hours,
         price_field=price_field,
     )
@@ -527,6 +555,7 @@ def build_rolling_price_slice(
     forecast_price_override_eur_per_mwh: float | None = None,
     forecast_price_field: str = "y_pred",
     perfect_foresight_oracle: bool = False,
+    realised_price_gap_patch_by_timestamp_utc: Mapping[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Return one information-safe hourly price slice for a rolling replan."""
 
@@ -553,6 +582,9 @@ def build_rolling_price_slice(
             price_override_eur_per_mwh=forecast_price_override_eur_per_mwh,
             price_field=forecast_price_field,
             perfect_foresight_oracle=perfect_foresight_oracle,
+            realised_price_gap_patch_by_timestamp_utc=(
+                realised_price_gap_patch_by_timestamp_utc
+            ),
         )
         replan_time = _timestamp(rows[0]["forecast_origin_utc"])
         delivery_start = _timestamp(rows[0]["delivery_timestamp_utc"])

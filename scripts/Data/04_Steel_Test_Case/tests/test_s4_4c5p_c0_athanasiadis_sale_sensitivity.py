@@ -69,7 +69,11 @@ from steel.s4_4c5p_c0_real_anchor_mechanism_experiment import (
     candidate_overrides,
     load_mechanism_config,
 )
+from steel.s4_4c5p_phase5b_c0_export_sensitivity import (
+    install_terminal_validation_extension,
+)
 from steel.validation_tolerance_policy import (
+    CONSTRAINT_FAMILY_REGISTRY,
     SOLVER_NUMERICAL_TOLERANCE,
     constraint_family_rule,
     policy_contract,
@@ -374,6 +378,15 @@ def _sale_model(*, demand: float = 5.0, wag_generation: float = 8.0) -> Concrete
     model.final_product_output = Expression(
         model.TIME, rule=lambda _m, _t: 1.2345678901234567
     )
+    model.bof_crude_steel_output = Expression(
+        model.TIME, rule=lambda _m, _t: 1.3
+    )
+    model.c0_hsm_final_product_output = Expression(
+        model.TIME, rule=lambda _m, _t: 0.9
+    )
+    model.c0_dsp_final_product_output = Expression(
+        model.TIME, rule=lambda _m, _t: 0.3345678901234567
+    )
     model.coke_inventory = Var(
         model.TIME, initialize={0: 11.11111111111111, 1: 12.12121212121212}
     )
@@ -461,7 +474,7 @@ def _cost_policy(*, electricity_price: float, ng_price: float = 55.0) -> dict[st
 
 def _state_preservation_contract() -> dict[str, object]:
     return {
-        "schema_version": "steel_phase2_sale_state_preservation_v3",
+        "schema_version": "steel_phase2_sale_state_preservation_v4",
         "enabled": True,
         "configuration_id": "C0_current_BF_BOF_reference",
         "replan_index": 0,
@@ -706,6 +719,15 @@ def test_real_containment_oracle_fixes_shared_incumbent_and_restores_state(
     comparator.final_product_output = Expression(
         comparator.TIME, rule=lambda m, t: m.shared[t]
     )
+    comparator.bof_crude_steel_output = Expression(
+        comparator.TIME, rule=lambda m, t: m.shared[t]
+    )
+    comparator.c0_hsm_final_product_output = Expression(
+        comparator.TIME, rule=lambda m, t: m.shared[t]
+    )
+    comparator.c0_dsp_final_product_output = Expression(
+        comparator.TIME, rule=lambda _m, _t: 0.0
+    )
     edge_lower_bound = full_precision_value + 1.0000003385357559e-6
     comparator.rolling_production_deadline = Constraint(
         expr=comparator.shared[0] >= edge_lower_bound
@@ -743,6 +765,15 @@ def test_real_containment_oracle_fixes_shared_incumbent_and_restores_state(
     sale.shared[0].set_value(None)
     sale.final_product_output = Expression(
         sale.TIME, rule=lambda m, t: m.shared[t]
+    )
+    sale.bof_crude_steel_output = Expression(
+        sale.TIME, rule=lambda m, t: m.shared[t]
+    )
+    sale.c0_hsm_final_product_output = Expression(
+        sale.TIME, rule=lambda m, t: m.shared[t]
+    )
+    sale.c0_dsp_final_product_output = Expression(
+        sale.TIME, rule=lambda _m, _t: 0.0
     )
     sale.rolling_production_deadline = Constraint(
         expr=sale.shared[0] >= edge_lower_bound
@@ -837,6 +868,9 @@ def test_real_containment_oracle_fixes_shared_incumbent_and_restores_state(
     ]
     assert result["state_preservation_capture"]["targets"] == {
         "executed_final_product_t": full_precision_value,
+        "executed_bof_liquid_steel_t": full_precision_value,
+        "executed_hsm_final_output_t": full_precision_value,
+        "executed_dsp_final_output_t": 0.0,
         "coke_inventory_t": inventory_targets["coke_inventory"],
         "sinter_inventory_t": inventory_targets["sinter_inventory"],
         "hot_iron_inventory_t": inventory_targets["hot_iron_inventory"],
@@ -1501,6 +1535,9 @@ def test_sale_state_targets_use_full_precision_verified_incumbent_values() -> No
     )
     assert capture["target_schema"] == [
         "executed_final_product_t",
+        "executed_bof_liquid_steel_t",
+        "executed_hsm_final_output_t",
+        "executed_dsp_final_output_t",
         "coke_inventory_t",
         "sinter_inventory_t",
         "hot_iron_inventory_t",
@@ -1508,6 +1545,9 @@ def test_sale_state_targets_use_full_precision_verified_incumbent_values() -> No
     ]
     assert capture["targets"] == {
         "executed_final_product_t": 2 * 1.2345678901234567,
+        "executed_bof_liquid_steel_t": 2.6,
+        "executed_hsm_final_output_t": 1.8,
+        "executed_dsp_final_output_t": 2 * 0.3345678901234567,
         "coke_inventory_t": 12.12121212121212,
         "sinter_inventory_t": 22.22222222222222,
         "hot_iron_inventory_t": 32.32323232323232,
@@ -1515,7 +1555,7 @@ def test_sale_state_targets_use_full_precision_verified_incumbent_values() -> No
     }
 
 
-def test_sale_state_apply_adds_exact_five_constraints_and_durable_evidence(
+def test_sale_state_apply_adds_exact_progress_and_inventory_constraints(
     local_test_tmp: Path,
 ) -> None:
     model = _sale_model()
@@ -1547,12 +1587,15 @@ def test_sale_state_apply_adds_exact_five_constraints_and_durable_evidence(
     expected_names = set(constraint_names.values())
     assert expected_names == {
         "sale_state_executed_final_product_preservation_exact",
+        "sale_state_executed_bof_liquid_steel_preservation_exact",
+        "sale_state_executed_hsm_final_output_preservation_exact",
+        "sale_state_executed_dsp_final_output_preservation_exact",
         "sale_state_coke_inventory_preservation_exact",
         "sale_state_sinter_inventory_preservation_exact",
         "sale_state_hot_iron_inventory_preservation_exact",
         "sale_state_cold_slab_inventory_preservation_exact",
     }
-    assert len(expected_names) == len(constraint_names) == 5
+    assert len(expected_names) == len(constraint_names) == 8
     assert all(hasattr(model, name) for name in expected_names)
     for target_id, name in constraint_names.items():
         constraint = getattr(model, name)
@@ -2246,6 +2289,9 @@ def _write_containment_record(
     replan_index = int(suffix) if suffix.isdigit() else 0
     target_schema = [
         "executed_final_product_t",
+        "executed_bof_liquid_steel_t",
+        "executed_hsm_final_output_t",
+        "executed_dsp_final_output_t",
         "coke_inventory_t",
         "sinter_inventory_t",
         "hot_iron_inventory_t",
@@ -2253,22 +2299,29 @@ def _write_containment_record(
     ]
     targets = {
         "executed_final_product_t": 18_493.150684931505,
+        "executed_bof_liquid_steel_t": 19_466.47440519106,
+        "executed_hsm_final_output_t": 14_000.0,
+        "executed_dsp_final_output_t": 4_493.150684931505,
         "coke_inventory_t": 245.38021409043836,
         "sinter_inventory_t": 0.0,
         "hot_iron_inventory_t": 500.0,
         "cold_slab_inventory_t": 12_456.801578003515,
     }
+    cumulative_components = {
+        "executed_final_product_t": "final_product_output",
+        "executed_bof_liquid_steel_t": "bof_crude_steel_output",
+        "executed_hsm_final_output_t": "c0_hsm_final_product_output",
+        "executed_dsp_final_output_t": "c0_dsp_final_product_output",
+    }
     state_schema = [
         {
             "target_id": key,
-            "model_component": (
-                "final_product_output"
-                if key == "executed_final_product_t"
-                else key.removesuffix("_t")
+            "model_component": cumulative_components.get(
+                key, key.removesuffix("_t")
             ),
             "selection": (
                 "sum_executed_hours"
-                if key == "executed_final_product_t"
+                if key in cumulative_components
                 else "handoff_hour"
             ),
             "unit": "t",
@@ -2282,6 +2335,9 @@ def _write_containment_record(
         key: f"sale_state_{stem}_preservation_exact"
         for key, stem in {
             "executed_final_product_t": "executed_final_product",
+            "executed_bof_liquid_steel_t": "executed_bof_liquid_steel",
+            "executed_hsm_final_output_t": "executed_hsm_final_output",
+            "executed_dsp_final_output_t": "executed_dsp_final_output",
             "coke_inventory_t": "coke_inventory",
             "sinter_inventory_t": "sinter_inventory",
             "hot_iron_inventory_t": "hot_iron_inventory",
@@ -2297,7 +2353,7 @@ def _write_containment_record(
     }
     implementation_sha = "a" * 64
     pre = {
-        "schema_version": "steel_phase2_sale_state_preservation_v3",
+        "schema_version": "steel_phase2_sale_state_preservation_v4",
         "status": "targets_applied_pending_economic_solve",
         "configuration_id": "C0_current_BF_BOF_reference",
         "replan_index": replan_index,
@@ -3598,7 +3654,7 @@ def test_case_cache_rejects_old_implementation_or_authorization_identity(
         encoding="utf-8",
     )
     (directory / "code_version.json").write_text(
-        json.dumps({"git_commit": "f2c4126b216707b132ca9bab43291b345e49b939"}),
+        json.dumps({"git_commit": sale_sensitivity_module._git_head()}),
         encoding="utf-8",
     )
     source = (
@@ -3775,9 +3831,19 @@ def test_real_volatile_active_c0_deadline_reports_exact_machine_edge() -> None:
     )
 
 
-def test_real_active_volatile_c0_exact_quota_families_resolve_and_fail_above_one_tonne() -> None:
+def test_real_active_volatile_c0_exact_quota_families_resolve_and_fail_above_one_tonne(
+    request: pytest.FixtureRequest,
+) -> None:
     """Use the real C0 builder plus the single-window volatile terminal contract."""
 
+    original_registry = dict(CONSTRAINT_FAMILY_REGISTRY)
+    request.addfinalizer(
+        lambda: (
+            CONSTRAINT_FAMILY_REGISTRY.clear(),
+            CONSTRAINT_FAMILY_REGISTRY.update(original_registry),
+        )
+    )
+    install_terminal_validation_extension()
     tables = _load_tables(modelbuilder.CORRECTED_INPUT_DIR)
     inputs = _build_c0_inputs(
         tables,
@@ -3840,6 +3906,10 @@ def test_real_active_volatile_c0_exact_quota_families_resolve_and_fail_above_one
         "rolling_production_future_terminal_quota_equality"
         in active_families
     )
+    unregistered_families = sorted(
+        set(active_families) - set(CONSTRAINT_FAMILY_REGISTRY)
+    )
+    assert not unregistered_families
     resolved_active_families = {
         family: constraint_family_rule(family) for family in active_families
     }
@@ -4217,7 +4287,9 @@ def test_real_active_c0_model_uses_constraint_aware_hourly_import_bounds(
         for row in stable_schema["current_or_derived_bound_pair_categories"]
     )
     for hour in model.TIME:
+        model.basic_oxygen_furnace[hour].set_value(1.0)
         model.hot_strip_mill[hour].set_value(1.0)
+        model.c0_dsp_liquid_steel_input[hour].set_value(0.0)
     for component_name, endpoint_value in {
         "coke_inventory": 10.0,
         "sinter_inventory": 20.0,
@@ -4243,6 +4315,9 @@ def test_real_active_c0_model_uses_constraint_aware_hourly_import_bounds(
     )
     assert set(preservation_context["targets"]) == {
         "executed_final_product_t",
+        "executed_bof_liquid_steel_t",
+        "executed_hsm_final_output_t",
+        "executed_dsp_final_output_t",
         "coke_inventory_t",
         "sinter_inventory_t",
         "hot_iron_inventory_t",
@@ -4254,7 +4329,7 @@ def test_real_active_c0_model_uses_constraint_aware_hourly_import_bounds(
             "constraint_names"
         ].values()
     }
-    assert len(real_band_names) == 5
+    assert len(real_band_names) == 8
     assert all(hasattr(model, name) for name in real_band_names)
     for target_id, name in preservation_oracle[
         "state_preservation_capture"
@@ -4436,7 +4511,13 @@ def test_persistent_payload_paths_are_repository_or_governed_root_relative(
 
 def test_full_matrix_requires_yaml_flag_hash_and_root_value(
     local_test_tmp: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        sale_sensitivity_module,
+        "_git_head",
+        lambda: sale_sensitivity_module.EXPECTED_HEAD,
+    )
     config = load_config()
     with pytest.raises(SaleSensitivityError, match="YAML authorization"):
         run_sale_sensitivity(

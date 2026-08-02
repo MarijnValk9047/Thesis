@@ -89,6 +89,45 @@ def test_real_anchor_interface_converts_only_approved_annual_terms() -> None:
     assert bridge["normal_case_flexible_ng_validation_reference_mwh_h"] == pytest.approx(
         1.65 / (HOURS_PER_YEAR * PJ_PER_MWH)
     )
+    assert bridge["flexible_ng_allocation_policy"] == "dispatch_endogenous"
+
+
+def test_normal_case_source_emulation_fixes_only_existing_flexible_heat_split() -> None:
+    generator, bridge = _c0_real_anchor_energy_recovery_interfaces(
+        {
+            "c0_aggregate_generator_technical_interface": GENERATOR_CONFIG,
+            "c0_full_site_energy_bridge": {
+                **BRIDGE_CONFIG,
+                "flexible_ng_allocation_policy": "normal_case_reference_exact_hourly",
+            },
+        }
+    )
+    inputs = _build_c0_inputs(
+        _load_tables(S44B_INPUT_DIR), horizon_hours_override=1, target_multiplier=1.0
+    )
+    model = _build_c0_model(
+        inputs,
+        enable_minimal_wag_layer=True,
+        enable_internal_wag_power=True,
+        aggregate_generator_technical_interface=generator,
+        full_site_energy_bridge=bridge,
+    )
+    ng_reference = 1.65 / (HOURS_PER_YEAR * PJ_PER_MWH)
+    total_service = 3.07 / (HOURS_PER_YEAR * PJ_PER_MWH)
+    model.flexible_other_site_heat_ng_mwh[0].set_value(ng_reference)
+    model.bfg_to_flexible_other_site_heat[0].set_value(total_service - ng_reference)
+    model.cog_to_flexible_other_site_heat[0].set_value(0.0)
+    model.bofg_to_flexible_other_site_heat[0].set_value(0.0)
+
+    assert model.flexible_ng_allocation_policy == "normal_case_reference_exact_hourly"
+    assert value(model.flexible_other_site_heat_ng_source_emulation[0].body) == pytest.approx(
+        ng_reference
+    )
+    assert value(model.flexible_other_site_heat_ng_source_emulation[0].lower) == pytest.approx(
+        ng_reference
+    )
+    assert value(model.flexible_other_site_heat_balance[0].body) == pytest.approx(total_service)
+    assert value(model.flexible_other_site_heat_balance[0].upper) == pytest.approx(total_service)
 
 
 def test_real_anchor_interface_rejects_export_and_fixed_ng_double_count() -> None:
@@ -336,11 +375,9 @@ def test_real_first_contract_config_and_checkpoint_snapshot_are_machine_readable
         "uae_c0_wag_generator_electricity",
         "uae_c0_figure91_ng_band",
     ):
-        assert anchors[overlay_id]["target_role"] == "calibration_target"
-        assert anchors[overlay_id]["calibration_stage"] == "screening_calibration"
-        assert "may not later be reused as independent validation" in anchors[
-            overlay_id
-        ]["arithmetic_caveat"]
+        assert anchors[overlay_id]["target_role"] == "primary_real_anchor"
+        assert anchors[overlay_id]["calibration_stage"] == "boundary_freeze"
+        assert anchors[overlay_id]["arithmetic_caveat"]
     assert anchors["real_anchor_c0_flexible_heat_service_envelope"][
         "value_central"
     ] == "3.07"
@@ -376,7 +413,9 @@ def test_real_first_contract_config_and_checkpoint_snapshot_are_machine_readable
             / "data/03_Optimisation/runs/steel_c5_real_anchor_energy_recovery_v1_20260722/checkpoint_state.json"
         ).read_text(encoding="utf-8")
     )
-    assert state["status"] == "checkpoint3_solved"
+    assert state["status"] == "complete"
     assert state["solver_invoked"] is True
-    assert state["dispatch_results_present"] is False
-    assert state["score_results_present"] is True
+    assert state["completed_checkpoints"] == [1, 2, 3, 4, 5, 6]
+    assert state["model_count"] == state["model_count_expected"] == 672
+    assert state["recovery_bg25_promoted"] is False
+    assert state["source_driven_baseline_status"] == "central_retained"

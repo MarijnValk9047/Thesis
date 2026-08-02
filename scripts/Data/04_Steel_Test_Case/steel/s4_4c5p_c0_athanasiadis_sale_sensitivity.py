@@ -697,13 +697,16 @@ def implementation_fingerprints(config_path: str | Path) -> dict[str, Any]:
             config_path
         ),
         "sale_state_preservation_specification": {
-            "schema_version": "steel_phase2_sale_state_preservation_v3",
+            "schema_version": "steel_phase2_sale_state_preservation_v4",
             "configuration_id": "C0_current_BF_BOF_reference",
             "operational_constraint": "full_precision_exact_equality",
             "final_validation": "independent_state_acceptance",
             "allowed_tolerance_t": TERMINAL_STATE_TOLERANCE_T,
             "target_schema": [
                 "executed_final_product_t",
+                "executed_bof_liquid_steel_t",
+                "executed_hsm_final_output_t",
+                "executed_dsp_final_output_t",
                 "coke_inventory_t",
                 "sinter_inventory_t",
                 "hot_iron_inventory_t",
@@ -1149,22 +1152,29 @@ def _validate_containment_records(
     preservation_max_residual = 0.0
     target_schema = (
         "executed_final_product_t",
+        "executed_bof_liquid_steel_t",
+        "executed_hsm_final_output_t",
+        "executed_dsp_final_output_t",
         "coke_inventory_t",
         "sinter_inventory_t",
         "hot_iron_inventory_t",
         "cold_slab_inventory_t",
     )
+    cumulative_components = {
+        "executed_final_product_t": "final_product_output",
+        "executed_bof_liquid_steel_t": "bof_crude_steel_output",
+        "executed_hsm_final_output_t": "c0_hsm_final_product_output",
+        "executed_dsp_final_output_t": "c0_dsp_final_product_output",
+    }
     state_schema = [
         {
             "target_id": target_id,
-            "model_component": (
-                "final_product_output"
-                if target_id == "executed_final_product_t"
-                else target_id.removesuffix("_t")
+            "model_component": cumulative_components.get(
+                target_id, target_id.removesuffix("_t")
             ),
             "selection": (
                 "sum_executed_hours"
-                if target_id == "executed_final_product_t"
+                if target_id in cumulative_components
                 else "handoff_hour"
             ),
             "unit": "t",
@@ -1178,6 +1188,9 @@ def _validate_containment_records(
         target_id: f"sale_state_{stem}_preservation_exact"
         for target_id, stem in {
             "executed_final_product_t": "executed_final_product",
+            "executed_bof_liquid_steel_t": "executed_bof_liquid_steel",
+            "executed_hsm_final_output_t": "executed_hsm_final_output",
+            "executed_dsp_final_output_t": "executed_dsp_final_output",
             "coke_inventory_t": "coke_inventory",
             "sinter_inventory_t": "sinter_inventory",
             "hot_iron_inventory_t": "hot_iron_inventory",
@@ -1261,7 +1274,7 @@ def _validate_containment_records(
             implementation_sha = str(pre["implementation_sha256"])
             provenance = dict(pre["source_capture_provenance"])
             valid = bool(
-                pre.get("schema_version") == "steel_phase2_sale_state_preservation_v3"
+                pre.get("schema_version") == "steel_phase2_sale_state_preservation_v4"
                 and final.get("schema_version") == pre.get("schema_version")
                 and pre.get("status") == "targets_applied_pending_economic_solve"
                 and final.get("status") == "pass"

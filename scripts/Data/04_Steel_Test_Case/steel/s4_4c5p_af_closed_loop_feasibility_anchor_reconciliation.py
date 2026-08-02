@@ -19,6 +19,8 @@ from typing import Any, Collection, Mapping
 import yaml
 from pyomo.environ import Objective, maximize, value
 
+from scripts.optimisation_performance import peak_working_set_mb
+
 from .model import collect_model_stats
 from .rolling_production_quota import (
     build_rolling_production_quota_plan,
@@ -521,24 +523,28 @@ def _deterministic_cost_policy(
         perfect_foresight_oracle=bool(
             config.get("perfect_foresight_oracle", False)
         ),
+        realised_price_gap_patch_by_timestamp_utc=config.get(
+            "realised_price_gap_patch_by_timestamp_utc"
+        ),
     )
     electricity_price_slice = electricity_price_slice[:horizon_hours]
-    real_anchor_c0_cost_flow_ids = {
-        "C0_NG_GENERATOR",
-        "C0_NG_FIXED_FULL_SITE",
-        "C0_NG_FLEXIBLE_OTHER_SITE_HEAT",
-    }
-    real_anchor_c0_costs_active = bool(
+    real_anchor_c0_generator_cost_active = bool(
         isinstance(config.get("c0_aggregate_generator_technical_interface"), Mapping)
         and config["c0_aggregate_generator_technical_interface"].get("enabled", False)
-        and isinstance(config.get("c0_full_site_energy_bridge"), Mapping)
+    )
+    real_anchor_c0_bridge_costs_active = bool(
+        isinstance(config.get("c0_full_site_energy_bridge"), Mapping)
         and config["c0_full_site_energy_bridge"].get("enabled", False)
     )
     flows: list[dict[str, Any]] = []
     for row in cost_rows:
         opt_in_real_anchor_flow = (
-            real_anchor_c0_costs_active
-            and row.get("flow_id") in real_anchor_c0_cost_flow_ids
+            real_anchor_c0_generator_cost_active
+            and row.get("flow_id") == "C0_NG_GENERATOR"
+        ) or (
+            real_anchor_c0_bridge_costs_active
+            and row.get("flow_id")
+            in {"C0_NG_FIXED_FULL_SITE", "C0_NG_FLEXIBLE_OTHER_SITE_HEAT"}
         )
         if row.get("objective_enabled") != "true" and not opt_in_real_anchor_flow:
             continue
@@ -601,6 +607,7 @@ def _cost_component_for_attribute(component: str, attribute: str) -> str:
         "generator_named_ng_mwh": "aggregate_generator",
         "full_site_fixed_ng_component_mwh": "fixed_full_site_component",
         "flexible_other_site_heat_ng_mwh": "flexible_other_site_heat",
+        "site_baseload_ng_mwh": "source_bounded_site_baseload",
     }
     return aliases.get(attribute, component)
 
@@ -1152,7 +1159,7 @@ def _generator_unit_interface(
 
 def _c0_real_anchor_energy_recovery_interfaces(
     config: Mapping[str, Any],
-) -> tuple[dict[str, Any] | None, dict[str, float] | None]:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Resolve the opt-in C0 aggregate generator and full-site NG bridge."""
 
     generator = config.get("c0_aggregate_generator_technical_interface")
@@ -1162,10 +1169,6 @@ def _c0_real_anchor_energy_recovery_interfaces(
     if not isinstance(generator, Mapping) or not bool(generator.get("enabled", False)):
         raise ClosedLoopFeasibilityError(
             "C0 real-anchor energy recovery requires the enabled aggregate generator interface."
-        )
-    if not isinstance(bridge, Mapping) or not bool(bridge.get("enabled", False)):
-        raise ClosedLoopFeasibilityError(
-            "C0 real-anchor energy recovery requires the enabled full-site energy bridge."
         )
     required_generator = {
         "electricity_efficiency": 0.345,
@@ -1180,6 +1183,24 @@ def _c0_real_anchor_energy_recovery_interfaces(
             )
     if bool(generator.get("export_allowed", False)):
         raise ClosedLoopFeasibilityError("C0 aggregate generator export must remain disabled.")
+
+    resolved_generator = {
+        "electricity_efficiency": 0.345,
+        "total_fuel_volume_cap_nm3_h": 900_000.0,
+        "natural_gas_lhv_mj_per_nm3": 35.8,
+        "electrical_capacity_mw": 770.0,
+        "export_allowed": False,
+    }
+    if bridge is None:
+        if not bool(config.get("phase5g_generator_without_legacy_bridge", False)):
+            raise ClosedLoopFeasibilityError(
+                "C0 generator without the legacy full-site bridge is only allowed by the Phase-5G gate."
+            )
+        return resolved_generator, None
+    if not isinstance(bridge, Mapping) or not bool(bridge.get("enabled", False)):
+        raise ClosedLoopFeasibilityError(
+            "C0 real-anchor energy recovery requires an enabled bridge or the Phase-5G bridge-retirement flag."
+        )
 
     required_bridge = {
         "inferred_low_case_full_site_ng_floor_pj_y",
@@ -1204,6 +1225,17 @@ def _c0_real_anchor_energy_recovery_interfaces(
     normal_case_flexible_ng_pj_y = float(
         bridge["normal_case_flexible_ng_validation_reference_pj_y"]
     )
+    flexible_ng_allocation_policy = str(
+        bridge.get("flexible_ng_allocation_policy", "dispatch_endogenous")
+    )
+    if flexible_ng_allocation_policy not in {
+        "dispatch_endogenous",
+        "normal_case_reference_exact_hourly",
+    }:
+        raise ClosedLoopFeasibilityError(
+            "Unsupported C0 flexible-heat NG allocation policy: "
+            f"{flexible_ng_allocation_policy}"
+        )
     if not 8.0 <= fixed_target_pj_y <= 8.12:
         raise ClosedLoopFeasibilityError(
             "The inferred fixed full-site NG component must stay inside 8.0-8.12 PJ/y."
@@ -1230,19 +1262,14 @@ def _c0_real_anchor_energy_recovery_interfaces(
         )
     pj_y_to_mwh_h = 1.0 / (HOURS_PER_YEAR * PJ_PER_MWH)
     return (
-        {
-            "electricity_efficiency": 0.345,
-            "total_fuel_volume_cap_nm3_h": 900_000.0,
-            "natural_gas_lhv_mj_per_nm3": 35.8,
-            "electrical_capacity_mw": 770.0,
-            "export_allowed": False,
-        },
+        resolved_generator,
         {
             "fixed_full_site_ng_component_mwh_h": net_fixed_pj_y * pj_y_to_mwh_h,
             "flexible_other_site_heat_service_envelope_mwh_h": flexible_service_pj_y
             * pj_y_to_mwh_h,
             "normal_case_flexible_ng_validation_reference_mwh_h": normal_case_flexible_ng_pj_y
             * pj_y_to_mwh_h,
+            "flexible_ng_allocation_policy": flexible_ng_allocation_policy,
         },
     )
 
@@ -1306,6 +1333,47 @@ def _electricity_boundary_levers(
     if dsp is not None and abs(dsp - 0.056) > 1e-12:
         raise ClosedLoopFeasibilityError("DSP electricity must remain the 0.056 MWh/t source-card value.")
     return linde_n2, eaf_secondary, dsp, background, resolved_background_by_configuration
+
+
+def _site_baseload_ng_levers(config: Mapping[str, Any]) -> dict[str, float]:
+    payload = config.get("source_backed_site_baseload")
+    payload_mapping = payload if isinstance(payload, Mapping) else {}
+    raw = config.get(
+        "site_baseload_ng_mwh_h_by_configuration",
+        payload_mapping.get("site_baseload_ng_mwh_h_by_configuration", {}),
+    )
+    if not isinstance(raw, Mapping):
+        raise ClosedLoopFeasibilityError(
+            "site_baseload_ng_mwh_h_by_configuration must be a mapping."
+        )
+    values = {str(key): float(value) for key, value in raw.items()}
+    unknown = set(values).difference(CONFIGURATIONS)
+    if unknown:
+        raise ClosedLoopFeasibilityError(
+            f"Unknown site-baseload NG configuration(s): {sorted(unknown)}."
+        )
+    if any(value < 0.0 for value in values.values()):
+        raise ClosedLoopFeasibilityError(
+            "Every configuration-specific site baseload NG value must be non-negative."
+        )
+    return {configuration: values.get(configuration, 0.0) for configuration in CONFIGURATIONS}
+
+
+def _site_residual_levers(
+    config: Mapping[str, Any], field: str
+) -> dict[str, float]:
+    raw = config.get(field, {})
+    if not isinstance(raw, Mapping):
+        raise ClosedLoopFeasibilityError(f"{field} must be a mapping.")
+    values = {str(key): float(value) for key, value in raw.items()}
+    unknown = set(values).difference(CONFIGURATIONS)
+    if unknown:
+        raise ClosedLoopFeasibilityError(
+            f"Unknown {field} configuration(s): {sorted(unknown)}."
+        )
+    if any(value < 0.0 for value in values.values()):
+        raise ClosedLoopFeasibilityError(f"Every {field} value must be non-negative.")
+    return {configuration: values.get(configuration, 0.0) for configuration in CONFIGURATIONS}
 
 
 def _c1_source_backed_energy_boundary(config: Mapping[str, Any]) -> dict[str, float] | None:
@@ -2726,6 +2794,7 @@ def _annual_model_metrics(hourly_rows: list[dict[str, Any]]) -> tuple[dict[str, 
         boiler_ng_mwh = total("natural_gas_boiler_mwh")
         fixed_bridge_ng_mwh = total("full_site_fixed_ng_component_mwh")
         flexible_bridge_ng_mwh = total("flexible_other_site_heat_ng_mwh")
+        site_baseload_ng_mwh = total("site_baseload_ng_mwh")
         represented_ng_mwh = (
             drp_ng_mwh
             + eaf_ng_mwh
@@ -2735,6 +2804,7 @@ def _annual_model_metrics(hourly_rows: list[dict[str, Any]]) -> tuple[dict[str, 
             + generator_named_ng_mwh
             + fixed_bridge_ng_mwh
             + flexible_bridge_ng_mwh
+            + site_baseload_ng_mwh
         )
         hsm_slab_field = "C0_HSM_input_t_h" if configuration.startswith("C0") else "C1_retained_HSM_input_t_h"
         hsm_output_field = "C0_HSM_final_product_t" if configuration.startswith("C0") else "C1_HSM_final_product_output_t"
@@ -2789,6 +2859,7 @@ def _annual_model_metrics(hourly_rows: list[dict[str, Any]]) -> tuple[dict[str, 
             "generator_named_ng_pj_y": generator_named_ng_mwh * factor * PJ_PER_MWH,
             "fixed_bridge_named_ng_pj_y": fixed_bridge_ng_mwh * factor * PJ_PER_MWH,
             "flexible_bridge_named_ng_pj_y": flexible_bridge_ng_mwh * factor * PJ_PER_MWH,
+            "site_baseload_named_ng_pj_y": site_baseload_ng_mwh * factor * PJ_PER_MWH,
             "generator_named_ng_available": (
                 total("generator_unit_interface_active") > 0.0
                 or total("aggregate_generator_technical_interface_active") > 0.0
@@ -3406,6 +3477,7 @@ def _annual_physical_boundary_ledger(hourly_rows: list[dict[str, Any]]) -> list[
             "VN25_generator": total("generator_named_ng_mwh"),
             "fixed_full_site_component": total("full_site_fixed_ng_component_mwh"),
             "flexible_other_site_heat": total("flexible_other_site_heat_ng_mwh"),
+            "source_bounded_site_baseload": total("site_baseload_ng_mwh"),
         }
         for component, amount in named_ng.items():
             add("named_NG", "NG", "use", component, amount, "MWh_LHV/y", "represented_named_consumer", physical=True, mode_b=True)
@@ -4212,6 +4284,13 @@ def run_closed_loop_feasibility_anchor_reconciliation(
         site_background_electricity_mwh_h,
         site_background_electricity_mwh_h_by_configuration,
     ) = _electricity_boundary_levers(config)
+    site_baseload_ng_mwh_h_by_configuration = _site_baseload_ng_levers(config)
+    site_residual_steam_t_h_by_configuration = _site_residual_levers(
+        config, "site_residual_steam_t_h_by_configuration"
+    )
+    site_residual_direct_co2_t_h_by_configuration = _site_residual_levers(
+        config, "site_residual_direct_co2_t_h_by_configuration"
+    )
     c1_energy_boundary = _c1_source_backed_energy_boundary(config)
     (
         wag_generation_yield_overrides,
@@ -4388,7 +4467,15 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             )
         elif (
             not raw_sale_sensitivity.get("incumbent_capture_directory")
-            or not isinstance(raw_sale_sensitivity.get("incumbent_provenance"), Mapping)
+            or not (
+                isinstance(
+                    raw_sale_sensitivity.get("incumbent_provenance"), Mapping
+                )
+                or isinstance(
+                    raw_sale_sensitivity.get("incumbent_provenance_by_replan"),
+                    Mapping,
+                )
+            )
             or not raw_sale_sensitivity.get("containment_oracle_root")
         ):
             raise ClosedLoopFeasibilityError(
@@ -4682,6 +4769,28 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 "replan_index": replan_index,
                 "execution_hours": plan.execution_block_hours,
             }
+            raw_breakthrough = raw_sale_sensitivity.get("breakthrough_test")
+            if raw_breakthrough is not None:
+                if not isinstance(raw_breakthrough, Mapping) or not isinstance(
+                    raw_breakthrough.get("reference_metrics_by_replan"), Mapping
+                ):
+                    raise ClosedLoopFeasibilityError(
+                        "Sale breakthrough test requires comparator metrics by replan."
+                    )
+                reference_by_replan = raw_breakthrough[
+                    "reference_metrics_by_replan"
+                ]
+                if str(replan_index) not in reference_by_replan:
+                    raise ClosedLoopFeasibilityError(
+                        f"Sale breakthrough comparator metrics missing for replan {replan_index}."
+                    )
+                resolved_sale_sensitivity["breakthrough_test"] = {
+                    "mode": str(raw_breakthrough.get("mode", "")),
+                    "execution_hours": plan.execution_block_hours,
+                    "reference_metrics": dict(
+                        reference_by_replan[str(replan_index)]
+                    ),
+                }
             implementation_sha256 = str(
                 config.get("phase2_implementation_sha256", "")
             ).lower()
@@ -4697,7 +4806,7 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                     "implementation identity."
                 )
             state_preservation_contract = {
-                "schema_version": "steel_phase2_sale_state_preservation_v3",
+                "schema_version": "steel_phase2_sale_state_preservation_v4",
                 "enabled": True,
                 "configuration_id": C0_CONFIGURATION,
                 "replan_index": replan_index,
@@ -4724,7 +4833,12 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                     incumbent_path.read_bytes()
                 ).hexdigest(),
                 "normal_solution_expected_provenance": dict(
-                    raw_sale_sensitivity["incumbent_provenance"]
+                    raw_sale_sensitivity.get(
+                        "incumbent_provenance_by_replan", {}
+                    ).get(
+                        str(replan_index),
+                        raw_sale_sensitivity.get("incumbent_provenance", {}),
+                    )
                 ),
                 "oracle_directory": str(
                     Path(str(raw_sale_sensitivity["containment_oracle_root"])).resolve()
@@ -4746,6 +4860,7 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             )
         report = run_s44c_unified_physical_regression(
             run_id=f"{config['run_id']}_replan_{replan_index:02d}", write_report=False,
+            performance_mode=str(config.get("performance_mode", "optimized_equivalent")),
             horizon_hours_override=plan.planning_horizon_hours,
             target_multiplier=target_multiplier,
             target_multiplier_by_configuration=(
@@ -4823,6 +4938,15 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             site_background_electricity_mwh_h_by_configuration=(
                 site_background_electricity_mwh_h_by_configuration
             ),
+            site_baseload_ng_mwh_h_by_configuration=(
+                site_baseload_ng_mwh_h_by_configuration
+            ),
+            site_residual_steam_t_h_by_configuration=(
+                site_residual_steam_t_h_by_configuration
+            ),
+            site_residual_direct_co2_t_h_by_configuration=(
+                site_residual_direct_co2_t_h_by_configuration
+            ),
             eaf_secondary_electricity_mwh_per_t_ls_override=eaf_secondary_electricity,
             dsp_electricity_mwh_per_t_coil_override=dsp_electricity,
             external_procurement_flow_coefficients=external_procurement_coefficients,
@@ -4837,6 +4961,9 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 c0_aggregate_generator_technical_interface
             ),
             c0_full_site_energy_bridge=c0_full_site_energy_bridge,
+            hsm_source_mix_policy_by_configuration=config.get(
+                "hsm_source_mix_policy_by_configuration"
+            ),
             c0_electricity_sale_sensitivity=resolved_sale_sensitivity,
             c0_allocation_envelope_diagnostic=(
                 {
@@ -4964,10 +5091,31 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 if row.get("configuration_id") == configuration
             ).get("build_status") == "solved"
         )
-        model_audit_rows.extend(
-            {"replan_index": replan_index, **row}
-            for row in report["configuration_build_audit"]
-        )
+        report_performance = dict(report.get("performance", {}))
+        configuration_count = max(len(report["configuration_build_audit"]), 1)
+        for row in report["configuration_build_audit"]:
+            model_audit_rows.append(
+                {
+                    "replan_index": replan_index,
+                    **row,
+                    "input_resolution_seconds": float(
+                        report_performance.get("input_resolution_seconds", 0.0)
+                    )
+                    / configuration_count,
+                    "array_preparation_seconds": 0.0,
+                    "model_build_seconds": float(row.get("build_runtime_seconds", 0.0)),
+                    "presolve_solver_seconds": float(row.get("runtime_seconds", 0.0)),
+                    "postprocessing_seconds": 0.0,
+                    "dataframe_construction_seconds": 0.0,
+                    "output_io_seconds": 0.0,
+                    "wall_time_seconds": float(row.get("build_runtime_seconds", 0.0))
+                    + float(row.get("runtime_seconds", 0.0)),
+                    "peak_working_set_mb": peak_working_set_mb(),
+                    "scenario_count": 1,
+                    "timestep_count": int(plan.planning_horizon_hours),
+                    "bid_ladder_steps": 0,
+                }
+            )
         if diagnostic_replan_index is not None:
             c0_oracle_audit = next(
                 row
@@ -5123,12 +5271,20 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                 objective_preservation_tolerance = float(
                     deterministic_cost_policy["objective_tolerance_eur"]
                 )
+                physical_wag_upper_bound = bool(
+                    configuration_id == C0_CONFIGURATION
+                    and raw_allocation_envelope is not None
+                    and raw_allocation_envelope.get("breakthrough_mode")
+                    == "phase5b_physical_wag_upper_bound_v1"
+                )
                 aggregate_preservation_validation = (
                     _planning_horizon_cost_preservation_validation(
                         primary_cost_eur=float(primary),
                         tie_break_cost_eur=float(tie_break_model_cost),
                         endpoint_cost_eur=float(
-                            endpoint_model_cost
+                            tie_break_model_cost
+                            if physical_wag_upper_bound
+                            else endpoint_model_cost
                             if endpoint_model_cost not in {None, ""}
                             else tie_break_model_cost
                         ),
@@ -5177,7 +5333,9 @@ def run_closed_loop_feasibility_anchor_reconciliation(
                             ]
                         ),
                         "cost_preservation_validation_purpose": (
-                            "trajectory_or_yearly_aggregate_cost"
+                            "economic_stage_only_physical_upper_bound_endpoint_not_applicable"
+                            if physical_wag_upper_bound
+                            else "trajectory_or_yearly_aggregate_cost"
                         ),
                         "cost_preservation_validation_status": (
                             aggregate_preservation_validation["status"]
@@ -6034,6 +6192,15 @@ def run_closed_loop_feasibility_anchor_reconciliation(
             site_background_electricity_mwh_h_by_configuration
         ),
     }
+    resolved["site_baseload_ng_mwh_h_by_configuration"] = dict(
+        site_baseload_ng_mwh_h_by_configuration
+    )
+    resolved["site_residual_steam_t_h_by_configuration"] = dict(
+        site_residual_steam_t_h_by_configuration
+    )
+    resolved["site_residual_direct_co2_t_h_by_configuration"] = dict(
+        site_residual_direct_co2_t_h_by_configuration
+    )
     resolved["c1_source_backed_energy_boundary"] = dict(c1_energy_boundary or {})
     resolved["wag_generation_yield_overrides_by_configuration"] = (
         wag_generation_yield_overrides

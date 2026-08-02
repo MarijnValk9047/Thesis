@@ -466,6 +466,22 @@ def test_fixed_reference_cost_config_activates_only_governed_procurement_costs()
     assert all(len(row["price_eur_by_hour"]) == 168 for row in policy["flows"])
 
 
+def test_c0_generator_ng_cost_does_not_depend_on_legacy_site_bridge() -> None:
+    config = _config(
+        STEEL_ROOT / "configs" / "steel_fixed_reference_deterministic_cost.yaml"
+    )
+    config["c0_aggregate_generator_technical_interface"] = {"enabled": True}
+    config["c0_full_site_energy_bridge"] = {"enabled": False}
+    policy = _deterministic_cost_policy(
+        config, load_future_cost_boundary_contract(), horizon_hours=168
+    )
+    assert policy is not None
+    flow_ids = {row["flow_id"] for row in policy["flows"]}
+    assert "C0_NG_GENERATOR" in flow_ids
+    assert "C0_NG_FIXED_FULL_SITE" not in flow_ids
+    assert "C0_NG_FLEXIBLE_OTHER_SITE_HEAT" not in flow_ids
+
+
 def test_external_procurement_coefficients_resolve_from_route_contract() -> None:
     coefficients = _external_procurement_flow_coefficients(
         {"external_procurement_flows_enabled": True},

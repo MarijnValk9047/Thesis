@@ -39,13 +39,19 @@ from pyomo.environ import (
 from pyomo.contrib.fbbt.fbbt import compute_bounds_on_expr, fbbt
 from pyomo.core.expr.visitor import identify_variables
 
+from scripts.optimisation_performance import (
+    StructuralSignature,
+    StructuralTemplateCache,
+    dst_shape_for_steps,
+    fingerprint_paths,
+    stable_hash,
+    validate_performance_mode,
+)
+
 from .model import collect_model_stats
 from .reporting import iso_utc, now_utc, repo_rel, resolve_git_commit, write_json
 from .s4_0b_guardrail_regression_runner import _mip_gap
-from .s4_4b_unified_input_validator import (
-    validate_unified_dev_inputs,
-    write_validation_outputs,
-)
+from .s4_4b_unified_input_validator import validate_unified_dev_inputs
 from .s4_4b5a_asymmetric_correction import CORRECTED_INPUT_DIR
 from .wag_milp_input_contract import load_governed_wag_factor_maps
 from .wag_development_controller_contract import (
@@ -108,6 +114,10 @@ POLICY_MODE = "price_naive_static_or_cost_smoothed"
 MODE_ID = "s4_4c_unified_physical_static_regression"
 TOLERANCE = 1e-6
 SOLVER_PREFERENCE = ("gurobi", "gurobi_direct", "appsi_highs", "highs", "cbc", "glpk")
+_STEEL_TABLE_CACHE: dict[str, UnifiedInputTables] = {}
+_STEEL_VALIDATION_CACHE: dict[str, dict[str, Any]] = {}
+_STEEL_INPUT_FINGERPRINT_CACHE: dict[str, tuple[tuple[tuple[str, int, int], ...], str]] = {}
+_STEEL_STRUCTURAL_TEMPLATE_CACHE = StructuralTemplateCache()
 MJ_PER_MWH = 3600.0
 PJ_TO_MWH = 277777.77777777775
 # Compatibility exports for historical C5 diagnostics.  Unlike the former
@@ -126,6 +136,7 @@ VATTENFALL_VELSEN25_WAG_CAP_NM3_H = 600_000.0
 VATTENFALL_IJM01_WAG_CAP_NM3_H = 300_000.0
 VATTENFALL_TOTAL_WAG_CAP_NM3_H = VATTENFALL_VELSEN25_WAG_CAP_NM3_H + VATTENFALL_IJM01_WAG_CAP_NM3_H
 FLARING_CO2_DIAGNOSTIC_EUR_PER_T = 75.0
+NG_COMBUSTION_T_CO2_PER_MWH_LHV = 56.1 * 3.6 / 1000.0
 FORBIDDEN_TERMS = {
     "product_revenue",
     "export_revenue",
@@ -183,6 +194,128 @@ def _development_controller_flags(phase: str) -> dict[str, bool]:
 class UnifiedInputTables:
     input_dir: Path
     tables: dict[str, list[dict[str, str]]]
+
+
+@dataclass(frozen=True)
+class ModelTimeGrid:
+    """Explicit physical duration and interval count for the steel MILP.
+
+    Model flow variables remain quantities per interval.  Source capacities
+    and fixed services are hourly rates and are converted once, before model
+    construction.  Keeping that boundary explicit prevents a 480-quarter
+    horizon from being mistaken for 480 physical hours.
+    """
+
+    horizon_hours: int
+    execution_hours: int
+    time_step_hours: float = 1.0
+
+    def __post_init__(self) -> None:
+        if self.horizon_hours <= 0 or self.execution_hours <= 0:
+            raise S44CModelBuilderError("Time-grid horizons must be positive.")
+        if self.execution_hours > self.horizon_hours:
+            raise S44CModelBuilderError("Execution duration exceeds the planning horizon.")
+        if self.time_step_hours not in {1.0, 0.25}:
+            raise S44CModelBuilderError("Steel time steps are restricted to 1 hour or 15 minutes.")
+        for label, hours in {
+            "planning": self.horizon_hours,
+            "execution": self.execution_hours,
+        }.items():
+            steps = hours / self.time_step_hours
+            if abs(steps - round(steps)) > 1e-9:
+                raise S44CModelBuilderError(
+                    f"{label.capitalize()} duration is not divisible by the time step."
+                )
+
+    @property
+    def horizon_steps(self) -> int:
+        return int(round(self.horizon_hours / self.time_step_hours))
+
+    @property
+    def execution_steps(self) -> int:
+        return int(round(self.execution_hours / self.time_step_hours))
+
+    @property
+    def steps_per_hour(self) -> int:
+        return int(round(1.0 / self.time_step_hours))
+
+    def hours_to_steps(self, hours: int) -> int:
+        steps = float(hours) / self.time_step_hours
+        if abs(steps - round(steps)) > 1e-9:
+            raise S44CModelBuilderError("Hour deadline is not aligned to the model time step.")
+        return int(round(steps))
+
+
+@dataclass(frozen=True)
+class EAFHeatStateParameters:
+    """Source-labelled start-only EAF heat formulation on an internal QH grid.
+
+    The 45-minute design basis is the three-quarter-hour rounding of
+    ``325 t / 458 t LS h-1 = 42.6 minutes``.  It is not a measured Tata
+    minimum tap-to-tap time.
+    """
+
+    active: bool = True
+    heat_size_t_liquid_steel: float = 325.0
+    total_qh_steps: int = 3
+    melting_qh_steps: int = 2
+    tapping_qh_steps: int = 1
+    arc_electricity_mwh_per_t_liquid_steel: float = 0.4222222222
+    secondary_electricity_mwh_per_t_liquid_steel: float = 0.031
+    design_liquid_steel_rate_t_h: float = 458.0
+    quantization_allowance_t: float = 162.5
+    initial_start_lag1: int = 0
+    initial_start_lag2: int = 0
+    maintenance_intervals: tuple[int, ...] = ()
+    require_idle_terminal_state: bool = False
+
+    def __post_init__(self) -> None:
+        if self.total_qh_steps != 3 or self.melting_qh_steps != 2 or self.tapping_qh_steps != 1:
+            raise S44CModelBuilderError(
+                "The Phase-6D EAF base requires exactly two melting quarters and one tap quarter."
+            )
+        if self.heat_size_t_liquid_steel <= 0.0:
+            raise S44CModelBuilderError("EAF heat size must be positive.")
+        if self.arc_electricity_mwh_per_t_liquid_steel <= 0.0:
+            raise S44CModelBuilderError("EAF arc-energy intensity must be positive.")
+        if self.secondary_electricity_mwh_per_t_liquid_steel < 0.0:
+            raise S44CModelBuilderError("EAF secondary-energy intensity cannot be negative.")
+        if self.quantization_allowance_t != 0.5 * self.heat_size_t_liquid_steel:
+            raise S44CModelBuilderError(
+                "EAF route-band quantization allowance must equal half a heat."
+            )
+        if self.initial_start_lag1 not in {0, 1} or self.initial_start_lag2 not in {0, 1}:
+            raise S44CModelBuilderError("EAF rolling start lags must be binary.")
+        if self.initial_start_lag1 + self.initial_start_lag2 > 1:
+            raise S44CModelBuilderError("Overlapping EAF rolling start lags are impossible.")
+        if any(int(interval) < 0 for interval in self.maintenance_intervals):
+            raise S44CModelBuilderError("EAF maintenance intervals must be non-negative.")
+
+    @property
+    def derived_design_cycle_minutes(self) -> float:
+        return 60.0 * self.heat_size_t_liquid_steel / self.design_liquid_steel_rate_t_h
+
+    @property
+    def arc_energy_mwh_per_heat(self) -> float:
+        return (
+            self.heat_size_t_liquid_steel
+            * self.arc_electricity_mwh_per_t_liquid_steel
+        )
+
+    @property
+    def arc_energy_mwh_per_melting_interval(self) -> float:
+        return self.arc_energy_mwh_per_heat / self.melting_qh_steps
+
+    @property
+    def arc_on_power_mw(self) -> float:
+        return self.arc_energy_mwh_per_melting_interval / 0.25
+
+    @property
+    def secondary_energy_mwh_per_heat(self) -> float:
+        return (
+            self.heat_size_t_liquid_steel
+            * self.secondary_electricity_mwh_per_t_liquid_steel
+        )
 
 
 @dataclass(frozen=True)
@@ -288,6 +421,58 @@ class RetainedBfBofInputs:
     boiler_total_placeholder_mwh_h: float
     eta_boiler_steam: float
     retained_target_share: float
+
+
+def scale_c0_inputs_to_time_grid(
+    inputs: C0ExecutableInputs,
+    grid: ModelTimeGrid,
+) -> C0ExecutableInputs:
+    """Convert C0 hourly rate bounds to quantities per model interval."""
+
+    dt = grid.time_step_hours
+    return replace(
+        inputs,
+        horizon_hours=grid.horizon_steps,
+        process_limits={
+            name: (float(lower) * dt, float(upper) * dt)
+            for name, (lower, upper) in inputs.process_limits.items()
+        },
+        boiler_wag_cap_mwh_h=float(inputs.boiler_wag_cap_mwh_h) * dt,
+        boiler_total_placeholder_mwh_h=float(inputs.boiler_total_placeholder_mwh_h) * dt,
+    )
+
+
+def scale_c1_inputs_to_time_grid(
+    inputs: C1ExecutableInputs,
+    grid: ModelTimeGrid,
+) -> C1ExecutableInputs:
+    """Convert C1 and retained-route hourly rates to interval quantities."""
+
+    dt = grid.time_step_hours
+    retained = inputs.retained_bf_bof
+    scaled_retained = (
+        None
+        if retained is None
+        else replace(
+            retained,
+            process_limits={
+                name: (float(lower) * dt, float(upper) * dt)
+                for name, (lower, upper) in retained.process_limits.items()
+            },
+            boiler_wag_cap_mwh_h=float(retained.boiler_wag_cap_mwh_h) * dt,
+            boiler_total_placeholder_mwh_h=float(retained.boiler_total_placeholder_mwh_h) * dt,
+        )
+    )
+    return replace(
+        inputs,
+        horizon_hours=grid.horizon_steps,
+        drp_capacity_t_pellets_h=float(inputs.drp_capacity_t_pellets_h) * dt,
+        # The property is applied to an interval quantity, so multiplying the
+        # per-hour ramp fraction by dt yields the required R * dt^2 bound.
+        drp_ramp_pu_per_h=float(inputs.drp_ramp_pu_per_h) * dt,
+        eaf_capacity_t_dri_h=float(inputs.eaf_capacity_t_dri_h) * dt,
+        retained_bf_bof=scaled_retained,
+    )
 
 
 def _apply_wag_generation_yield_overrides(
@@ -398,8 +583,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str] | N
             writer.writerows(rows)
 
 
-def _load_tables(input_dir: Path = S44B_INPUT_DIR) -> UnifiedInputTables:
-    table_names = (
+_UNIFIED_TABLE_NAMES = (
         "configuration_assets.csv",
         "process_units.csv",
         "process_io_coefficients.csv",
@@ -417,10 +601,53 @@ def _load_tables(input_dir: Path = S44B_INPUT_DIR) -> UnifiedInputTables:
         "policy_modes.csv",
         "solver_and_horizon_config.csv",
     )
-    return UnifiedInputTables(
-        input_dir=input_dir,
-        tables={table_name: _read_csv(input_dir / table_name) for table_name in table_names},
+
+
+def _steel_input_fingerprint(input_dir: Path) -> str:
+    resolved = Path(input_dir).resolve()
+    stat_signature = tuple(
+        (
+            name,
+            int((resolved / name).stat().st_size),
+            int((resolved / name).stat().st_mtime_ns),
+        )
+        for name in _UNIFIED_TABLE_NAMES
     )
+    cache_key = str(resolved)
+    cached = _STEEL_INPUT_FINGERPRINT_CACHE.get(cache_key)
+    if cached is not None and cached[0] == stat_signature:
+        return cached[1]
+    fingerprint = fingerprint_paths([resolved / name for name in _UNIFIED_TABLE_NAMES])
+    _STEEL_INPUT_FINGERPRINT_CACHE[cache_key] = (stat_signature, fingerprint)
+    return fingerprint
+
+
+def _load_tables_with_status(
+    input_dir: Path = S44B_INPUT_DIR,
+    *,
+    performance_mode: str = "optimized_equivalent",
+) -> tuple[UnifiedInputTables, str, str]:
+    mode = validate_performance_mode(performance_mode)
+    resolved = Path(input_dir).resolve()
+    source_hash = _steel_input_fingerprint(resolved)
+    if mode == "optimized_equivalent" and source_hash in _STEEL_TABLE_CACHE:
+        return _STEEL_TABLE_CACHE[source_hash], "hit", source_hash
+    tables = UnifiedInputTables(
+        input_dir=input_dir,
+        tables={table_name: _read_csv(resolved / table_name) for table_name in _UNIFIED_TABLE_NAMES},
+    )
+    if mode == "optimized_equivalent":
+        _STEEL_TABLE_CACHE[source_hash] = tables
+    return tables, ("miss_registered" if mode == "optimized_equivalent" else "disabled_legacy_rebuild"), source_hash
+
+
+def _load_tables(
+    input_dir: Path = S44B_INPUT_DIR,
+    *,
+    performance_mode: str = "optimized_equivalent",
+) -> UnifiedInputTables:
+    tables, _, _ = _load_tables_with_status(input_dir, performance_mode=performance_mode)
+    return tables
 
 
 def _is_executable(row: dict[str, str]) -> bool:
@@ -1406,10 +1633,13 @@ _CARRIED_STATE_COMPONENTS = {
 }
 
 _SALE_STATE_PRESERVATION_SCHEMA_VERSION = (
-    "steel_phase2_sale_state_preservation_v3"
+    "steel_phase2_sale_state_preservation_v4"
 )
 _SALE_STATE_TARGET_SCHEMA = (
     "executed_final_product_t",
+    "executed_bof_liquid_steel_t",
+    "executed_hsm_final_output_t",
+    "executed_dsp_final_output_t",
     "coke_inventory_t",
     "sinter_inventory_t",
     "hot_iron_inventory_t",
@@ -1417,6 +1647,9 @@ _SALE_STATE_TARGET_SCHEMA = (
 )
 _SALE_STATE_COMPONENTS = {
     "final_product_output",
+    "bof_crude_steel_output",
+    "c0_hsm_final_product_output",
+    "c0_dsp_final_product_output",
     "coke_inventory",
     "sinter_inventory",
     "hot_iron_inventory",
@@ -1432,12 +1665,29 @@ _SALE_STATE_CONSTRAINT_NAMES = {
     target_id: f"sale_state_{stem}_preservation_exact"
     for target_id, stem in {
         "executed_final_product_t": "executed_final_product",
+        "executed_bof_liquid_steel_t": "executed_bof_liquid_steel",
+        "executed_hsm_final_output_t": "executed_hsm_final_output",
+        "executed_dsp_final_output_t": "executed_dsp_final_output",
         "coke_inventory_t": "coke_inventory",
         "sinter_inventory_t": "sinter_inventory",
         "hot_iron_inventory_t": "hot_iron_inventory",
         "cold_slab_inventory_t": "cold_slab_inventory",
     }.items()
 }
+
+_SALE_BREAKTHROUGH_MODES = {
+    "phase5b_physical_wag_upper_bound_v1",
+    "phase5b_clean_economic_export_v1",
+}
+_SALE_BREAKTHROUGH_NG_COMPONENTS = (
+    "ng_to_hsm_mwh",
+    "ng_to_pefa_malerij_mwh",
+    "ng_to_pefa_branderij_mwh",
+    "ng_to_boiler_mwh",
+    "generator_named_ng_mwh",
+    "full_site_energy_bridge_named_ng_mwh",
+    "site_baseload_ng_mwh",
+)
 
 
 def _variable_structural_classification(model: ConcreteModel) -> dict[str, Any]:
@@ -2199,6 +2449,18 @@ def _sale_state_expressions(
             model.final_product_output[time_by_index[index]]
             for index in range(execution_hours)
         ),
+        "executed_bof_liquid_steel_t": sum(
+            model.bof_crude_steel_output[time_by_index[index]]
+            for index in range(execution_hours)
+        ),
+        "executed_hsm_final_output_t": sum(
+            model.c0_hsm_final_product_output[time_by_index[index]]
+            for index in range(execution_hours)
+        ),
+        "executed_dsp_final_output_t": sum(
+            model.c0_dsp_final_product_output[time_by_index[index]]
+            for index in range(execution_hours)
+        ),
         "coke_inventory_t": model.coke_inventory[handoff_hour],
         "sinter_inventory_t": model.sinter_inventory[handoff_hour],
         "hot_iron_inventory_t": model.hot_iron_inventory[handoff_hour],
@@ -2207,17 +2469,22 @@ def _sale_state_expressions(
 
 
 def _sale_state_schema_payload() -> list[dict[str, Any]]:
+    component_by_target = {
+        "executed_final_product_t": "final_product_output",
+        "executed_bof_liquid_steel_t": "bof_crude_steel_output",
+        "executed_hsm_final_output_t": "c0_hsm_final_product_output",
+        "executed_dsp_final_output_t": "c0_dsp_final_product_output",
+    }
+    cumulative_targets = set(component_by_target)
     return [
         {
             "target_id": target_id,
-            "model_component": (
-                "final_product_output"
-                if target_id == "executed_final_product_t"
-                else target_id.removesuffix("_t")
+            "model_component": component_by_target.get(
+                target_id, target_id.removesuffix("_t")
             ),
             "selection": (
                 "sum_executed_hours"
-                if target_id == "executed_final_product_t"
+                if target_id in cumulative_targets
                 else "handoff_hour"
             ),
             "unit": "t",
@@ -3585,6 +3852,91 @@ def _complete_normal_feasibility_oracle(
     }
 
 
+def _in_memory_physical_upper_bound_oracle(
+    model: ConcreteModel,
+    *,
+    diagnostic: Mapping[str, Any],
+    tolerance: float,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Audit the already-solved capped sale incumbent used to seed the oracle."""
+
+    raw_directory = diagnostic.get("oracle_directory") or diagnostic.get(
+        "failure_evidence_directory"
+    )
+    if not raw_directory:
+        raise S44CModelBuilderError(
+            "Physical upper-bound in-memory oracle directory is missing."
+        )
+    directory = Path(str(raw_directory)).resolve()
+    directory.mkdir(parents=True, exist_ok=True)
+    records = _active_variable_records(model)
+    name_hash, schema_hash, fixed_hash = _variable_name_and_schema_hashes(records)
+    audit = _audit_loaded_incumbent(model, tolerance=tolerance)
+    if not audit.get("feasible"):
+        raise S44CModelBuilderError(
+            "The solved capped-sale incumbent is infeasible before physical maximization: "
+            f"{audit}."
+        )
+    value_state_hash = _variable_value_and_fixed_state_sha256(records)
+    fixed_compatibility = {
+        "endpoint_prefixed_checked_count": sum(
+            1 for row in records if bool(row["fixed"])
+        ),
+        "endpoint_prefixed_overwrite_count": 0,
+        "temporarily_fixed_count": 0,
+        "max_endpoint_prefixed_value_residual": 0.0,
+        "endpoint_fixed_state_sha256_before": fixed_hash,
+        "endpoint_fixed_state_sha256_after": fixed_hash,
+        "unchanged_endpoint_fixed_state": True,
+        "in_memory_solved_incumbent": True,
+    }
+    record_path = directory / "physical_upper_bound_in_memory_oracle.json"
+    record = {
+        "schema_version": "steel_phase5b_physical_upper_bound_oracle_v1",
+        "status": "pass_in_memory_solved_incumbent",
+        "variable_count": len(records),
+        "variable_name_sha256": name_hash,
+        "variable_schema_sha256": schema_hash,
+        "variable_fixed_schema_sha256": fixed_hash,
+        "saved_normal_solution_sha256": value_state_hash,
+        "pre_solve_loaded_value_audit": audit,
+        "fixed_variable_compatibility_audit": fixed_compatibility,
+    }
+    record_path.write_text(
+        json.dumps(record, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    oracle = {
+        **record,
+        "oracle_record_path": _portable_repository_path(record_path),
+        "oracle_record_sha256": _sha256_file(record_path),
+    }
+    warm_start_path = directory / "endpoint_warm_start_audit.json"
+    warm_start = {
+        "schema_version": "steel_endpoint_warm_start_v1",
+        "status": "pass_in_memory_solved_incumbent",
+        "assignment_count": sum(1 for row in records if not bool(row["fixed"])),
+        "assignment_variable_name_sha256": name_hash,
+        "assignment_variable_schema_sha256": schema_hash,
+        "assignment_value_state_sha256": value_state_hash,
+        "full_start_value_state_sha256": value_state_hash,
+        "source_normal_solution_sha256": value_state_hash,
+        "endpoint_fixed_overwrite_count": 0,
+        "loaded_start_audit": audit,
+    }
+    warm_start_path.write_text(
+        json.dumps(warm_start, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    warm_start.update(
+        {
+            "audit_path": _portable_repository_path(warm_start_path),
+            "audit_sha256": _sha256_file(warm_start_path),
+        }
+    )
+    return oracle, warm_start
+
+
 def _prepare_allocation_endpoint_warm_start(
     model: ConcreteModel,
     *,
@@ -3844,6 +4196,126 @@ def _allocation_endpoint_objective_bound_audit(
     return record
 
 
+def _install_sale_breakthrough_test(
+    model: ConcreteModel,
+    policy: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Install Phase-5B comparator-resource caps without changing physics."""
+
+    if policy is None:
+        return None
+    mode = str(policy.get("mode", ""))
+    if mode not in _SALE_BREAKTHROUGH_MODES:
+        raise S44CModelBuilderError(
+            f"Unsupported Phase-5B breakthrough-test mode: {mode!r}."
+        )
+    execution_hours = int(policy.get("execution_hours", 0))
+    if execution_hours <= 0 or execution_hours > len(model.TIME):
+        raise S44CModelBuilderError(
+            "Phase-5B breakthrough execution hours are outside model.TIME."
+        )
+    reference = policy.get("reference_metrics")
+    if not isinstance(reference, Mapping):
+        raise S44CModelBuilderError(
+            "Phase-5B breakthrough test requires comparator reference metrics."
+        )
+    required = {
+        "gross_grid_import_mwh",
+        "named_ng_mwh_lhv",
+        "wag_generator_electricity_mwh",
+    }
+    if set(reference) != required:
+        raise S44CModelBuilderError(
+            "Phase-5B breakthrough comparator metric schema changed."
+        )
+    targets = {key: float(reference[key]) for key in sorted(required)}
+    if any(not math.isfinite(item) or item < 0.0 for item in targets.values()):
+        raise S44CModelBuilderError(
+            "Phase-5B breakthrough comparator metrics must be finite and nonnegative."
+        )
+    for attribute in ("gross_grid_import_mwh", "wag_generator_electricity_mwh"):
+        if not hasattr(model, attribute):
+            raise S44CModelBuilderError(
+                f"Phase-5B breakthrough model component is missing: {attribute}."
+            )
+    missing_ng = [
+        attribute
+        for attribute in _SALE_BREAKTHROUGH_NG_COMPONENTS
+        if not hasattr(model, attribute)
+    ]
+    if missing_ng:
+        raise S44CModelBuilderError(
+            f"Phase-5B breakthrough named-NG components are missing: {missing_ng}."
+        )
+    import_expression = sum(
+        model.gross_grid_import_mwh[t] for t in range(execution_hours)
+    )
+    named_ng_expression = sum(
+        getattr(model, attribute)[t]
+        for attribute in _SALE_BREAKTHROUGH_NG_COMPONENTS
+        for t in range(execution_hours)
+    )
+    wag_expression = sum(
+        model.wag_generator_electricity_mwh[t]
+        for t in range(execution_hours)
+    )
+    model.phase5b_breakthrough_gross_import_cap = Constraint(
+        expr=import_expression <= targets["gross_grid_import_mwh"]
+    )
+    model.phase5b_breakthrough_named_ng_cap = Constraint(
+        expr=named_ng_expression <= targets["named_ng_mwh_lhv"]
+    )
+    return {
+        "schema_version": "steel_phase5b_breakthrough_resource_caps_v1",
+        "mode": mode,
+        "execution_hours": execution_hours,
+        "targets": targets,
+        "expressions": {
+            "gross_grid_import_mwh": import_expression,
+            "named_ng_mwh_lhv": named_ng_expression,
+            "wag_generator_electricity_mwh": wag_expression,
+        },
+    }
+
+
+def _sale_breakthrough_test_record(
+    context: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    if context is None:
+        return None
+    targets = dict(context["targets"])
+    actual = {
+        key: float(value(expression))
+        for key, expression in context["expressions"].items()
+    }
+    residuals = {
+        "gross_grid_import_mwh": (
+            actual["gross_grid_import_mwh"] - targets["gross_grid_import_mwh"]
+        ),
+        "named_ng_mwh_lhv": (
+            actual["named_ng_mwh_lhv"] - targets["named_ng_mwh_lhv"]
+        ),
+        "wag_generator_electricity_mwh": (
+            actual["wag_generator_electricity_mwh"]
+            - targets["wag_generator_electricity_mwh"]
+        ),
+    }
+    return {
+        "schema_version": context["schema_version"],
+        "mode": context["mode"],
+        "execution_hours": context["execution_hours"],
+        "reference_metrics": targets,
+        "actual_metrics": actual,
+        "residuals": residuals,
+        "resource_caps_status": (
+            "pass"
+            if residuals["gross_grid_import_mwh"] <= 1e-6
+            and residuals["named_ng_mwh_lhv"] <= 1e-6
+            else "fail"
+        ),
+    }
+
+
 def _preserve_allocation_endpoint_failure(
     model: ConcreteModel,
     result: Any,
@@ -4087,6 +4559,7 @@ def _solve_with_optional_lexicographic_cost(
         "sale_incumbent_containment": None,
         "sale_state_preservation": None,
         "sale_economic_validation_overlay": None,
+        "sale_breakthrough_test": None,
     }
 
     cost_objective = None
@@ -4094,6 +4567,7 @@ def _solve_with_optional_lexicographic_cost(
     sale_validation_context: dict[str, Any] | None = None
     sale_containment_policy: Mapping[str, Any] | None = None
     sale_state_contract: Mapping[str, Any] | None = None
+    sale_breakthrough_context: dict[str, Any] | None = None
     flows: list[Mapping[str, Any]] = []
     sale_enabled = bool(
         electricity_sale_sensitivity
@@ -4306,6 +4780,18 @@ def _solve_with_optional_lexicographic_cost(
                 "constraint_names_sha256"
             ],
         }
+        sale_breakthrough_context = _install_sale_breakthrough_test(
+            model,
+            electricity_sale_sensitivity.get("breakthrough_test"),
+        )
+        if sale_breakthrough_context is not None:
+            metadata["sale_breakthrough_test"] = {
+                "schema_version": sale_breakthrough_context["schema_version"],
+                "mode": sale_breakthrough_context["mode"],
+                "execution_hours": sale_breakthrough_context["execution_hours"],
+                "reference_metrics": dict(sale_breakthrough_context["targets"]),
+                "status": "installed_pending_solve",
+            }
 
     model.static_price_naive_objective.deactivate()
     if progress_active:
@@ -4475,6 +4961,14 @@ def _solve_with_optional_lexicographic_cost(
                 "sale_economic.validation_overlay_final_audit"
             )
             raise error
+    if sale_breakthrough_context is not None:
+        metadata["sale_breakthrough_test"] = _sale_breakthrough_test_record(
+            sale_breakthrough_context
+        )
+        if metadata["sale_breakthrough_test"]["resource_caps_status"] != "pass":
+            raise S44CModelBuilderError(
+                "Phase-5B breakthrough resource-cap audit failed."
+            )
     if normal_solution_capture is not None:
         metadata.update(
             _capture_complete_normal_solution(
@@ -4504,6 +4998,24 @@ def _solve_with_optional_lexicographic_cost(
     if endpoint not in {"min", "max"}:
         raise S44CModelBuilderError(
             "Allocation-envelope endpoint must be exactly 'min' or 'max'."
+        )
+    breakthrough_mode = str(
+        allocation_envelope_diagnostic.get("breakthrough_mode", "")
+    )
+    physical_wag_upper_bound = (
+        breakthrough_mode == "phase5b_physical_wag_upper_bound_v1"
+    )
+    if breakthrough_mode and breakthrough_mode not in _SALE_BREAKTHROUGH_MODES:
+        raise S44CModelBuilderError(
+            f"Unsupported allocation-envelope breakthrough mode: {breakthrough_mode!r}."
+        )
+    if physical_wag_upper_bound and (
+        sale_breakthrough_context is None
+        or sale_breakthrough_context["mode"] != breakthrough_mode
+        or endpoint != "max"
+    ):
+        raise S44CModelBuilderError(
+            "The Phase-5B physical WAG upper bound requires matching sale resource caps and endpoint=max."
         )
     execution_hours = int(
         allocation_envelope_diagnostic.get(
@@ -4625,7 +5137,7 @@ def _solve_with_optional_lexicographic_cost(
     normal_cost_minus_upper_limit = normal_cost - (
         primary_cost + cost_tolerance
     )
-    if normal_cost_minus_upper_limit > 1e-6:
+    if not physical_wag_upper_bound and normal_cost_minus_upper_limit > 1e-6:
         raise S44CModelBuilderError(
             "The normal tie-break incumbent is not feasible for the allocation "
             "endpoint formulations: "
@@ -4641,6 +5153,12 @@ def _solve_with_optional_lexicographic_cost(
             )
         ).hexdigest()
 
+    if physical_wag_upper_bound:
+        if not hasattr(model, "procurement_cost_optimum_preservation"):
+            raise S44CModelBuilderError(
+                "The physical WAG upper bound expected the completed economic stage before removing its cost cap."
+            )
+        model.del_component(model.procurement_cost_optimum_preservation)
     base_model_structure_sha256 = _model_structure_sha256(model)
     model.static_price_naive_objective.deactivate()
     state_expressions = {
@@ -4685,12 +5203,17 @@ def _solve_with_optional_lexicographic_cost(
             "The IIS-proven executed-hours rolling deadline row is absent."
         )
     deadline_row = deadline[execution_hours]
-    if not deadline_row.active:
+    if not deadline_row.active and not physical_wag_upper_bound:
         raise S44CModelBuilderError(
             "The IIS-proven executed-hours rolling deadline row was already inactive."
         )
-    deadline_row.deactivate()
-    deactivated_deadline_name = deadline_row.name
+    if deadline_row.active:
+        deadline_row.deactivate()
+        deactivated_deadline_name = deadline_row.name
+    else:
+        deactivated_deadline_name = (
+            f"{deadline_row.name}:already_replaced_by_governed_sale_validation_overlay"
+        )
     if hasattr(model, "rolling_production_progress_identity"):
         if not model.rolling_production_progress_identity.active:
             raise S44CModelBuilderError(
@@ -4710,13 +5233,23 @@ def _solve_with_optional_lexicographic_cost(
         sense=minimize if endpoint == "min" else maximize,
     )
     model.allocation_envelope_objective.deactivate()
-    normal_oracle = _complete_normal_feasibility_oracle(
-        model,
-        solver=solver,
-        diagnostic=allocation_envelope_diagnostic,
-        tolerance=state_tolerance,
-        base_model_structure_sha256=base_model_structure_sha256,
-    )
+    in_memory_endpoint_warm_start: dict[str, Any] | None = None
+    if physical_wag_upper_bound:
+        normal_oracle, in_memory_endpoint_warm_start = (
+            _in_memory_physical_upper_bound_oracle(
+                model,
+                diagnostic=allocation_envelope_diagnostic,
+                tolerance=state_tolerance,
+            )
+        )
+    else:
+        normal_oracle = _complete_normal_feasibility_oracle(
+            model,
+            solver=solver,
+            diagnostic=allocation_envelope_diagnostic,
+            tolerance=state_tolerance,
+            base_model_structure_sha256=base_model_structure_sha256,
+        )
     normal_incumbent_audit = dict(
         normal_oracle["pre_solve_loaded_value_audit"]
     )
@@ -4729,6 +5262,11 @@ def _solve_with_optional_lexicographic_cost(
     )
     normal_incumbent_audit["cost_cap_present"] = hasattr(
         model, "procurement_cost_optimum_preservation"
+    )
+    normal_incumbent_audit["cost_cap_requirement"] = (
+        "not_applicable_physical_upper_bound"
+        if physical_wag_upper_bound
+        else "required"
     )
     normal_incumbent_audit["production_and_state_preservation_present"] = (
         all(
@@ -4745,7 +5283,10 @@ def _solve_with_optional_lexicographic_cost(
     )
     normal_incumbent_audit["feasible"] = bool(
         normal_incumbent_audit["feasible"]
-        and normal_incumbent_audit["cost_cap_present"]
+        and (
+            physical_wag_upper_bound
+            or normal_incumbent_audit["cost_cap_present"]
+        )
         and normal_incumbent_audit["production_and_state_preservation_present"]
         and objective_definition_valid
     )
@@ -4834,11 +5375,15 @@ def _solve_with_optional_lexicographic_cost(
         )
         return tie_result, metadata
     model.allocation_envelope_objective.activate()
-    endpoint_warm_start = _prepare_allocation_endpoint_warm_start(
-        model,
-        diagnostic=allocation_envelope_diagnostic,
-        normal_oracle=normal_oracle,
-        tolerance=state_tolerance,
+    endpoint_warm_start = (
+        in_memory_endpoint_warm_start
+        if in_memory_endpoint_warm_start is not None
+        else _prepare_allocation_endpoint_warm_start(
+            model,
+            diagnostic=allocation_envelope_diagnostic,
+            normal_oracle=normal_oracle,
+            tolerance=state_tolerance,
+        )
     )
     metadata.update(
         {
@@ -5051,7 +5596,9 @@ def _solve_with_optional_lexicographic_cost(
         1e-6 if "gurobi" in str(getattr(solver, "name", "")).lower() else 0.0
     )
     best_bound_audit_status = (
-        "pass"
+        "not_applicable_physical_upper_bound"
+        if physical_wag_upper_bound
+        else "pass"
         if endpoint_minus_primary_best_bound is not None
         and endpoint_minus_primary_best_bound >= 0.0
         else "unavailable"
@@ -5059,7 +5606,9 @@ def _solve_with_optional_lexicographic_cost(
         else "fail"
     )
     primary_objective_audit_status = (
-        "pass"
+        "not_applicable_physical_upper_bound"
+        if physical_wag_upper_bound
+        else "pass"
         if endpoint_cost
         <= primary_cost + cost_tolerance + solver_cost_feasibility_tolerance
         else "fail"
@@ -5070,8 +5619,14 @@ def _solve_with_optional_lexicographic_cost(
     effective_state_tolerance = state_tolerance
     if (
         max_state_residual > effective_state_tolerance
-        or endpoint_cost > primary_cost + cost_tolerance + 1e-6
-        or best_bound_audit_status != "pass"
+        or (
+            not physical_wag_upper_bound
+            and endpoint_cost > primary_cost + cost_tolerance + 1e-6
+        )
+        or (
+            not physical_wag_upper_bound
+            and best_bound_audit_status != "pass"
+        )
     ):
         raise S44CModelBuilderError(
             "Allocation-envelope endpoint failed state or represented-cost "
@@ -5085,10 +5640,26 @@ def _solve_with_optional_lexicographic_cost(
     normal_handoff_hash = _snapshot_hash(normal_snapshot)
     raw_endpoint_handoff_hash = _snapshot_hash(endpoint_snapshot)
     endpoint_handoff_hash = raw_endpoint_handoff_hash
+    if sale_breakthrough_context is not None:
+        metadata["sale_breakthrough_test"] = _sale_breakthrough_test_record(
+            sale_breakthrough_context
+        )
+        if metadata["sale_breakthrough_test"]["resource_caps_status"] != "pass":
+            raise S44CModelBuilderError(
+                "Phase-5B endpoint violated its comparator resource caps."
+            )
     metadata.update(
         {
             "allocation_envelope_active": True,
             "allocation_envelope_endpoint": endpoint,
+            "allocation_envelope_breakthrough_mode": (
+                breakthrough_mode or None
+            ),
+            "allocation_envelope_cost_preservation_requirement": (
+                "not_applicable_physical_upper_bound"
+                if physical_wag_upper_bound
+                else "required"
+            ),
             "allocation_envelope_execution_hours": execution_hours,
             "allocation_envelope_objective_value_mwh": endpoint_incumbent_mwh,
             "allocation_envelope_endpoint_accuracy_schema": (
@@ -5852,14 +6423,26 @@ def _add_reference_horizon_band(
         raise S44CModelBuilderError(
             f"Reference band {constraint_id} is missing: {sorted(missing)}"
         )
-    lower = float(band["lower_t"])
-    upper = float(band["upper_t"])
+    original_lower = float(band["lower_t"])
+    original_upper = float(band["upper_t"])
+    quantization_allowance = float(band.get("quantization_allowance_t", 0.0))
+    lower = max(0.0, original_lower - quantization_allowance)
+    upper = original_upper + quantization_allowance
     if not 0.0 <= lower <= upper:
         raise S44CModelBuilderError(
             f"Reference band {constraint_id} must satisfy 0 <= lower <= upper."
         )
     setattr(model, f"{constraint_id}_lower", Constraint(expr=expression >= lower))
     setattr(model, f"{constraint_id}_upper", Constraint(expr=expression <= upper))
+    setattr(model, f"{constraint_id}_original_lower_t", original_lower)
+    setattr(model, f"{constraint_id}_original_upper_t", original_upper)
+    setattr(
+        model,
+        f"{constraint_id}_quantization_allowance_t",
+        quantization_allowance,
+    )
+    setattr(model, f"{constraint_id}_effective_lower_t", lower)
+    setattr(model, f"{constraint_id}_effective_upper_t", upper)
 
 
 def _add_reference_cumulative_deadline_bands(
@@ -5893,12 +6476,19 @@ def _add_reference_cumulative_deadline_bands(
         component = hourly_expressions[band_id]
         lower = float(band["lower_t"])
         upper = float(band["upper_t"])
+        quantization_allowance = float(band.get("quantization_allowance_t", 0.0))
         for deadline in deadlines:
             if explicit_deadline_bands is not None:
                 try:
                     deadline_band = explicit_deadline_bands[band_id][deadline]
                     deadline_lower = float(deadline_band["lower_t"])
                     deadline_upper = float(deadline_band["upper_t"])
+                    deadline_allowance = float(
+                        deadline_band.get(
+                            "quantization_allowance_t",
+                            quantization_allowance,
+                        )
+                    )
                 except (KeyError, TypeError, ValueError) as exc:
                     raise S44CModelBuilderError(
                         "Explicit fixed-reference deadline bands are incomplete."
@@ -5907,6 +6497,9 @@ def _add_reference_cumulative_deadline_bands(
                 scale = deadline / horizon_hours
                 deadline_lower = lower * scale
                 deadline_upper = upper * scale
+                deadline_allowance = quantization_allowance
+            deadline_lower = max(0.0, deadline_lower - deadline_allowance)
+            deadline_upper += deadline_allowance
             cumulative = sum(component[t] for t in range(deadline))
             setattr(
                 model,
@@ -5926,8 +6519,9 @@ def _add_day_commitment_layer(
     horizon_hours: int,
     commitment_definitions: Mapping[str, tuple[str, str, float]],
     commitment_day_lengths: Collection[int] | None = None,
+    time_step_hours: float = 1.0,
 ) -> None:
-    """Use one daily plant-commitment binary while retaining hourly throughput.
+    """Use one daily plant-commitment binary with interval throughput.
 
     This is a tractable development abstraction for a price-free quota model:
     it selects plant availability from physical demand without prescribing
@@ -5936,15 +6530,20 @@ def _add_day_commitment_layer(
     day_lengths = (
         [int(value) for value in commitment_day_lengths]
         if commitment_day_lengths is not None
-        else [24] * (horizon_hours // 24)
+        else [int(round(24.0 / time_step_hours))]
+        * int(round(horizon_hours * time_step_hours / 24.0))
     )
     if (
         not day_lengths
         or sum(day_lengths) != horizon_hours
-        or any(value not in {23, 24, 25} for value in day_lengths)
+        or any(
+            round(value * time_step_hours, 10) not in {23.0, 24.0, 25.0}
+            for value in day_lengths
+        )
     ):
         raise S44CModelBuilderError(
-            "Daily commitment requires complete 23/24/25-hour local delivery days."
+            "Daily commitment requires complete 23/24/25-hour local delivery days "
+            "expressed in model intervals."
         )
     boundaries: list[tuple[int, int]] = []
     start = 0
@@ -5976,7 +6575,7 @@ def _add_day_commitment_layer(
                 model.COMMITMENT_DAY,
                 rule=lambda m, d, activity_name=activity_name, day_on_name=day_on_name, minimum_rate=minimum_rate:
                 sum(getattr(m, activity_name)[t] for t in range(*boundaries[int(d)]))
-                >= minimum_rate * getattr(m, day_on_name)[d],
+                >= (minimum_rate / time_step_hours) * getattr(m, day_on_name)[d],
             ),
         )
 
@@ -6108,6 +6707,7 @@ def _add_c0_minimal_wag_layer(
     model: ConcreteModel,
     inputs: C0ExecutableInputs | RetainedBfBofInputs,
     *,
+    time_step_hours: float = 1.0,
     enable_internal_wag_power: bool = False,
     gross_electricity_rule: Any | None = None,
     development_profile: DevelopmentControllerProfile | None = None,
@@ -6121,14 +6721,18 @@ def _add_c0_minimal_wag_layer(
     development_controller_profile_weights: Mapping[str, Mapping[int, float]] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
     site_background_electricity_mwh_h: float = 0.0,
+    site_baseload_ng_mwh_h: float = 0.0,
+    site_residual_steam_t_h: float = 0.0,
+    site_residual_direct_co2_t_h: float = 0.0,
     kgf_underfiring_activity_rule: Any | None = None,
     kgf_underfiring_activity_rule_kgf2: Any | None = None,
     hsm_carrier_precedence: Collection[str] | None = None,
     hsm_eligible_carriers: Collection[str] | None = None,
+    hsm_source_mix_policy: Mapping[str, Any] | None = None,
     generator_interface_cap_mode: str = "inherited_profile",
     generator_unit_interface: Mapping[str, Any] | None = None,
     aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
-    full_site_energy_bridge: Mapping[str, float] | None = None,
+    full_site_energy_bridge: Mapping[str, Any] | None = None,
     eaf_secondary_electricity_mwh_per_t_ls_override: float | None = None,
     dsp_electricity_mwh_per_t_coil_override: float | None = None,
     hsm_output_activity_rule: Any | None = None,
@@ -6143,6 +6747,12 @@ def _add_c0_minimal_wag_layer(
         raise S44CModelBuilderError("Linde N2 auxiliary electricity must be non-negative.")
     if site_background_electricity_mwh_h < 0.0:
         raise S44CModelBuilderError("Site background electricity must be non-negative.")
+    if site_baseload_ng_mwh_h < 0.0:
+        raise S44CModelBuilderError("Site baseload NG must be non-negative.")
+    if site_residual_steam_t_h < 0.0:
+        raise S44CModelBuilderError("Site residual steam demand must be non-negative.")
+    if site_residual_direct_co2_t_h < 0.0:
+        raise S44CModelBuilderError("Site residual direct CO2 must be non-negative.")
     if eaf_secondary_electricity_mwh_per_t_ls_override is not None and eaf_secondary_electricity_mwh_per_t_ls_override < 0.0:
         raise S44CModelBuilderError("EAF secondary-electricity override must be non-negative.")
     if dsp_electricity_mwh_per_t_coil_override is not None and dsp_electricity_mwh_per_t_coil_override < 0.0:
@@ -6150,12 +6760,53 @@ def _add_c0_minimal_wag_layer(
     if bf_electricity_intensity_scale <= 0.0:
         raise S44CModelBuilderError("BF electricity-intensity scale must be positive.")
 
-    # This is a diagnostic allocation *order*, not a gas-mix ratio or a
-    # gas-quality model.  Every eligible carrier stays separately balanced.
-    # The default preserves the historical BFG-first tie-breaker; callers must
-    # opt in explicitly to a different source-backed development case.
+    # Every eligible carrier stays separately balanced.  The active HSM
+    # development controller defaults to the source-backed QRA COG/NG
+    # composition; an explicit empty mapping retains the historical broad-fuel
+    # allocation for labelled diagnostics only.
     supported_hsm_carriers = ("BFG", "COG", "BOFG", "NG")
-    allowed_hsm_carriers = tuple(hsm_eligible_carriers or supported_hsm_carriers)
+    if (
+        hsm_source_mix_policy is None
+        and enable_hsm_controller
+        and development_profile is not None
+    ):
+        if development_profile.configuration_id == "C0_current_BF_BOF_reference":
+            source_mix = {
+                "basis": "qra_reference_volumetric_design_flow_45_ng_55_cog",
+                "ng_volume_fraction": 0.45,
+                "cog_volume_fraction": 0.55,
+                "ng_lhv_mj_per_nm3": 37.5,
+                "cog_lhv_mj_per_nm3": 18.5,
+                "block_hours": 24,
+                "energy_share_tolerance_fraction": 0.0,
+                "displace_from_c0_fixed_ng_bridge": full_site_energy_bridge is not None,
+            }
+        elif development_profile.configuration_id == "C1_phase1_BF_BOF_plus_DRP_EAF":
+            source_mix = {
+                "basis": "qra_heracless_volumetric_design_flow_80_ng_20_cog",
+                "ng_volume_fraction": 0.80,
+                "cog_volume_fraction": 0.20,
+                "ng_lhv_mj_per_nm3": 37.5,
+                "cog_lhv_mj_per_nm3": 18.5,
+                "block_hours": 24,
+                "energy_share_tolerance_fraction": 0.0,
+                "displace_from_c0_fixed_ng_bridge": False,
+            }
+        else:
+            raise S44CModelBuilderError(
+                "No default HSM QRA source-mixture policy exists for "
+                f"{development_profile.configuration_id!r}."
+            )
+    else:
+        source_mix = dict(hsm_source_mix_policy or {})
+    if source_mix and not enable_hsm_controller:
+        raise S44CModelBuilderError(
+            "An HSM source-mixture policy requires the active HSM controller."
+        )
+    allowed_hsm_carriers = tuple(
+        hsm_eligible_carriers
+        or (("COG", "NG") if source_mix else supported_hsm_carriers)
+    )
     if not allowed_hsm_carriers or len(allowed_hsm_carriers) != len(set(allowed_hsm_carriers)) or not set(allowed_hsm_carriers).issubset(supported_hsm_carriers):
         raise S44CModelBuilderError(
             "HSM eligible carriers must be a non-empty unique subset of BFG, COG, BOFG and NG."
@@ -6175,6 +6826,62 @@ def _add_c0_minimal_wag_layer(
     }
     model.hsm_carrier_precedence = hsm_precedence
     model.hsm_eligible_carriers = allowed_hsm_carriers
+    if source_mix:
+        required_mix_keys = {
+            "ng_volume_fraction",
+            "cog_volume_fraction",
+            "ng_lhv_mj_per_nm3",
+            "cog_lhv_mj_per_nm3",
+            "block_hours",
+        }
+        missing_mix_keys = required_mix_keys.difference(source_mix)
+        if missing_mix_keys:
+            raise S44CModelBuilderError(
+                f"HSM source-mixture policy is missing: {sorted(missing_mix_keys)}"
+            )
+        if set(allowed_hsm_carriers) != {"COG", "NG"}:
+            raise S44CModelBuilderError(
+                "The source-backed HSM mixture permits exactly COG and NG."
+            )
+        ng_volume_fraction = float(source_mix["ng_volume_fraction"])
+        cog_volume_fraction = float(source_mix["cog_volume_fraction"])
+        ng_lhv_mj_per_nm3 = float(source_mix["ng_lhv_mj_per_nm3"])
+        cog_lhv_mj_per_nm3 = float(source_mix["cog_lhv_mj_per_nm3"])
+        hsm_mix_block_hours = int(source_mix["block_hours"])
+        hsm_mix_tolerance = float(
+            source_mix.get("energy_share_tolerance_fraction", 0.0)
+        )
+        if (
+            ng_volume_fraction <= 0.0
+            or cog_volume_fraction <= 0.0
+            or abs(ng_volume_fraction + cog_volume_fraction - 1.0) > 1e-9
+        ):
+            raise S44CModelBuilderError(
+                "HSM COG/NG volumetric fractions must be positive and sum to one."
+            )
+        if ng_lhv_mj_per_nm3 <= 0.0 or cog_lhv_mj_per_nm3 <= 0.0:
+            raise S44CModelBuilderError("HSM COG/NG LHVs must be positive.")
+        if hsm_mix_block_hours <= 0:
+            raise S44CModelBuilderError("HSM mixture block hours must be positive.")
+        if not 0.0 <= hsm_mix_tolerance < 0.5:
+            raise S44CModelBuilderError(
+                "HSM mixture energy-share tolerance must lie in [0, 0.5)."
+            )
+        hsm_ng_energy_share = (
+            ng_volume_fraction * ng_lhv_mj_per_nm3
+            / (
+                ng_volume_fraction * ng_lhv_mj_per_nm3
+                + cog_volume_fraction * cog_lhv_mj_per_nm3
+            )
+        )
+    else:
+        hsm_mix_block_hours = 0
+        hsm_mix_tolerance = 0.0
+        hsm_ng_energy_share = 0.0
+    model.hsm_source_mix_policy_active = bool(source_mix)
+    model.hsm_source_mix_basis = str(source_mix.get("basis", "inactive"))
+    model.hsm_ng_energy_share_target = hsm_ng_energy_share
+    model.hsm_source_mix_block_hours = hsm_mix_block_hours
     model.generator_interface_cap_mode = generator_interface_cap_mode
     model.generator_unit_interface_active = generator_unit_interface is not None
     hsm_output_activity = hsm_output_activity_rule or (lambda m, t: m.hot_strip_mill[t])
@@ -6298,6 +7005,29 @@ def _add_c0_minimal_wag_layer(
             rule=lambda m, t: m.bfg_to_hsm[t] + m.cog_to_hsm[t] + m.bofg_to_hsm[t] + m.ng_to_hsm_mwh[t]
             == m.hsm_reheat_demand_mwh[t],
         )
+        model.hsm_source_mix_constraints = ConstraintList()
+        if source_mix:
+            lower_share = max(0.0, hsm_ng_energy_share - hsm_mix_tolerance)
+            upper_share = min(1.0, hsm_ng_energy_share + hsm_mix_tolerance)
+            complete_block_starts = tuple(
+                start
+                for start in range(0, len(model.TIME), hsm_mix_block_hours)
+                if start + hsm_mix_block_hours <= len(model.TIME)
+            )
+            # A short smoke horizon is constrained as one aggregate block. In
+            # rolling runs, an incomplete forecast tail is deliberately left
+            # unconstrained; it must never collapse the QRA share into an
+            # accidental one-hour composition requirement.
+            block_starts = complete_block_starts or (0,)
+            for start in block_starts:
+                hours = range(
+                    start,
+                    min(start + hsm_mix_block_hours, len(model.TIME)),
+                )
+                block_ng = sum(model.ng_to_hsm_mwh[t] for t in hours)
+                block_heat = sum(model.hsm_reheat_demand_mwh[t] for t in hours)
+                model.hsm_source_mix_constraints.add(block_ng >= lower_share * block_heat)
+                model.hsm_source_mix_constraints.add(block_ng <= upper_share * block_heat)
         model.hsm_carrier_precedence_penalty = Expression(
             model.TIME,
             rule=lambda m, t: (
@@ -6318,7 +7048,10 @@ def _add_c0_minimal_wag_layer(
     # C5n_a resolves the total PEFA-gas controller without inventing a fixed
     # stage-intensity split.  These are its accepted continuous output rows.
     if enable_pefa_controller:
-        model.pefa_pellet_output_t = Expression(model.TIME, rule=lambda _m, _t: development_profile.pefa_pellets_t_h)
+        model.pefa_pellet_output_t = Expression(
+            model.TIME,
+            rule=lambda _m, _t: development_profile.pefa_pellets_t_h * time_step_hours,
+        )
         model.bofg_to_pefa_malerij = Var(model.TIME, domain=NonNegativeReals)
         model.cog_to_pefa_branderij = Var(model.TIME, domain=NonNegativeReals)
         model.ng_to_pefa_malerij_mwh = Var(model.TIME, domain=NonNegativeReals)
@@ -6326,12 +7059,16 @@ def _add_c0_minimal_wag_layer(
         model.pefa_malerij_heat_balance = Constraint(
             model.TIME,
             rule=lambda m, t: m.bofg_to_pefa_malerij[t] + m.ng_to_pefa_malerij_mwh[t]
-            == development_profile.pefa_bofg_mwh_h * _controller_profile_weight("pefa_bofg", int(t)),
+            == development_profile.pefa_bofg_mwh_h
+            * time_step_hours
+            * _controller_profile_weight("pefa_bofg", int(t)),
         )
         model.pefa_branderij_heat_balance = Constraint(
             model.TIME,
             rule=lambda m, t: m.cog_to_pefa_branderij[t] + m.ng_to_pefa_branderij_mwh[t]
-            == development_profile.pefa_cog_mwh_h * _controller_profile_weight("pefa_cog", int(t)),
+            == development_profile.pefa_cog_mwh_h
+            * time_step_hours
+            * _controller_profile_weight("pefa_cog", int(t)),
         )
     else:
         model.pefa_pellet_output_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
@@ -6341,21 +7078,32 @@ def _add_c0_minimal_wag_layer(
         model.ng_to_pefa_branderij_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
 
     if enable_boiler_scaffold:
-        # C5p_b fixes the continuous, existing-modelled 15-bar steam demand
-        # and its source-stage fuel requirement. Carrier use remains BFG/COG
-        # first with named NG backup; no residual steam or capacity-derived
-        # fuel demand is introduced here.
+        # The explicit demand remains source-stage fixed. Phase 5H may add a
+        # constant residual demand, but only through this existing
+        # instantaneous WAG/NG boiler interface. No capacity-derived demand,
+        # storage, startup state or steam quality conversion is introduced.
         model.bfg_to_boiler = Var(model.TIME, domain=NonNegativeReals)
         model.cog_to_boiler = Var(model.TIME, domain=NonNegativeReals)
         model.ng_to_boiler_mwh = Var(model.TIME, domain=NonNegativeReals)
         model.boiler_scaffold_fuel_balance = Constraint(
             model.TIME,
             rule=lambda m, t: m.bfg_to_boiler[t] + m.cog_to_boiler[t] + m.ng_to_boiler_mwh[t]
-            == development_profile.boiler_fuel_mwh_h,
+            == development_profile.boiler_fuel_mwh_h * time_step_hours
+            + site_residual_steam_t_h
+            * development_profile.boiler_fuel_mwh_per_t_steam,
+        )
+        model.steam_15bar_explicit_demand_t = Expression(
+            model.TIME,
+            rule=lambda _m, _t: development_profile.boiler_steam_15bar_demand_t_h
+            * time_step_hours,
+        )
+        model.residual_steam_15bar_demand_t = Expression(
+            model.TIME, rule=lambda _m, _t: site_residual_steam_t_h
         )
         model.steam_15bar_demand_t = Expression(
             model.TIME,
-            rule=lambda _m, _t: development_profile.boiler_steam_15bar_demand_t_h,
+            rule=lambda m, t: m.steam_15bar_explicit_demand_t[t]
+            + m.residual_steam_15bar_demand_t[t],
         )
         model.steam_15bar_supply_t = Expression(
             model.TIME,
@@ -6368,20 +7116,47 @@ def _add_c0_minimal_wag_layer(
             rule=lambda m, t: m.steam_15bar_supply_t[t] == m.steam_15bar_demand_t[t],
         )
         model.steam_15bar_unserved_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.wag_boiler_steam_supply_t = Expression(
+            model.TIME,
+            rule=lambda m, t: (m.bfg_to_boiler[t] + m.cog_to_boiler[t])
+            / development_profile.boiler_fuel_mwh_per_t_steam,
+        )
+        model.ng_boiler_steam_supply_t = Expression(
+            model.TIME,
+            rule=lambda m, t: m.ng_to_boiler_mwh[t]
+            / development_profile.boiler_fuel_mwh_per_t_steam,
+        )
+        model.recovered_steam_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.external_steam_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.steam_15bar_spill_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
     elif retire_legacy_boiler_placeholder:
         model.bfg_to_boiler = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.cog_to_boiler = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.ng_to_boiler_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.steam_15bar_explicit_demand_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.residual_steam_15bar_demand_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.steam_15bar_demand_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.steam_15bar_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.steam_15bar_unserved_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.wag_boiler_steam_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.ng_boiler_steam_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.recovered_steam_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.external_steam_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.steam_15bar_spill_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
     else:
         model.bfg_to_boiler = Var(model.TIME, domain=NonNegativeReals)
         model.cog_to_boiler = Var(model.TIME, domain=NonNegativeReals)
         model.ng_to_boiler_mwh = Var(model.TIME, domain=NonNegativeReals)
+        model.steam_15bar_explicit_demand_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.residual_steam_15bar_demand_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.steam_15bar_demand_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.steam_15bar_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.steam_15bar_unserved_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.wag_boiler_steam_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.ng_boiler_steam_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.recovered_steam_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.external_steam_supply_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        model.steam_15bar_spill_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
 
     # These existing controller-electricity expressions are declared before
     # gross electricity because an opt-in C1 gross-load rule may reference
@@ -6401,7 +7176,11 @@ def _add_c0_minimal_wag_layer(
     )
     model.pefa_electricity_mwh = Expression(
         model.TIME,
-        rule=lambda _m, _t: 0.0213 * development_profile.pefa_pellets_t_h if enable_pefa_controller else 0.0,
+        rule=lambda _m, _t: (
+            0.0213 * development_profile.pefa_pellets_t_h * time_step_hours
+            if enable_pefa_controller
+            else 0.0
+        ),
     )
     model.development_controller_electricity_mwh = Expression(
         model.TIME,
@@ -6547,6 +7326,17 @@ def _add_c0_minimal_wag_layer(
         normal_case_flexible_ng_reference_mwh_h = float(
             bridge["normal_case_flexible_ng_validation_reference_mwh_h"]
         )
+        flexible_ng_allocation_policy = str(
+            bridge.get("flexible_ng_allocation_policy", "dispatch_endogenous")
+        )
+        if flexible_ng_allocation_policy not in {
+            "dispatch_endogenous",
+            "normal_case_reference_exact_hourly",
+        }:
+            raise S44CModelBuilderError(
+                "Unsupported flexible-heat NG allocation policy: "
+                f"{flexible_ng_allocation_policy}"
+            )
         if fixed_ng_mwh_h <= 0.0:
             raise S44CModelBuilderError(
                 "The net fixed full-site NG component must remain positive when enabled."
@@ -6572,17 +7362,45 @@ def _add_c0_minimal_wag_layer(
             rule=lambda m, t: m.flexible_other_site_heat_ng_mwh[t]
             <= flexible_heat_service_mwh_h,
         )
+        if flexible_ng_allocation_policy == "normal_case_reference_exact_hourly":
+            model.flexible_other_site_heat_ng_source_emulation = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.flexible_other_site_heat_ng_mwh[t]
+                == normal_case_flexible_ng_reference_mwh_h,
+            )
     else:
         fixed_ng_mwh_h = 0.0
         flexible_heat_service_mwh_h = 0.0
         normal_case_flexible_ng_reference_mwh_h = 0.0
+        flexible_ng_allocation_policy = "inactive"
         model.bfg_to_flexible_other_site_heat = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.cog_to_flexible_other_site_heat = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.bofg_to_flexible_other_site_heat = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.flexible_other_site_heat_ng_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
-    model.full_site_fixed_ng_component_mwh = Expression(
+    reclassify_hsm_ng = bool(
+        source_mix.get("displace_from_c0_fixed_ng_bridge", False)
+    )
+    if reclassify_hsm_ng and not bridge:
+        raise S44CModelBuilderError(
+            "HSM NG can only displace an enabled C0 fixed-NG bridge."
+        )
+    model.full_site_fixed_ng_component_gross_mwh = Expression(
         model.TIME, rule=lambda _m, _t: fixed_ng_mwh_h
     )
+    model.hsm_ng_reclassified_from_fixed_bridge_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: m.ng_to_hsm_mwh[t] if reclassify_hsm_ng else 0.0,
+    )
+    model.full_site_fixed_ng_component_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: m.full_site_fixed_ng_component_gross_mwh[t]
+        - m.hsm_ng_reclassified_from_fixed_bridge_mwh[t],
+    )
+    model.full_site_fixed_ng_component_nonnegative = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.full_site_fixed_ng_component_mwh[t] >= 0.0,
+    )
+    model.hsm_ng_displaces_fixed_bridge = reclassify_hsm_ng
     model.flexible_other_site_heat_service_envelope_mwh = Expression(
         model.TIME, rule=lambda _m, _t: flexible_heat_service_mwh_h
     )
@@ -6594,7 +7412,12 @@ def _add_c0_minimal_wag_layer(
         rule=lambda m, t: m.full_site_fixed_ng_component_mwh[t]
         + m.flexible_other_site_heat_ng_mwh[t],
     )
+    model.site_baseload_ng_mwh = Expression(
+        model.TIME, rule=lambda _m, _t: site_baseload_ng_mwh_h
+    )
     model.full_site_energy_bridge_active = bool(bridge)
+    model.site_baseload_ng_mwh_h = site_baseload_ng_mwh_h
+    model.flexible_ng_allocation_policy = flexible_ng_allocation_policy
     model.flexible_other_site_heat_service_envelope_mwh_h = flexible_heat_service_mwh_h
     model.normal_case_flexible_ng_validation_reference_mwh_h = (
         normal_case_flexible_ng_reference_mwh_h
@@ -6863,7 +7686,8 @@ def _add_c0_minimal_wag_layer(
             model.vattenfall_fixed_interface_cap = Constraint(
                 model.TIME,
                 rule=lambda m, t: m.bfg_to_vattenfall[t] + m.cog_to_vattenfall[t] + m.bofg_to_vattenfall[t]
-                <= development_profile.generator_wag_interface_cap_mwh_h,
+                    <= development_profile.generator_wag_interface_cap_mwh_h
+                    * time_step_hours,
             )
         model.vattenfall_fuel_mwh = Expression(
             model.TIME,
@@ -7121,6 +7945,18 @@ def _add_c0_minimal_wag_layer(
             - m.gross_grid_import_mwh[t]
             + m.gross_grid_export_mwh[t],
         )
+    model.total_named_ng_procurement_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: m.ng_to_hsm_mwh[t]
+        + m.ng_to_pefa_malerij_mwh[t]
+        + m.ng_to_pefa_branderij_mwh[t]
+        + m.ng_to_boiler_mwh[t]
+        + m.generator_named_ng_mwh[t]
+        + m.full_site_energy_bridge_named_ng_mwh[t]
+        + m.site_baseload_ng_mwh[t]
+        + (m.drp_named_ng_mwh[t] if hasattr(m, "drp_named_ng_mwh") else 0.0)
+        + (m.eaf_named_ng_mwh[t] if hasattr(m, "eaf_named_ng_mwh") else 0.0),
+    )
     model.aggregate_generator_technical_interface_active = bool(
         aggregate_generator_technical_interface
     )
@@ -7264,6 +8100,32 @@ def _add_c0_minimal_wag_layer(
         + m.cog_explicit_combustion_co2_t[t]
         + m.bofg_explicit_combustion_co2_t[t],
     )
+    model.explicit_ng_combustion_co2_t = Expression(
+        model.TIME,
+        rule=lambda m, t: NG_COMBUSTION_T_CO2_PER_MWH_LHV
+        * m.total_named_ng_procurement_mwh[t],
+    )
+    # Aggregate process counters remain visible in the separate emissions
+    # ledgers and are intentionally excluded here because their carbon basis
+    # overlaps represented fuel oxidation. This is not an ETS ledger.
+    model.represented_process_counter_direct_co2_t = Expression(
+        model.TIME, rule=lambda _m, _t: 0.0
+    )
+    model.residual_unmodelled_direct_co2_t = Expression(
+        model.TIME, rule=lambda _m, _t: site_residual_direct_co2_t_h
+    )
+    model.explicit_direct_co2_t = Expression(
+        model.TIME,
+        rule=lambda m, t: m.wag_explicit_combustion_co2_t[t]
+        + m.explicit_ng_combustion_co2_t[t],
+    )
+    model.total_direct_co2_reporting_t = Expression(
+        model.TIME,
+        rule=lambda m, t: m.explicit_direct_co2_t[t]
+        + m.residual_unmodelled_direct_co2_t[t],
+    )
+    model.site_residual_steam_t_h = site_residual_steam_t_h
+    model.site_residual_direct_co2_t_h = site_residual_direct_co2_t_h
     model.flaring_co2_diagnostic_cost_eur = Expression(
         model.TIME,
         rule=lambda m, t: FLARING_CO2_DIAGNOSTIC_EUR_PER_T * m.flaring_co2_t[t],
@@ -7298,6 +8160,7 @@ def _enforce_continuous_must_run_availability(
 def _build_c0_model(
     inputs: C0ExecutableInputs,
     *,
+    time_step_hours: float = 1.0,
     fix_binary_schedule: bool = False,
     enable_minimal_wag_layer: bool = False,
     enable_internal_wag_power: bool = False,
@@ -7313,12 +8176,22 @@ def _build_c0_model(
     c0_downstream_reference_routing: Mapping[str, Any] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
     site_background_electricity_mwh_h: float = 0.0,
+    site_baseload_ng_mwh_h: float = 0.0,
+    site_residual_steam_t_h: float = 0.0,
+    site_residual_direct_co2_t_h: float = 0.0,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
     bf_electricity_intensity_scale: float = 1.0,
     aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
-    full_site_energy_bridge: Mapping[str, float] | None = None,
+    full_site_energy_bridge: Mapping[str, Any] | None = None,
+    hsm_source_mix_policy: Mapping[str, Any] | None = None,
     electricity_sale_sensitivity: Mapping[str, Any] | None = None,
 ):
+    if time_step_hours not in {1.0, 0.25}:
+        raise S44CModelBuilderError("C0 model time step must be 1 hour or 15 minutes.")
+    if time_step_hours != 1.0 and (fix_binary_schedule or c0_fixed_schedule_hours_by_process):
+        raise S44CModelBuilderError(
+            "Historical fixed-hour C0 schedules are not valid at quarter-hour resolution."
+        )
     if commitment_granularity not in {"hourly_binary", "daily_binary_hourly_throughput"}:
         raise S44CModelBuilderError(f"Unsupported commitment granularity: {commitment_granularity}")
     if fix_binary_schedule and continuous_must_run_activities:
@@ -7372,6 +8245,9 @@ def _build_c0_model(
             raise S44CModelBuilderError("C0 reference downstream factors and cap must be positive.")
     model = ConcreteModel()
     model.TIME = RangeSet(0, inputs.horizon_hours - 1)
+    model.time_step_hours = float(time_step_hours)
+    model.horizon_steps = int(inputs.horizon_hours)
+    model.physical_horizon_hours = float(inputs.horizon_hours) * time_step_hours
     process_names = tuple(inputs.process_limits)
 
     on_domain = UnitInterval if commitment_granularity == "daily_binary_hourly_throughput" else Binary
@@ -7544,12 +8420,13 @@ def _build_c0_model(
         _add_c0_minimal_wag_layer(
             model,
             inputs,
+            time_step_hours=time_step_hours,
             enable_internal_wag_power=enable_internal_wag_power,
             gross_electricity_rule=(
                 (lambda m, t: m.development_controller_electricity_mwh[t] + m.electricity_boundary_development_mwh[t])
                 if controller_flags["electricity_boundary"]
                 else (
-                    (lambda _m, _t: C0_SITE_ELECTRICITY_PROXY_MWH_H)
+                    (lambda _m, _t: C0_SITE_ELECTRICITY_PROXY_MWH_H * time_step_hours)
                     if enable_internal_wag_power or controller_flags["generator"]
                     else (lambda _m, _t: 0.0)
                 )
@@ -7564,9 +8441,13 @@ def _build_c0_model(
             development_controller_profile_weights=development_controller_profile_weights,
             linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
             site_background_electricity_mwh_h=site_background_electricity_mwh_h,
+            site_baseload_ng_mwh_h=site_baseload_ng_mwh_h,
+            site_residual_steam_t_h=site_residual_steam_t_h,
+            site_residual_direct_co2_t_h=site_residual_direct_co2_t_h,
             bf_electricity_intensity_scale=bf_electricity_intensity_scale,
             aggregate_generator_technical_interface=aggregate_generator_technical_interface,
             full_site_energy_bridge=full_site_energy_bridge,
+            hsm_source_mix_policy=hsm_source_mix_policy,
             electricity_sale_sensitivity=electricity_sale_sensitivity,
             kgf_underfiring_activity_rule=(
                 (lambda m, t: m.coke_output_kgf1[t]) if c0_coke_chain_reconciliation is not None else None
@@ -7695,6 +8576,7 @@ def _build_c0_model(
                 for name in process_names
             },
             commitment_day_lengths=commitment_day_lengths,
+            time_step_hours=time_step_hours,
         )
     if daily_production_guardrail:
         _add_daily_production_guardrail(model, inputs)
@@ -7892,6 +8774,7 @@ def _build_c1_inputs(
 def _build_c1_hybrid_model(
     inputs: C1ExecutableInputs,
     *,
+    time_step_hours: float = 1.0,
     enable_minimal_wag_layer: bool = False,
     enable_internal_wag_power: bool = False,
     development_controller_activation: str = "none",
@@ -7913,8 +8796,12 @@ def _build_c1_hybrid_model(
     c1_coke_chain_reconciliation: Mapping[str, float] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
     site_background_electricity_mwh_h: float = 0.0,
+    site_baseload_ng_mwh_h: float = 0.0,
+    site_residual_steam_t_h: float = 0.0,
+    site_residual_direct_co2_t_h: float = 0.0,
     hsm_carrier_precedence: Collection[str] | None = None,
     hsm_eligible_carriers: Collection[str] | None = None,
+    hsm_source_mix_policy: Mapping[str, Any] | None = None,
     generator_interface_cap_mode: str = "inherited_profile",
     generator_unit_interface: Mapping[str, Any] | None = None,
     c1_energy_boundary: Mapping[str, float] | None = None,
@@ -7922,7 +8809,25 @@ def _build_c1_hybrid_model(
     dsp_electricity_mwh_per_t_coil_override: float | None = None,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
     bf_electricity_intensity_scale: float = 1.0,
+    eaf_heat_state_parameters: EAFHeatStateParameters | None = None,
+    initial_drp_pellet_input_t: float | None = None,
 ):
+    if time_step_hours not in {1.0, 0.25}:
+        raise S44CModelBuilderError("C1 model time step must be 1 hour or 15 minutes.")
+    if time_step_hours != 1.0 and fix_c1_hybrid_schedule:
+        raise S44CModelBuilderError(
+            "Historical fixed-hour C1 schedules are not valid at quarter-hour resolution."
+        )
+    heat_state_active = bool(
+        eaf_heat_state_parameters is not None
+        and eaf_heat_state_parameters.active
+    )
+    if heat_state_active and time_step_hours != 0.25:
+        raise S44CModelBuilderError(
+            "The discrete EAF heat-state component requires the shared internal 15-minute grid."
+        )
+    if initial_drp_pellet_input_t is not None and float(initial_drp_pellet_input_t) < 0.0:
+        raise S44CModelBuilderError("Initial DRP pellet input cannot be negative.")
     if commitment_granularity not in {"hourly_binary", "daily_binary_hourly_throughput"}:
         raise S44CModelBuilderError(f"Unsupported commitment granularity: {commitment_granularity}")
     if external_procurement_flow_coefficients is not None:
@@ -8029,6 +8934,9 @@ def _build_c1_hybrid_model(
 
     model = ConcreteModel()
     model.TIME = RangeSet(0, inputs.horizon_hours - 1)
+    model.time_step_hours = float(time_step_hours)
+    model.horizon_steps = int(inputs.horizon_hours)
+    model.physical_horizon_hours = float(inputs.horizon_hours) * time_step_hours
     retained_process_names = tuple(retained.process_limits)
     on_domain = UnitInterval if commitment_granularity == "daily_binary_hourly_throughput" else Binary
     for process_name in retained_process_names:
@@ -8037,8 +8945,90 @@ def _build_c1_hybrid_model(
 
     model.drp_pellet_input = Var(model.TIME, domain=NonNegativeReals)
     model.drp_on = Var(model.TIME, domain=on_domain)
-    model.eaf_dri_input = Var(model.TIME, domain=NonNegativeReals)
-    model.eaf_on = Var(model.TIME, domain=on_domain)
+    if heat_state_active:
+        heat = eaf_heat_state_parameters
+        assert heat is not None
+        model.eaf_heat_start = Var(model.TIME, domain=Binary)
+
+        def _eaf_start_at(m, interval: int):
+            if interval >= 0:
+                return m.eaf_heat_start[interval]
+            if interval == -1:
+                return float(heat.initial_start_lag1)
+            if interval == -2:
+                return float(heat.initial_start_lag2)
+            return 0.0
+
+        model.eaf_melt = Expression(
+            model.TIME,
+            rule=lambda m, t: _eaf_start_at(m, int(t))
+            + _eaf_start_at(m, int(t) - 1),
+        )
+        model.eaf_tap = Expression(
+            model.TIME,
+            rule=lambda m, t: _eaf_start_at(m, int(t) - 2),
+        )
+        model.eaf_completed_heat = Expression(
+            model.TIME, rule=lambda m, t: m.eaf_tap[t]
+        )
+        model.eaf_on = Expression(
+            model.TIME, rule=lambda m, t: m.eaf_melt[t] + m.eaf_tap[t]
+        )
+        model.eaf_single_furnace_occupancy = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.eaf_melt[t] + m.eaf_tap[t] <= 1.0,
+        )
+        maintenance = {
+            int(interval)
+            for interval in heat.maintenance_intervals
+            if int(interval) < inputs.horizon_hours
+        }
+        for start_interval in model.TIME:
+            occupied = {
+                int(start_interval),
+                int(start_interval) + 1,
+                int(start_interval) + 2,
+            }
+            if occupied.intersection(maintenance):
+                model.eaf_heat_start[start_interval].fix(0.0)
+        for interval in maintenance:
+            setattr(
+                model,
+                f"eaf_maintenance_off_{interval}",
+                Constraint(expr=model.eaf_on[interval] == 0.0),
+            )
+        # A heat may cross the rolling execution boundary, but it may not
+        # disappear beyond the finite planning boundary.  Fix only starts that
+        # cannot reach their tap inside this model.
+        for interval in range(max(0, inputs.horizon_hours - 2), inputs.horizon_hours):
+            model.eaf_heat_start[interval].fix(0.0)
+        model.eaf_heat_count_started = Expression(
+            expr=sum(model.eaf_heat_start[t] for t in model.TIME)
+        )
+        model.eaf_heat_count_tapped = Expression(
+            expr=sum(model.eaf_tap[t] for t in model.TIME)
+        )
+        model.eaf_arc_on_interval_count = Expression(
+            expr=sum(model.eaf_melt[t] for t in model.TIME)
+        )
+        model.eaf_unfinished_heat_count_end = Expression(
+            expr=model.eaf_heat_start[inputs.horizon_hours - 2]
+            + model.eaf_heat_start[inputs.horizon_hours - 1]
+        )
+        if heat.require_idle_terminal_state:
+            model.eaf_terminal_idle = Constraint(
+                expr=model.eaf_unfinished_heat_count_end == 0.0
+            )
+        model.eaf_heat_state_active = True
+        model.eaf_heat_size_t_liquid_steel = heat.heat_size_t_liquid_steel
+        model.eaf_arc_energy_mwh_per_heat = heat.arc_energy_mwh_per_heat
+        model.eaf_arc_on_power_mw = heat.arc_on_power_mw
+        model.eaf_secondary_energy_mwh_per_heat = heat.secondary_energy_mwh_per_heat
+        model.eaf_quantization_allowance_t = heat.quantization_allowance_t
+    else:
+        model.eaf_dri_input = Var(model.TIME, domain=NonNegativeReals)
+        model.eaf_on = Var(model.TIME, domain=on_domain)
+        model.eaf_heat_state_active = False
     model.dri_inventory = Var(model.TIME, domain=NonNegativeReals)
     model.coke_inventory = Var(model.TIME, domain=NonNegativeReals)
     model.sinter_inventory = Var(model.TIME, domain=NonNegativeReals)
@@ -8100,6 +9090,39 @@ def _build_c1_hybrid_model(
         rule=lambda m, t: inputs.drp_yield_t_dri_per_t_pellets * m.drp_pellet_input[t],
     )
     if eaf_material_balance is None:
+        hdri_per_t_ls = 1.0 / inputs.eaf_yield_t_final_per_t_dri
+        scrap_per_t_ls = inputs.eaf_scrap_t_per_t_dri * hdri_per_t_ls
+    else:
+        hdri_per_t_ls = float(eaf_material_balance["hdri_t_per_t_liquid_steel"])
+        scrap_per_t_ls = float(eaf_material_balance["scrap_t_per_t_liquid_steel"])
+        scrap_supply_cap_t = float(eaf_material_balance.get("scrap_supply_cap_t", 0.0))
+        if hdri_per_t_ls <= 0.0 or scrap_per_t_ls < 0.0 or (scrap_supply_ledger is None and scrap_supply_cap_t < 0.0):
+            raise S44CModelBuilderError("C1 EAF material balance requires non-negative, non-zero HDRI basis values.")
+    if heat_state_active:
+        heat = eaf_heat_state_parameters
+        assert heat is not None
+        half_hdri_per_heat = (
+            hdri_per_t_ls * heat.heat_size_t_liquid_steel / heat.melting_qh_steps
+        )
+        half_scrap_per_heat = (
+            scrap_per_t_ls * heat.heat_size_t_liquid_steel / heat.melting_qh_steps
+        )
+        model.eaf_liquid_steel_output = Expression(
+            model.TIME,
+            rule=lambda m, t: heat.heat_size_t_liquid_steel * m.eaf_tap[t],
+        )
+        model.eaf_dri_input = Expression(
+            model.TIME,
+            rule=lambda m, t: half_hdri_per_heat * m.eaf_melt[t],
+        )
+        model.eaf_scrap_supply_t = Expression(
+            model.TIME,
+            rule=lambda m, t: half_scrap_per_heat * m.eaf_melt[t],
+        )
+        model.scrap_t = Expression(
+            model.TIME, rule=lambda m, t: m.eaf_scrap_supply_t[t]
+        )
+    elif eaf_material_balance is None:
         model.eaf_liquid_steel_output = Expression(
             model.TIME,
             rule=lambda m, t: inputs.eaf_yield_t_final_per_t_dri * m.eaf_dri_input[t],
@@ -8109,11 +9132,6 @@ def _build_c1_hybrid_model(
             rule=lambda m, t: inputs.eaf_scrap_t_per_t_dri * m.eaf_dri_input[t],
         )
     else:
-        hdri_per_t_ls = float(eaf_material_balance["hdri_t_per_t_liquid_steel"])
-        scrap_per_t_ls = float(eaf_material_balance["scrap_t_per_t_liquid_steel"])
-        scrap_supply_cap_t = float(eaf_material_balance.get("scrap_supply_cap_t", 0.0))
-        if hdri_per_t_ls <= 0.0 or scrap_per_t_ls < 0.0 or (scrap_supply_ledger is None and scrap_supply_cap_t < 0.0):
-            raise S44CModelBuilderError("C1 EAF material balance requires non-negative, non-zero HDRI basis values.")
         model.eaf_scrap_supply_t = Var(model.TIME, domain=NonNegativeReals)
         model.eaf_liquid_steel_output = Expression(
             model.TIME,
@@ -8283,15 +9301,35 @@ def _build_c1_hybrid_model(
             else inputs.drp_electricity_mwh_per_t_pellets * m.drp_pellet_input[t]
         ),
     )
-    model.eaf_arc_electricity_mwh = Expression(
-        model.TIME,
-        rule=lambda m, t: (
-            float(c1_energy_boundary["eaf_arc_electricity_mwh_per_t_liquid_steel"])
-            * m.eaf_liquid_steel_output[t]
-            if c1_energy_boundary is not None
-            else inputs.eaf_electricity_mwh_per_t_dri * m.eaf_dri_input[t]
-        ),
-    )
+    if heat_state_active:
+        heat = eaf_heat_state_parameters
+        assert heat is not None
+        if (
+            c1_energy_boundary is not None
+            and abs(
+                float(c1_energy_boundary["eaf_arc_electricity_mwh_per_t_liquid_steel"])
+                - heat.arc_electricity_mwh_per_t_liquid_steel
+            )
+            > 1e-9
+        ):
+            raise S44CModelBuilderError(
+                "EAF heat-state arc intensity differs from the frozen C1 energy boundary."
+            )
+        model.eaf_arc_electricity_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: heat.arc_energy_mwh_per_melting_interval
+            * m.eaf_melt[t],
+        )
+    else:
+        model.eaf_arc_electricity_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: (
+                float(c1_energy_boundary["eaf_arc_electricity_mwh_per_t_liquid_steel"])
+                * m.eaf_liquid_steel_output[t]
+                if c1_energy_boundary is not None
+                else inputs.eaf_electricity_mwh_per_t_dri * m.eaf_dri_input[t]
+            ),
+        )
     model.electricity_mwh = Expression(
         model.TIME,
         rule=lambda m, t: m.drp_electricity_mwh[t] + m.eaf_arc_electricity_mwh[t],
@@ -8308,6 +9346,26 @@ def _build_c1_hybrid_model(
             / 3600.0
         ),
     )
+    # HERACLES separates the existing 9.9-GJ/t DRI natural-gas total into
+    # reduction and furnace services.  These are reporting expressions only.
+    model.drp_reduction_ng_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: (8.1 / 3.6) * m.drp_dri_output[t]
+        if c1_energy_boundary is not None
+        else 0.0,
+    )
+    model.drp_furnace_ng_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: (1.8 / 3.6) * m.drp_dri_output[t]
+        if c1_energy_boundary is not None
+        else 0.0,
+    )
+    model.drp_heracless_ng_split_residual_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: m.drp_reduction_ng_mwh[t]
+        + m.drp_furnace_ng_mwh[t]
+        - m.drp_named_ng_mwh[t],
+    )
     model.natural_gas_nm3 = Expression(
         model.TIME,
         rule=lambda m, t: (
@@ -8318,15 +9376,31 @@ def _build_c1_hybrid_model(
             else inputs.drp_ng_nm3_per_t_pellets * m.drp_pellet_input[t]
         ),
     )
-    model.eaf_named_ng_mwh = Expression(
-        model.TIME,
-        rule=lambda m, t: (
-            float(c1_energy_boundary["eaf_ng_gj_per_t_liquid_steel"]) / 3.6
-            * m.eaf_liquid_steel_output[t]
+    if heat_state_active:
+        heat = eaf_heat_state_parameters
+        assert heat is not None
+        eaf_ng_mwh_per_melt = (
+            float(c1_energy_boundary["eaf_ng_gj_per_t_liquid_steel"])
+            / 3.6
+            * heat.heat_size_t_liquid_steel
+            / heat.melting_qh_steps
             if c1_energy_boundary is not None
             else 0.0
-        ),
-    )
+        )
+        model.eaf_named_ng_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: eaf_ng_mwh_per_melt * m.eaf_melt[t],
+        )
+    else:
+        model.eaf_named_ng_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: (
+                float(c1_energy_boundary["eaf_ng_gj_per_t_liquid_steel"]) / 3.6
+                * m.eaf_liquid_steel_output[t]
+                if c1_energy_boundary is not None
+                else 0.0
+            ),
+        )
     model.oxygen_t = Expression(
         model.TIME,
         rule=lambda m, t: inputs.drp_o2_t_per_t_pellets * m.drp_pellet_input[t]
@@ -8341,8 +9415,30 @@ def _build_c1_hybrid_model(
         model.TIME,
         rule=lambda m, t: m.drp_pellet_input[t] >= inputs.drp_min_t_pellets_h * m.drp_on[t],
     )
-    model.eaf_off_on_upper = Constraint(model.TIME, rule=lambda m, t: m.eaf_dri_input[t] <= inputs.eaf_max_t_dri_h * m.eaf_on[t])
-    model.eaf_off_on_lower = Constraint(model.TIME, rule=lambda m, t: m.eaf_dri_input[t] >= inputs.eaf_min_t_dri_h * m.eaf_on[t])
+    if not heat_state_active:
+        model.eaf_off_on_upper = Constraint(model.TIME, rule=lambda m, t: m.eaf_dri_input[t] <= inputs.eaf_max_t_dri_h * m.eaf_on[t])
+        model.eaf_off_on_lower = Constraint(model.TIME, rule=lambda m, t: m.eaf_dri_input[t] >= inputs.eaf_min_t_dri_h * m.eaf_on[t])
+
+    drp_time_points = list(range(inputs.horizon_hours))
+    model.drp_ramp_up = Constraint(
+        drp_time_points[1:],
+        rule=lambda m, t: m.drp_pellet_input[t] - m.drp_pellet_input[t - 1]
+        <= inputs.drp_ramp_t_pellets_h,
+    )
+    model.drp_ramp_down = Constraint(
+        drp_time_points[1:],
+        rule=lambda m, t: m.drp_pellet_input[t - 1] - m.drp_pellet_input[t]
+        <= inputs.drp_ramp_t_pellets_h,
+    )
+    if initial_drp_pellet_input_t is not None:
+        model.drp_initial_ramp_up = Constraint(
+            expr=model.drp_pellet_input[0] - float(initial_drp_pellet_input_t)
+            <= inputs.drp_ramp_t_pellets_h
+        )
+        model.drp_initial_ramp_down = Constraint(
+            expr=float(initial_drp_pellet_input_t) - model.drp_pellet_input[0]
+            <= inputs.drp_ramp_t_pellets_h
+        )
 
     model.dri_buffer_balance = Constraint(
         model.TIME,
@@ -8352,9 +9448,26 @@ def _build_c1_hybrid_model(
         - m.eaf_dri_input[t],
     )
     model.dri_buffer_capacity = Constraint(model.TIME, rule=lambda m, t: m.dri_inventory[t] <= inputs.dri_buffer_capacity_t)
-    model.dri_terminal_equality = Constraint(
-        expr=model.dri_inventory[inputs.horizon_hours - 1] == inputs.dri_buffer_initial_t
-    )
+    if heat_state_active:
+        # A continuously operating DRP necessarily produces DRI in the final
+        # quarter, while the last completable EAF heat is already tapping.
+        # Preserve the cyclic inventory at the last melting-capable boundary
+        # and expose the unavoidable final-quarter DRP production as explicit
+        # carry inventory.  Campaign terminal bands still replace this local
+        # look-ahead equality through the existing named constraint.
+        model.dri_terminal_equality = Constraint(
+            expr=model.dri_inventory[inputs.horizon_hours - 2]
+            == inputs.dri_buffer_initial_t
+        )
+        model.dri_terminal_carry_inventory_t = Expression(
+            expr=model.dri_inventory[inputs.horizon_hours - 1]
+            - inputs.dri_buffer_initial_t
+        )
+    else:
+        model.dri_terminal_equality = Constraint(
+            expr=model.dri_inventory[inputs.horizon_hours - 1]
+            == inputs.dri_buffer_initial_t
+        )
     if c1_coke_chain_reconciliation is None:
         model.coke_output = Expression(model.TIME, rule=lambda m, t: m.coking_plant_1[t])
         model.bf_coke_demand = Expression(
@@ -8497,18 +9610,25 @@ def _build_c1_hybrid_model(
         quota_lower_bound=rolling_production_deadline_targets_t is not None,
     )
     if commitment_granularity == "daily_binary_hourly_throughput":
+        commitment_definitions = {
+            **{
+                name: (name, f"{name}_on", retained.process_limits[name][0])
+                for name in retained_process_names
+            },
+            "drp": ("drp_pellet_input", "drp_on", inputs.drp_min_t_pellets_h),
+        }
+        if not heat_state_active:
+            commitment_definitions["eaf"] = (
+                "eaf_dri_input",
+                "eaf_on",
+                inputs.eaf_min_t_dri_h,
+            )
         _add_day_commitment_layer(
             model,
             horizon_hours=inputs.horizon_hours,
-            commitment_definitions={
-                **{
-                    name: (name, f"{name}_on", retained.process_limits[name][0])
-                    for name in retained_process_names
-                },
-                "drp": ("drp_pellet_input", "drp_on", inputs.drp_min_t_pellets_h),
-                "eaf": ("eaf_dri_input", "eaf_on", inputs.eaf_min_t_dri_h),
-            },
+            commitment_definitions=commitment_definitions,
             commitment_day_lengths=commitment_day_lengths,
+            time_step_hours=time_step_hours,
         )
     if daily_production_guardrail:
         _add_daily_production_guardrail(model, inputs)
@@ -8541,6 +9661,7 @@ def _build_c1_hybrid_model(
         _add_c0_minimal_wag_layer(
             model,
             retained,
+            time_step_hours=time_step_hours,
             enable_internal_wag_power=enable_internal_wag_power,
             # DRP/EAF electricity is the existing C1 route demand.  When the
             # opt-in HSM/PEFA development controllers are active, their
@@ -8563,8 +9684,12 @@ def _build_c1_hybrid_model(
             development_controller_profile_weights=development_controller_profile_weights,
             linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
             site_background_electricity_mwh_h=site_background_electricity_mwh_h,
+            site_baseload_ng_mwh_h=site_baseload_ng_mwh_h,
+            site_residual_steam_t_h=site_residual_steam_t_h,
+            site_residual_direct_co2_t_h=site_residual_direct_co2_t_h,
             hsm_carrier_precedence=hsm_carrier_precedence,
             hsm_eligible_carriers=hsm_eligible_carriers,
+            hsm_source_mix_policy=hsm_source_mix_policy,
             generator_interface_cap_mode=generator_interface_cap_mode,
             generator_unit_interface=generator_unit_interface,
             eaf_secondary_electricity_mwh_per_t_ls_override=eaf_secondary_electricity_mwh_per_t_ls_override,
@@ -8637,18 +9762,27 @@ def _build_c1_hybrid_model(
             model.TIME,
             rule=lambda m, t: pefa_ore_factor * m.pefa_pellet_output_t[t],
         )
+    commitment_tiebreak_names = (*retained_process_names, "drp") + (
+        () if heat_state_active else ("eaf",)
+    )
     day_commitment_tiebreaker = (
         1e-4
         * sum(
             getattr(model, f"{name}_day_on")[d]
-            for name in (*retained_process_names, "drp", "eaf")
+            for name in commitment_tiebreak_names
             for d in model.COMMITMENT_DAY
         )
         if commitment_granularity == "daily_binary_hourly_throughput"
         else 0.0
     )
+    eaf_commitment_term = (
+        sum(model.eaf_heat_start[t] for t in model.TIME)
+        if heat_state_active
+        else sum(model.eaf_on[t] for t in model.TIME)
+    )
     model.static_price_naive_objective = Objective(
-        expr=sum(model.eaf_on[t] + model.drp_on[t] for t in model.TIME)
+        expr=eaf_commitment_term
+        + sum(model.drp_on[t] for t in model.TIME)
         + sum(getattr(model, f"{name}_on")[t] for name in retained_process_names for t in model.TIME)
         + 1e-8
         * sum(
@@ -8670,6 +9804,7 @@ def _build_c1_hybrid_model(
 def _build_c1_model(
     inputs: C1ExecutableInputs,
     *,
+    time_step_hours: float = 1.0,
     enable_minimal_wag_layer: bool = False,
     enable_c1_retained_bf_bof_route: bool = False,
     enable_internal_wag_power: bool = False,
@@ -8691,8 +9826,12 @@ def _build_c1_model(
     c1_coke_chain_reconciliation: Mapping[str, float] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
     site_background_electricity_mwh_h: float = 0.0,
+    site_baseload_ng_mwh_h: float = 0.0,
+    site_residual_steam_t_h: float = 0.0,
+    site_residual_direct_co2_t_h: float = 0.0,
     hsm_carrier_precedence: Collection[str] | None = None,
     hsm_eligible_carriers: Collection[str] | None = None,
+    hsm_source_mix_policy: Mapping[str, Any] | None = None,
     generator_interface_cap_mode: str = "inherited_profile",
     generator_unit_interface: Mapping[str, Any] | None = None,
     c1_energy_boundary: Mapping[str, float] | None = None,
@@ -8700,10 +9839,13 @@ def _build_c1_model(
     dsp_electricity_mwh_per_t_coil_override: float | None = None,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
     bf_electricity_intensity_scale: float = 1.0,
+    eaf_heat_state_parameters: EAFHeatStateParameters | None = None,
+    initial_drp_pellet_input_t: float | None = None,
 ):
     if enable_c1_retained_bf_bof_route:
         return _build_c1_hybrid_model(
             inputs,
+            time_step_hours=time_step_hours,
             enable_minimal_wag_layer=enable_minimal_wag_layer,
             enable_internal_wag_power=enable_internal_wag_power,
             development_controller_activation=development_controller_activation,
@@ -8724,8 +9866,12 @@ def _build_c1_model(
             c1_coke_chain_reconciliation=c1_coke_chain_reconciliation,
             linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
             site_background_electricity_mwh_h=site_background_electricity_mwh_h,
+            site_baseload_ng_mwh_h=site_baseload_ng_mwh_h,
+            site_residual_steam_t_h=site_residual_steam_t_h,
+            site_residual_direct_co2_t_h=site_residual_direct_co2_t_h,
             hsm_carrier_precedence=hsm_carrier_precedence,
             hsm_eligible_carriers=hsm_eligible_carriers,
+            hsm_source_mix_policy=hsm_source_mix_policy,
             generator_interface_cap_mode=generator_interface_cap_mode,
             generator_unit_interface=generator_unit_interface,
             c1_energy_boundary=c1_energy_boundary,
@@ -8733,11 +9879,16 @@ def _build_c1_model(
             dsp_electricity_mwh_per_t_coil_override=dsp_electricity_mwh_per_t_coil_override,
             external_procurement_flow_coefficients=external_procurement_flow_coefficients,
             bf_electricity_intensity_scale=bf_electricity_intensity_scale,
+            eaf_heat_state_parameters=eaf_heat_state_parameters,
+            initial_drp_pellet_input_t=initial_drp_pellet_input_t,
         )
     if development_controller_activation != "none":
         raise S44CModelBuilderError("Development WAG controllers require the retained C1 BF-BOF route.")
     model = ConcreteModel()
     model.TIME = RangeSet(0, inputs.horizon_hours - 1)
+    model.time_step_hours = float(time_step_hours)
+    model.horizon_steps = int(inputs.horizon_hours)
+    model.physical_horizon_hours = float(inputs.horizon_hours) * time_step_hours
     model.drp_pellet_input = Var(model.TIME, domain=NonNegativeReals)
     model.eaf_dri_input = Var(model.TIME, domain=NonNegativeReals)
     model.eaf_on = Var(model.TIME, domain=Binary)
@@ -8967,12 +10118,16 @@ def _solve_c0_configuration(
     c0_downstream_reference_routing: Mapping[str, Any] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
     site_background_electricity_mwh_h: float = 0.0,
+    site_baseload_ng_mwh_h: float = 0.0,
+    site_residual_steam_t_h: float = 0.0,
+    site_residual_direct_co2_t_h: float = 0.0,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
     deterministic_cost_policy: Mapping[str, Any] | None = None,
     wag_generation_yield_overrides: Mapping[str, float] | None = None,
     bf_electricity_intensity_scale: float = 1.0,
     aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
-    full_site_energy_bridge: Mapping[str, float] | None = None,
+    full_site_energy_bridge: Mapping[str, Any] | None = None,
+    hsm_source_mix_policy: Mapping[str, Any] | None = None,
     electricity_sale_sensitivity: Mapping[str, Any] | None = None,
     allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
     normal_solution_capture: Mapping[str, Any] | None = None,
@@ -9004,10 +10159,14 @@ def _solve_c0_configuration(
         c0_downstream_reference_routing=c0_downstream_reference_routing,
         linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
         site_background_electricity_mwh_h=site_background_electricity_mwh_h,
+        site_baseload_ng_mwh_h=site_baseload_ng_mwh_h,
+        site_residual_steam_t_h=site_residual_steam_t_h,
+        site_residual_direct_co2_t_h=site_residual_direct_co2_t_h,
         external_procurement_flow_coefficients=external_procurement_flow_coefficients,
         bf_electricity_intensity_scale=bf_electricity_intensity_scale,
         aggregate_generator_technical_interface=aggregate_generator_technical_interface,
         full_site_energy_bridge=full_site_energy_bridge,
+        hsm_source_mix_policy=hsm_source_mix_policy,
         electricity_sale_sensitivity=electricity_sale_sensitivity,
     )
     if rolling_production_progress_target_t is not None:
@@ -9206,6 +10365,29 @@ def _solve_c0_configuration(
         "electricity_sale_sensitivity_active": cost_metadata[
             "electricity_sale_sensitivity_active"
         ],
+        "sale_breakthrough_mode": (
+            (cost_metadata.get("sale_breakthrough_test") or {}).get("mode", "")
+        ),
+        "sale_breakthrough_resource_caps_status": (
+            (cost_metadata.get("sale_breakthrough_test") or {}).get(
+                "resource_caps_status", ""
+            )
+        ),
+        "sale_breakthrough_actual_gross_grid_import_mwh": (
+            (cost_metadata.get("sale_breakthrough_test") or {})
+            .get("actual_metrics", {})
+            .get("gross_grid_import_mwh", "")
+        ),
+        "sale_breakthrough_actual_named_ng_mwh_lhv": (
+            (cost_metadata.get("sale_breakthrough_test") or {})
+            .get("actual_metrics", {})
+            .get("named_ng_mwh_lhv", "")
+        ),
+        "sale_breakthrough_actual_wag_generator_electricity_mwh": (
+            (cost_metadata.get("sale_breakthrough_test") or {})
+            .get("actual_metrics", {})
+            .get("wag_generator_electricity_mwh", "")
+        ),
         "grid_import_bound_audit_status": (
             model.grid_import_bound_audit["status"]
             if hasattr(model, "grid_import_bound_audit")
@@ -9332,6 +10514,18 @@ def _solve_c0_configuration(
         else 0.0,
         "natural_gas_nm3": 0.0,
         "natural_gas_boiler_mwh": round(sum(ng_boiler), 6),
+        "steam_15bar_explicit_demand_t": round(sum(float(value(model.steam_15bar_explicit_demand_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "residual_steam_15bar_demand_t": round(sum(float(value(model.residual_steam_15bar_demand_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "steam_15bar_total_demand_t": round(sum(float(value(model.steam_15bar_demand_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "steam_15bar_unserved_t": round(sum(float(value(model.steam_15bar_unserved_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
         "generator_named_ng_mwh": _costed_c0_ng_reporting_value(
             sum(float(value(model.generator_named_ng_mwh[t])) for t in model.TIME)
         )
@@ -9342,6 +10536,28 @@ def _solve_c0_configuration(
         )
         if enable_minimal_wag_layer
         else 0.0,
+        "full_site_fixed_ng_component_gross_mwh": _costed_c0_ng_reporting_value(
+            sum(
+                float(value(model.full_site_fixed_ng_component_gross_mwh[t]))
+                for t in model.TIME
+            )
+        )
+        if enable_minimal_wag_layer
+        else 0.0,
+        "hsm_ng_reclassified_from_fixed_bridge_mwh": _costed_c0_ng_reporting_value(
+            sum(
+                float(value(model.hsm_ng_reclassified_from_fixed_bridge_mwh[t]))
+                for t in model.TIME
+            )
+        )
+        if enable_minimal_wag_layer
+        else 0.0,
+        "hsm_source_mix_policy_active": str(
+            enable_minimal_wag_layer and model.hsm_source_mix_policy_active
+        ).lower(),
+        "hsm_ng_energy_share_target": (
+            model.hsm_ng_energy_share_target if enable_minimal_wag_layer else 0.0
+        ),
         "flexible_other_site_heat_ng_mwh": _costed_c0_ng_reporting_value(
             sum(float(value(model.flexible_other_site_heat_ng_mwh[t])) for t in model.TIME)
         )
@@ -9349,6 +10565,16 @@ def _solve_c0_configuration(
         else 0.0,
         "full_site_energy_bridge_named_ng_mwh": _costed_c0_ng_reporting_value(
             sum(float(value(model.full_site_energy_bridge_named_ng_mwh[t])) for t in model.TIME)
+        )
+        if enable_minimal_wag_layer
+        else 0.0,
+        "site_baseload_ng_mwh": _costed_c0_ng_reporting_value(
+            sum(float(value(model.site_baseload_ng_mwh[t])) for t in model.TIME)
+        )
+        if enable_minimal_wag_layer
+        else 0.0,
+        "total_named_ng_procurement_mwh": _costed_c0_ng_reporting_value(
+            sum(float(value(model.total_named_ng_procurement_mwh[t])) for t in model.TIME)
         )
         if enable_minimal_wag_layer
         else 0.0,
@@ -9372,6 +10598,15 @@ def _solve_c0_configuration(
         "WAG_used": round(sum(wag_used), 6),
         "WAG_flared": round(sum(wag_flared), 6),
         "WAG_explicit_combustion_co2_t": round(sum(float(value(model.wag_explicit_combustion_co2_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "explicit_NG_combustion_co2_t": round(sum(float(value(model.explicit_ng_combustion_co2_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "residual_unmodelled_direct_co2_t": round(sum(float(value(model.residual_unmodelled_direct_co2_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "total_direct_co2_reporting_t": round(sum(float(value(model.total_direct_co2_reporting_t[t])) for t in model.TIME), 6)
         if enable_minimal_wag_layer
         else 0.0,
         "development_controller_activation": development_controller_activation,
@@ -9415,6 +10650,8 @@ def _solve_c0_configuration(
                 for key in (
                     "allocation_envelope_active",
                     "allocation_envelope_endpoint",
+                    "allocation_envelope_breakthrough_mode",
+                    "allocation_envelope_cost_preservation_requirement",
                     "allocation_envelope_execution_hours",
                     "allocation_envelope_objective_value_mwh",
                     "allocation_envelope_endpoint_accuracy_schema",
@@ -9888,8 +11125,28 @@ def _solve_c0_configuration(
                 )
                 if enable_minimal_wag_layer
                 else "",
+                "full_site_fixed_ng_component_gross_mwh": _costed_c0_ng_reporting_value(
+                    float(value(model.full_site_fixed_ng_component_gross_mwh[t]))
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "hsm_ng_reclassified_from_fixed_bridge_mwh": _costed_c0_ng_reporting_value(
+                    float(value(model.hsm_ng_reclassified_from_fixed_bridge_mwh[t]))
+                )
+                if enable_minimal_wag_layer
+                else "",
                 "full_site_energy_bridge_named_ng_mwh": _costed_c0_ng_reporting_value(
                     float(value(model.full_site_energy_bridge_named_ng_mwh[t]))
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "site_baseload_ng_mwh": _costed_c0_ng_reporting_value(
+                    float(value(model.site_baseload_ng_mwh[t]))
+                )
+                if enable_minimal_wag_layer
+                else "",
+                "total_named_ng_procurement_mwh": _costed_c0_ng_reporting_value(
+                    float(value(model.total_named_ng_procurement_mwh[t]))
                 )
                 if enable_minimal_wag_layer
                 else "",
@@ -10038,10 +11295,31 @@ def _solve_c0_configuration(
                 "steam_15bar_demand_t": round(float(value(model.steam_15bar_demand_t[t])), 6)
                 if enable_minimal_wag_layer
                 else "",
+                "steam_15bar_explicit_demand_t": round(float(value(model.steam_15bar_explicit_demand_t[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "residual_steam_15bar_demand_t": round(float(value(model.residual_steam_15bar_demand_t[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
                 "steam_15bar_supply_t": round(float(value(model.steam_15bar_supply_t[t])), 6)
                 if enable_minimal_wag_layer
                 else "",
                 "steam_15bar_unserved_t": round(float(value(model.steam_15bar_unserved_t[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "WAG_boiler_steam_supply_t": round(float(value(model.wag_boiler_steam_supply_t[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "NG_boiler_steam_supply_t": round(float(value(model.ng_boiler_steam_supply_t[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "recovered_steam_supply_t": round(float(value(model.recovered_steam_supply_t[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "external_steam_supply_t": round(float(value(model.external_steam_supply_t[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "steam_15bar_spill_t": round(float(value(model.steam_15bar_spill_t[t])), 6)
                 if enable_minimal_wag_layer
                 else "",
                 "BFG_balance_residual_mwh": round(float(value(model.bfg_balance_residual[t])), 9)
@@ -10075,6 +11353,15 @@ def _solve_c0_configuration(
                 if enable_minimal_wag_layer
                 else "",
                 "WAG_explicit_combustion_co2_t": round(float(value(model.wag_explicit_combustion_co2_t[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "explicit_NG_combustion_co2_t": round(float(value(model.explicit_ng_combustion_co2_t[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "residual_unmodelled_direct_co2_t": round(float(value(model.residual_unmodelled_direct_co2_t[t])), 6)
+                if enable_minimal_wag_layer
+                else "",
+                "total_direct_co2_reporting_t": round(float(value(model.total_direct_co2_reporting_t[t])), 6)
                 if enable_minimal_wag_layer
                 else "",
                 "flaring_co2_diagnostic_cost_eur": round(float(value(model.flaring_co2_diagnostic_cost_eur[t])), 6)
@@ -10140,8 +11427,12 @@ def _solve_c1_configuration(
     generator_interface_cap_mode: str = "inherited_profile",
     generator_unit_interface: Mapping[str, Any] | None = None,
     c1_energy_boundary: Mapping[str, float] | None = None,
+    hsm_source_mix_policy: Mapping[str, Any] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
     site_background_electricity_mwh_h: float = 0.0,
+    site_baseload_ng_mwh_h: float = 0.0,
+    site_residual_steam_t_h: float = 0.0,
+    site_residual_direct_co2_t_h: float = 0.0,
     eaf_secondary_electricity_mwh_per_t_ls_override: float | None = None,
     dsp_electricity_mwh_per_t_coil_override: float | None = None,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
@@ -10189,8 +11480,12 @@ def _solve_c1_configuration(
         generator_interface_cap_mode=generator_interface_cap_mode,
         generator_unit_interface=generator_unit_interface,
         c1_energy_boundary=c1_energy_boundary,
+        hsm_source_mix_policy=hsm_source_mix_policy,
         linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
         site_background_electricity_mwh_h=site_background_electricity_mwh_h,
+        site_baseload_ng_mwh_h=site_baseload_ng_mwh_h,
+        site_residual_steam_t_h=site_residual_steam_t_h,
+        site_residual_direct_co2_t_h=site_residual_direct_co2_t_h,
         eaf_secondary_electricity_mwh_per_t_ls_override=eaf_secondary_electricity_mwh_per_t_ls_override,
         dsp_electricity_mwh_per_t_coil_override=dsp_electricity_mwh_per_t_coil_override,
         external_procurement_flow_coefficients=external_procurement_flow_coefficients,
@@ -10595,8 +11890,43 @@ def _solve_c1_configuration(
         else round(sum(float(value(model.electricity_mwh[t])) for t in model.TIME), 6),
         "natural_gas_nm3": round(sum(float(value(model.natural_gas_nm3[t])) for t in model.TIME), 6),
         "DRP_NG_mwh": round(sum(_model_value_or_zero(model, "drp_named_ng_mwh", t) for t in model.TIME), 6),
+        "DRP_reduction_NG_mwh": round(
+            sum(_model_value_or_zero(model, "drp_reduction_ng_mwh", t) for t in model.TIME), 6
+        ),
+        "DRP_furnace_NG_mwh": round(
+            sum(_model_value_or_zero(model, "drp_furnace_ng_mwh", t) for t in model.TIME), 6
+        ),
+        "DRP_HERACLES_NG_split_max_abs_residual_mwh": round(
+            max(
+                abs(_model_value_or_zero(model, "drp_heracless_ng_split_residual_mwh", t))
+                for t in model.TIME
+            ),
+            9,
+        ),
         "EAF_NG_mwh": round(sum(_model_value_or_zero(model, "eaf_named_ng_mwh", t) for t in model.TIME), 6),
+        "site_baseload_ng_mwh": round(
+            sum(float(value(model.site_baseload_ng_mwh[t])) for t in model.TIME), 6
+        )
+        if enable_minimal_wag_layer
+        else 0.0,
+        "total_named_ng_procurement_mwh": round(
+            sum(float(value(model.total_named_ng_procurement_mwh[t])) for t in model.TIME), 6
+        )
+        if enable_minimal_wag_layer
+        else 0.0,
         "natural_gas_boiler_mwh": round(sum(float(value(model.ng_to_boiler_mwh[t])) for t in model.TIME), 6),
+        "steam_15bar_explicit_demand_t": round(sum(float(value(model.steam_15bar_explicit_demand_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "residual_steam_15bar_demand_t": round(sum(float(value(model.residual_steam_15bar_demand_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "steam_15bar_total_demand_t": round(sum(float(value(model.steam_15bar_demand_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "steam_15bar_unserved_t": round(sum(float(value(model.steam_15bar_unserved_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
         "steam_mwh": round(sum(float(value(model.steam_production_mwh[t])) for t in model.TIME), 6),
         "oxygen_t": round(sum(float(value(model.oxygen_t[t])) for t in model.TIME), 6),
         "scrap_t": round(sum(float(value(model.scrap_t[t])) for t in model.TIME), 6),
@@ -10615,6 +11945,15 @@ def _solve_c1_configuration(
         "WAG_used": round(sum(float(value(model.wag_used[t])) for t in model.TIME), 6),
         "WAG_flared": round(sum(float(value(model.wag_flared[t])) for t in model.TIME), 6),
         "WAG_explicit_combustion_co2_t": round(sum(float(value(model.wag_explicit_combustion_co2_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "explicit_NG_combustion_co2_t": round(sum(float(value(model.explicit_ng_combustion_co2_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "residual_unmodelled_direct_co2_t": round(sum(float(value(model.residual_unmodelled_direct_co2_t[t])) for t in model.TIME), 6)
+        if enable_minimal_wag_layer
+        else 0.0,
+        "total_direct_co2_reporting_t": round(sum(float(value(model.total_direct_co2_reporting_t[t])) for t in model.TIME), 6)
         if enable_minimal_wag_layer
         else 0.0,
         "BFG_generated_mwh": round(sum(float(value(model.bfg_generated[t])) for t in model.TIME), 6),
@@ -11094,6 +12433,11 @@ def _solve_c1_configuration(
                 else round(float(value(model.electricity_mwh[t])), 6),
                 "natural_gas_nm3": round(float(value(model.natural_gas_nm3[t])), 6),
                 "DRP_named_NG_mwh": round(_model_value_or_zero(model, "drp_named_ng_mwh", t), 12),
+                "DRP_reduction_NG_mwh": round(_model_value_or_zero(model, "drp_reduction_ng_mwh", t), 12),
+                "DRP_furnace_NG_mwh": round(_model_value_or_zero(model, "drp_furnace_ng_mwh", t), 12),
+                "DRP_HERACLES_NG_split_residual_mwh": round(
+                    _model_value_or_zero(model, "drp_heracless_ng_split_residual_mwh", t), 12
+                ),
                 "EAF_named_NG_mwh": round(_model_value_or_zero(model, "eaf_named_ng_mwh", t), 12),
                 "natural_gas_boiler_mwh": round(float(value(model.ng_to_boiler_mwh[t])), 12),
                 "BFG_generated_mwh": round(float(value(model.bfg_generated[t])), 6),
@@ -11176,6 +12520,14 @@ def _solve_c1_configuration(
                 if enable_minimal_wag_layer
                 else 0.0,
                 "generator_named_ng_mwh": round(float(value(model.generator_named_ng_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "site_baseload_ng_mwh": round(float(value(model.site_baseload_ng_mwh[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "total_named_ng_procurement_mwh": round(
+                    float(value(model.total_named_ng_procurement_mwh[t])), 6
+                )
                 if enable_minimal_wag_layer
                 else 0.0,
                 "generator_total_fuel_mwh": round(float(value(model.generator_total_fuel_mwh[t])), 6)
@@ -11308,6 +12660,36 @@ def _solve_c1_configuration(
                 "WAG_used": round(float(value(model.wag_used[t])), 6),
                 "WAG_flared": round(float(value(model.wag_flared[t])), 6),
                 "steam": round(float(value(model.steam_production_mwh[t])), 6),
+                "steam_15bar_explicit_demand_t": round(float(value(model.steam_15bar_explicit_demand_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "residual_steam_15bar_demand_t": round(float(value(model.residual_steam_15bar_demand_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "steam_15bar_demand_t": round(float(value(model.steam_15bar_demand_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "steam_15bar_supply_t": round(float(value(model.steam_15bar_supply_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "WAG_boiler_steam_supply_t": round(float(value(model.wag_boiler_steam_supply_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "NG_boiler_steam_supply_t": round(float(value(model.ng_boiler_steam_supply_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "recovered_steam_supply_t": round(float(value(model.recovered_steam_supply_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "external_steam_supply_t": round(float(value(model.external_steam_supply_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "steam_15bar_spill_t": round(float(value(model.steam_15bar_spill_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "steam_15bar_unserved_t": round(float(value(model.steam_15bar_unserved_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
                 "BFG_balance_residual_mwh": round(float(value(model.bfg_balance_residual[t])), 9)
                 if enable_minimal_wag_layer
                 else 0.0,
@@ -11339,6 +12721,15 @@ def _solve_c1_configuration(
                 if enable_minimal_wag_layer
                 else 0.0,
                 "WAG_explicit_combustion_co2_t": round(float(value(model.wag_explicit_combustion_co2_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "explicit_NG_combustion_co2_t": round(float(value(model.explicit_ng_combustion_co2_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "residual_unmodelled_direct_co2_t": round(float(value(model.residual_unmodelled_direct_co2_t[t])), 6)
+                if enable_minimal_wag_layer
+                else 0.0,
+                "total_direct_co2_reporting_t": round(float(value(model.total_direct_co2_reporting_t[t])), 6)
                 if enable_minimal_wag_layer
                 else 0.0,
                 "flaring_co2_diagnostic_cost_eur": round(float(value(model.flaring_co2_diagnostic_cost_eur[t])), 6)
@@ -11441,6 +12832,7 @@ def run_s44c_unified_physical_regression(
     input_dir: str | Path = S44B_INPUT_DIR,
     run_id: str | None = None,
     write_report: bool = True,
+    report_dir: str | Path | None = None,
     horizon_hours_override: int | None = None,
     target_multiplier: float = 1.0,
     target_multiplier_by_configuration: Mapping[str, float] | None = None,
@@ -11503,6 +12895,9 @@ def run_s44c_unified_physical_regression(
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
     site_background_electricity_mwh_h: float = 0.0,
     site_background_electricity_mwh_h_by_configuration: Mapping[str, float] | None = None,
+    site_baseload_ng_mwh_h_by_configuration: Mapping[str, float] | None = None,
+    site_residual_steam_t_h_by_configuration: Mapping[str, float] | None = None,
+    site_residual_direct_co2_t_h_by_configuration: Mapping[str, float] | None = None,
     eaf_secondary_electricity_mwh_per_t_ls_override: float | None = None,
     dsp_electricity_mwh_per_t_coil_override: float | None = None,
     external_procurement_flow_coefficients: Mapping[str, float] | None = None,
@@ -11513,18 +12908,24 @@ def run_s44c_unified_physical_regression(
     | None = None,
     bf_electricity_intensity_scale_by_configuration: Mapping[str, float] | None = None,
     c0_aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
-    c0_full_site_energy_bridge: Mapping[str, float] | None = None,
+    c0_full_site_energy_bridge: Mapping[str, Any] | None = None,
+    hsm_source_mix_policy_by_configuration: Mapping[
+        str, Mapping[str, Any]
+    ]
+    | None = None,
     c0_electricity_sale_sensitivity: Mapping[str, Any] | None = None,
     c0_allocation_envelope_diagnostic: Mapping[str, Any] | None = None,
     normal_solution_capture_by_configuration: Mapping[
         str, Mapping[str, Any]
     ]
     | None = None,
+    performance_mode: str = "optimized_equivalent",
 ) -> dict[str, Any]:
     start = time.perf_counter()
     timestamp = now_utc()
     resolved_run_id = run_id or f"{MODE_ID}_{timestamp.strftime('%Y%m%d_%H%M%S')}"
     input_path = Path(input_dir)
+    performance_mode_value = validate_performance_mode(performance_mode)
     if site_background_electricity_mwh_h < 0.0:
         raise S44CModelBuilderError("Site background electricity must be non-negative.")
     background_overrides = dict(site_background_electricity_mwh_h_by_configuration or {})
@@ -11544,10 +12945,56 @@ def run_s44c_unified_physical_regression(
         raise S44CModelBuilderError(
             "Every configuration-specific site background electricity value must be non-negative."
         )
+    ng_baseload_overrides = dict(site_baseload_ng_mwh_h_by_configuration or {})
+    unknown_ng_baseload_configurations = set(ng_baseload_overrides).difference(CONFIGURATIONS)
+    if unknown_ng_baseload_configurations:
+        raise S44CModelBuilderError(
+            "Unknown site-baseload NG configuration(s): "
+            f"{sorted(unknown_ng_baseload_configurations)}."
+        )
+    resolved_site_baseload_ng_by_configuration = {
+        configuration: float(ng_baseload_overrides.get(configuration, 0.0))
+        for configuration in CONFIGURATIONS
+    }
+    if any(value < 0.0 for value in resolved_site_baseload_ng_by_configuration.values()):
+        raise S44CModelBuilderError(
+            "Every configuration-specific site baseload NG value must be non-negative."
+        )
+    residual_steam_overrides = dict(site_residual_steam_t_h_by_configuration or {})
+    residual_co2_overrides = dict(site_residual_direct_co2_t_h_by_configuration or {})
+    unknown_residual_configurations = (
+        set(residual_steam_overrides) | set(residual_co2_overrides)
+    ).difference(CONFIGURATIONS)
+    if unknown_residual_configurations:
+        raise S44CModelBuilderError(
+            "Unknown site-residual configuration(s): "
+            f"{sorted(unknown_residual_configurations)}."
+        )
+    resolved_site_residual_steam_by_configuration = {
+        configuration: float(residual_steam_overrides.get(configuration, 0.0))
+        for configuration in CONFIGURATIONS
+    }
+    resolved_site_residual_co2_by_configuration = {
+        configuration: float(residual_co2_overrides.get(configuration, 0.0))
+        for configuration in CONFIGURATIONS
+    }
+    if any(
+        value < 0.0
+        for value in (
+            *resolved_site_residual_steam_by_configuration.values(),
+            *resolved_site_residual_co2_by_configuration.values(),
+        )
+    ):
+        raise S44CModelBuilderError(
+            "Every configuration-specific residual steam/CO2 value must be non-negative."
+        )
     wag_yield_overrides = dict(wag_generation_yield_overrides_by_configuration or {})
     bf_electricity_scales = dict(bf_electricity_intensity_scale_by_configuration or {})
+    hsm_source_mix_policies = dict(hsm_source_mix_policy_by_configuration or {})
     unknown_overlay_configurations = (
-        set(wag_yield_overrides) | set(bf_electricity_scales)
+        set(wag_yield_overrides)
+        | set(bf_electricity_scales)
+        | set(hsm_source_mix_policies)
     ).difference(CONFIGURATIONS)
     if unknown_overlay_configurations:
         raise S44CModelBuilderError(
@@ -11562,12 +13009,58 @@ def run_s44c_unified_physical_regression(
         raise S44CModelBuilderError(
             "Every BF electricity-intensity scale must be positive."
         )
-    validation_result = validate_unified_dev_inputs(input_path)
-    write_validation_outputs(validation_result, input_path)
+    input_resolution_started = time.perf_counter()
+    input_fingerprint = _steel_input_fingerprint(input_path)
+    validation_cache_status = "disabled_legacy_rebuild"
+    if (
+        performance_mode_value == "optimized_equivalent"
+        and input_fingerprint in _STEEL_VALIDATION_CACHE
+    ):
+        validation_result = _STEEL_VALIDATION_CACHE[input_fingerprint]
+        validation_cache_status = "hit"
+    else:
+        validation_result = validate_unified_dev_inputs(input_path)
+        if performance_mode_value == "optimized_equivalent":
+            _STEEL_VALIDATION_CACHE[input_fingerprint] = validation_result
+            validation_cache_status = "miss_registered"
     if validation_result["failure_count"] != 0:
         raise S44CModelBuilderError("S4.4b input validation must pass before S4.4c model construction.")
 
-    tables = _load_tables(input_path)
+    tables, table_cache_status, _ = _load_tables_with_status(
+        input_path, performance_mode=performance_mode_value
+    )
+    input_resolution_seconds = time.perf_counter() - input_resolution_started
+    horizon_steps = _horizon_hours(tables, horizon_hours_override)
+    structural_signature = StructuralSignature(
+        model_type="steel_deterministic_rolling_physical",
+        granularity="hourly",
+        timestep_count=int(horizon_steps),
+        scenario_count=1,
+        bid_grid=(),
+        dst_shape=dst_shape_for_steps("hourly", int(horizon_steps)),
+        physical_config_hash=stable_hash(
+            {
+                "input_fingerprint": input_fingerprint,
+                "commitment_granularity": commitment_granularity,
+                "fix_c0_binary_schedule": fix_c0_binary_schedule,
+                "fix_c1_hybrid_schedule": fix_c1_hybrid_schedule,
+                "minimal_wag": enable_minimal_wag_layer,
+                "internal_wag_power": enable_internal_wag_power,
+                "retained_route": enable_c1_retained_bf_bof_route,
+            }
+        ),
+        quota_structure=stable_hash(
+            {
+                "deadline_hours": sorted((rolling_production_deadline_targets_t or {}).keys()),
+                "execution_block_hours": rolling_production_execution_block_hours,
+                "hard_exact": rolling_production_hard_exact_execution_target,
+            }
+        ),
+    )
+    template_cache_status, _ = _STEEL_STRUCTURAL_TEMPLATE_CACHE.register(
+        structural_signature,
+        {"horizon_steps": int(horizon_steps), "configuration_count": len(CONFIGURATIONS)},
+    )
     invalid_rows_used_count = _validate_forbidden_terms(tables)
     build_audits: list[dict[str, Any]] = []
     constraint_audits: list[dict[str, Any]] = []
@@ -11654,6 +13147,15 @@ def run_s44c_unified_physical_regression(
             site_background_electricity_mwh_h=resolved_site_background_by_configuration[
                 "C0_current_BF_BOF_reference"
             ],
+            site_baseload_ng_mwh_h=resolved_site_baseload_ng_by_configuration[
+                "C0_current_BF_BOF_reference"
+            ],
+            site_residual_steam_t_h=resolved_site_residual_steam_by_configuration[
+                "C0_current_BF_BOF_reference"
+            ],
+            site_residual_direct_co2_t_h=resolved_site_residual_co2_by_configuration[
+                "C0_current_BF_BOF_reference"
+            ],
             external_procurement_flow_coefficients=external_procurement_flow_coefficients,
             deterministic_cost_policy=deterministic_cost_policy,
             wag_generation_yield_overrides=wag_yield_overrides.get(
@@ -11664,6 +13166,9 @@ def run_s44c_unified_physical_regression(
             ],
             aggregate_generator_technical_interface=c0_aggregate_generator_technical_interface,
             full_site_energy_bridge=c0_full_site_energy_bridge,
+            hsm_source_mix_policy=hsm_source_mix_policies.get(
+                "C0_current_BF_BOF_reference"
+            ),
             electricity_sale_sensitivity=c0_electricity_sale_sensitivity,
             allocation_envelope_diagnostic=c0_allocation_envelope_diagnostic,
             normal_solution_capture=(
@@ -11783,8 +13288,20 @@ def run_s44c_unified_physical_regression(
         generator_interface_cap_mode=generator_interface_cap_mode,
         generator_unit_interface=generator_unit_interface,
         c1_energy_boundary=c1_energy_boundary,
+        hsm_source_mix_policy=hsm_source_mix_policies.get(
+            "C1_phase1_BF_BOF_plus_DRP_EAF"
+        ),
         linde_n2_auxiliary_electricity_mwh_h=linde_n2_auxiliary_electricity_mwh_h,
         site_background_electricity_mwh_h=resolved_site_background_by_configuration[
+            "C1_phase1_BF_BOF_plus_DRP_EAF"
+        ],
+        site_baseload_ng_mwh_h=resolved_site_baseload_ng_by_configuration[
+            "C1_phase1_BF_BOF_plus_DRP_EAF"
+        ],
+        site_residual_steam_t_h=resolved_site_residual_steam_by_configuration[
+            "C1_phase1_BF_BOF_plus_DRP_EAF"
+        ],
+        site_residual_direct_co2_t_h=resolved_site_residual_co2_by_configuration[
             "C1_phase1_BF_BOF_plus_DRP_EAF"
         ],
         eaf_secondary_electricity_mwh_per_t_ls_override=eaf_secondary_electricity_mwh_per_t_ls_override,
@@ -11817,6 +13334,23 @@ def run_s44c_unified_physical_regression(
     constraint_audits.extend(c1_constraints)
     hourly_rows.extend(c1_hourly)
 
+    for audit in build_audits:
+        audit.update(
+            {
+                "performance_mode": performance_mode_value,
+                "structural_signature": structural_signature.digest,
+                "model_reuse_status": (
+                    "static_input_and_structure_cache_hit_pyomo_rebuilt"
+                    if table_cache_status == "hit" and template_cache_status == "hit"
+                    else "static_input_or_structure_registered_pyomo_rebuilt"
+                ),
+                "cache_status": table_cache_status,
+                "warm_start_status": "safe_fallback_no_cross_replan_mapper",
+                "warm_start_values_applied": 0,
+                "pyomo_model_rebuilt": True,
+            }
+        )
+
     gate = _stage_gate(build_audits, invalid_rows_used_count)
     report = {
         "run_id": resolved_run_id,
@@ -11846,6 +13380,15 @@ def run_s44c_unified_physical_regression(
         "site_background_electricity_mwh_h": site_background_electricity_mwh_h,
         "site_background_electricity_mwh_h_by_configuration": dict(
             resolved_site_background_by_configuration
+        ),
+        "site_baseload_ng_mwh_h_by_configuration": dict(
+            resolved_site_baseload_ng_by_configuration
+        ),
+        "site_residual_steam_t_h_by_configuration": dict(
+            resolved_site_residual_steam_by_configuration
+        ),
+        "site_residual_direct_co2_t_h_by_configuration": dict(
+            resolved_site_residual_co2_by_configuration
         ),
         "wag_generation_yield_overrides_by_configuration": wag_yield_overrides,
         "bf_electricity_intensity_scale_by_configuration": resolved_bf_electricity_scales,
@@ -11932,6 +13475,23 @@ def run_s44c_unified_physical_regression(
         },
         "configuration_build_audit": build_audits,
         "constraint_audit": constraint_audits,
+        "performance": {
+            "schema_version": "optimisation_performance_v1",
+            "performance_mode": performance_mode_value,
+            "structural_signature": structural_signature.digest,
+            "model_reuse_status": (
+                "static_input_and_structure_cache_hit_pyomo_rebuilt"
+                if table_cache_status == "hit" and template_cache_status == "hit"
+                else "static_input_or_structure_registered_pyomo_rebuilt"
+            ),
+            "input_validation_cache_status": validation_cache_status,
+            "input_table_cache_status": table_cache_status,
+            "structural_template_cache_status": template_cache_status,
+            "warm_start_status": "safe_fallback_no_cross_replan_mapper",
+            "warm_start_values_applied": 0,
+            "pyomo_model_rebuilt": True,
+            "input_resolution_seconds": input_resolution_seconds,
+        },
         "blocker_rows_preserved": len(blocker_rows),
         "stage_gate": gate,
         "runtime_seconds": round(time.perf_counter() - start, 6),
@@ -11939,14 +13499,15 @@ def run_s44c_unified_physical_regression(
     }
 
     if write_report:
-        S44C_DIR.mkdir(parents=True, exist_ok=True)
-        write_json(DEFAULT_REPORT_JSON_PATH, report)
-        _write_csv(DEFAULT_REPORT_CSV_PATH, _report_rows(build_audits))
-        _write_csv(DEFAULT_BUILD_AUDIT_CSV_PATH, build_audits)
-        _write_csv(DEFAULT_CONSTRAINT_AUDIT_CSV_PATH, constraint_audits)
-        _write_csv(DEFAULT_HOURLY_CSV_PATH, hourly_rows)
-        write_json(DEFAULT_STAGE_GATE_JSON_PATH, gate)
-        _write_csv(DEFAULT_STAGE_GATE_CSV_PATH, [gate])
+        destination = S44C_DIR if report_dir is None else Path(report_dir).resolve()
+        destination.mkdir(parents=True, exist_ok=True)
+        write_json(destination / DEFAULT_REPORT_JSON_PATH.name, report)
+        _write_csv(destination / DEFAULT_REPORT_CSV_PATH.name, _report_rows(build_audits))
+        _write_csv(destination / DEFAULT_BUILD_AUDIT_CSV_PATH.name, build_audits)
+        _write_csv(destination / DEFAULT_CONSTRAINT_AUDIT_CSV_PATH.name, constraint_audits)
+        _write_csv(destination / DEFAULT_HOURLY_CSV_PATH.name, hourly_rows)
+        write_json(destination / DEFAULT_STAGE_GATE_JSON_PATH.name, gate)
+        _write_csv(destination / DEFAULT_STAGE_GATE_CSV_PATH.name, [gate])
 
     return {
         **report,
