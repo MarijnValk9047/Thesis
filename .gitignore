@@ -52,9 +52,13 @@ workspace_triage/
 
 # Hydrogen optimisation run artifacts
 scripts/Data/03_Hydrogen_Test_Case/runs/
+data/03_Hydrogen_Test_Case/performance_benchmarks/
 
 # Steel optimisation run artifacts (compact provenance may be promoted manually)
 data/03_Optimisation/runs/
+data/03_Optimisation/performance_benchmarks/
+data/03_Optimisation/steel_hourly_da_bid_clear_redispatch/
+data/03_Optimisation/steel_qh_da_bid_clear_redispatch/
 
 # Historical C5 stage scripts wrote reproducible diagnostic bundles below the
 # S4 input tree. Existing tracked inputs remain tracked; new stage bundles are
@@ -64,6 +68,7 @@ data/03_Optimisation/runs/
 # Documentation export bundles
 docs/optimisation/exports/
 docs/optimisation/*.zip
+docs/optimisation/steel/S4/methodology/exports/
 
 # Temporary debug folders and accidental local files
 tmp_phase07_debug/
