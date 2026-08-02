@@ -1,0 +1,55 @@
+run_id: steel_phase6c_qh_da_bid_clear_redispatch_a01_20260730
+mode: quarterhour_stochastic_DA_bid_clear_redispatch_engineering_validation
+output_policy: diagnostics
+run_class: diagnostic_validation
+lineage_role: thesis-candidate QH implementation validation and bounded common-period comparison, not long-run economic evaluation
+output_root: data/03_Optimisation/runs/steel_phase6c_qh_da_bid_clear_redispatch_a01_20260730
+comparison_root: data/03_Optimisation/steel_qh_da_bid_clear_redispatch/steel_phase6c_qh_da_bid_clear_redispatch_a01_20260730
+retention_status: local_ignored
+git_eligible: false
+
+phase6c:
+  physical_config: scripts/Data/04_Steel_Test_Case/configs/steel_hourly_da_dplus4_point_forecast_integration.yaml
+  phase4_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase4_terminal_inventory_equivalence.yaml
+  terminal_target_contract: data/03_Optimisation/runs/steel_c5_phase4_reachability_aware_terminal_band_v3_20260727/target_state_contract.json
+  terminal_target_source_period: validation_2024-02-12
+  terminal_inventory_horizon_policy: reuse_hourly_band_and_truncate_at_campaign_endpoint
+  phase5g_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5g_final_deterministic_freeze.yaml
+  phase5k_boundary_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5k_final_user_authorized_boundary_contract/final_boundary_contract.csv
+  phase5k_wag_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5k_final_user_authorized_boundary_contract/wag_carrier_source_audit.csv
+  phase5k_checkpoint: data/03_Optimisation/runs/steel_c5_phase5k_final_user_authorized_boundary_freeze_v1_20260729/checkpoint_decision.json
+  forecast_root: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03
+  model_id: qh-fs1__mean_shape__hourly_anchor__lear_strict
+  granularity: quarterhour
+  time_step_hours: 0.25
+  scenario_count: 10
+  cvar_gamma: 0.0
+  planning_horizon_hours: 120
+  execution_hours: 24
+  solver_time_limit_seconds: 900
+  mip_gap_limit: 0.001
+  rolling_week_start_date: '2026-04-27'
+  rolling_week_end_date: '2026-05-03'
+  actuals_use: clearing_settlement_and_isolated_pf_only
+  true_pf_objective_scope: executed_D_cost_within_full_D_Dplus4_feasibility_horizon
+  policies: [QH-point, QH-S10, price-insensitive, true-PF]
+  bid_grid_id: steel_phase6c_qh_da_bid_grid_v1
+  canonical_bid_tiebreak: minimum_total_volume_then_highest_willingness_price
+  bid_grid_eur_per_mwh:
+    [-500, -5, 25, 50, 55, 80, 90, 110, 130, 155, 159.420290, 175, 210, 245, 375, 3000]
+  hourly_reference_run_id: steel_phase6b_hourly_da_bid_clear_redispatch_a03_20260730
+  hourly_reference_run_root: data/03_Optimisation/runs/steel_phase6b_hourly_da_bid_clear_redispatch_a03_20260730
+  hourly_reference_summary: data/03_Optimisation/steel_hourly_da_bid_clear_redispatch/steel_phase6b_hourly_da_bid_clear_redispatch_a03_20260730/phase6b_fixture_summary.csv
+  hourly_terminal_inventory_band: data/03_Optimisation/runs/steel_phase6b_hourly_da_bid_clear_redispatch_a03_20260730/common_week_terminal_inventory_band.csv
+  checkpoint_policy: one_atomic_checkpoint_per_configuration_and_strategy
+  resume_fingerprint_fields:
+    [config, code, forecast, hourly_reference, terminal_band]
+  forbidden_scope:
+    cvar: true
+    mfrr: true
+    export: true
+    ets: true
+    product_revenue: true
+    emergency_import: true
+    imbalance_market: true
+    annualisation: true

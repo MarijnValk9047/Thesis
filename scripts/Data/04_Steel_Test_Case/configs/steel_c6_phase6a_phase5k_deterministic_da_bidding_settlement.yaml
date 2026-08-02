@@ -1,0 +1,49 @@
+run_id: steel_c6_phase6a_phase5k_deterministic_da_bidding_settlement_v2_20260729
+mode: deterministic_da_bid_settlement_gate_on_phase5k_boundary
+checkpoint_id: phase6a_phase5k_deterministic_da_bid_settlement
+lineage_role: canonical Phase-6A evidence on frozen Phase-5K boundary
+run_class: deterministic_da_settlement_gate_on_frozen_phase5k_boundary
+output_policy: minimal
+output_root: data/03_Optimisation/runs/steel_c6_phase6a_phase5k_deterministic_da_bidding_settlement_v2_20260729
+retention_status: local_ignored
+git_eligible: false
+
+phase6a_phase5k:
+  expected_parent_head: d565ff94a45328750ecee6c2e2818eaa6e6eb616
+  phase5k_checkpoint: data/03_Optimisation/runs/steel_c5_phase5k_final_user_authorized_boundary_freeze_v1_20260729/checkpoint_decision.json
+  phase5k_fingerprint_manifest: data/03_Optimisation/runs/steel_c5_phase5k_final_user_authorized_boundary_freeze_v1_20260729/fingerprint_manifest.json
+  phase5k_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5k_final_user_authorized_boundary_freeze.yaml
+  phase5g_config: scripts/Data/04_Steel_Test_Case/configs/steel_c5_phase5g_final_deterministic_freeze.yaml
+  boundary_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5k_final_user_authorized_boundary_contract/final_boundary_contract.csv
+  wag_audit_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5k_final_user_authorized_boundary_contract/wag_carrier_source_audit.csv
+  da_contract: data/03_Optimisation/inputs/assets/steel/S4/c6_phase6a_deterministic_da_contract/deterministic_da_bid_settlement_contract.csv
+  realised_price_gap_supplement: data/03_Optimisation/inputs/assets/steel/S4/c6_phase6a_deterministic_da_contract/phase5k_realised_price_gap_supplement.csv
+  held_out_contract: data/03_Optimisation/inputs/assets/steel/S4/c5_phase5k_final_user_authorized_boundary_contract/fresh_held_out_period_contract.csv
+  phase5k_case_cache: tmp/steel_c5_phase5k_final_user_authorized_boundary_freeze_v1_20260729_cases
+  scratch_root: tmp/steel_c6_phase6a_phase5k_deterministic_da_bidding_settlement_v2_20260729_cases
+  expected_period_count: 4
+  expected_point_models_reused: 56
+  expected_new_benchmark_models: 112
+  expected_evaluated_models: 168
+  flat_reference_price_eur_per_mwh: 80.0
+  physical_balance_tolerance_mwh: 0.0001
+  settlement_tolerance_eur: 0.0001
+  policy:
+    bid_information: forecast_origin_only
+    realised_price_use: settlement_and_isolated_oracle_only
+    purchase_bid_clearing: price_taking_full_acceptance
+    imbalance_representation: deterministic_zero
+    electricity_baseload_fixed: true
+    common_ng_site_service_fixed: true
+    residual_co2_reporting_only: true
+    residual_co2_in_cost_or_ets: false
+    export_allowed: false
+    stochastic_scenarios_allowed: false
+    cvar_allowed: false
+    mfrr_allowed: false
+    ets_allowed: false
+    product_revenue_allowed: false
+    physical_flexibility_changed: false
+  decision_on_pass: phase6a_phase5k_deterministic_da_bidding_and_settlement_validated
+  decision_on_fail: phase6a_phase5k_deterministic_da_gate_failed
+  next_gate_on_pass: phase6b_scenario_contract_design_authorized_execution_not_started
