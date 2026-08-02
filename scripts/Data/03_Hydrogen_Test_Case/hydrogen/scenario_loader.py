@@ -51,6 +51,42 @@ class ScenarioArtifactSpec:
     granularity: str | None
     validation_mode: str
     allow_forecast_origin_reconstruction: bool
+    actuals_path: Path | None = None
+    scenario_set_size: int | None = None
+
+
+def _read_table(path: Path) -> pd.DataFrame:
+    suffix = path.suffix.lower()
+    if suffix in {".parquet", ".pq"}:
+        return pd.read_parquet(path)
+    if suffix == ".csv" or path.name.lower().endswith(".csv.gz"):
+        return pd.read_csv(path)
+    raise ValueError(f"Unsupported scenario artifact format: {path}")
+
+
+def _attach_separate_actuals(frame: pd.DataFrame, *, actuals_path: Path, granularity: str | None) -> pd.DataFrame:
+    actuals = _read_table(actuals_path).copy()
+    rename = {}
+    if "target_timestamp_utc" in actuals.columns:
+        rename["target_timestamp_utc"] = "delivery_start_utc"
+    if "actual_price" in actuals.columns:
+        rename["actual_price"] = "actual_price_eur_per_mwh"
+    actuals = actuals.rename(columns=rename)
+    required = {"forecast_origin_utc", "delivery_start_utc", "lead_day", "actual_price_eur_per_mwh"}
+    missing = required.difference(actuals.columns)
+    if missing:
+        raise ValueError(f"Separate actuals artifact is missing columns: {sorted(missing)}")
+    actuals["forecast_origin_utc"] = pd.to_datetime(actuals["forecast_origin_utc"], utc=True, errors="raise")
+    actuals["delivery_start_utc"] = pd.to_datetime(actuals["delivery_start_utc"], utc=True, errors="raise")
+    if granularity is not None and "granularity" in actuals.columns:
+        actuals = actuals[actuals["granularity"].astype(str).str.lower() == str(granularity).lower()].copy()
+    keys = ["forecast_origin_utc", "delivery_start_utc", "lead_day"]
+    if "granularity" in frame.columns and "granularity" in actuals.columns:
+        keys.append("granularity")
+    actuals = actuals[keys + ["actual_price_eur_per_mwh"]].drop_duplicates(keys)
+    if actuals.duplicated(keys).any():
+        raise ValueError("Separate actuals artifact has duplicate origin/timestamp keys.")
+    return frame.merge(actuals, on=keys, how="left", validate="many_to_one")
 
 
 def _pick_column(frame: pd.DataFrame, candidates: tuple[str, ...]) -> pd.Series | None:
@@ -82,6 +118,13 @@ def _normalize_schema(
         normalized["scenario_generation_run_id"] = "unknown_scenario_run"
     if "dataset_split" in frame.columns:
         normalized["dataset_split"] = frame["dataset_split"].astype(str)
+    for optional_column in (
+        "scenario_set_size",
+        "parent_scenario_id",
+        "source_residual_block_id",
+    ):
+        if optional_column in frame.columns:
+            normalized[optional_column] = frame[optional_column]
 
     if "delivery_start_local" not in normalized.columns and "delivery_start_utc" in normalized.columns:
         delivery_utc = pd.to_datetime(normalized["delivery_start_utc"], utc=True, errors="coerce")
@@ -235,6 +278,9 @@ def resolve_artifact_specs(config: HydrogenConfig) -> list[ScenarioArtifactSpec]
                 "Use 'thesis_grade' or 'smoke_test'."
             )
         allow_reconstruction = bool(raw.get("allow_forecast_origin_reconstruction", False))
+        actuals_path = Path(str(raw["actuals_path"])) if raw.get("actuals_path") else None
+        if actuals_path is not None and not actuals_path.is_absolute():
+            actuals_path = (config.repo_root / actuals_path).resolve()
         specs.append(
             ScenarioArtifactSpec(
                 artifact_key=str(artifact_key),
@@ -244,6 +290,8 @@ def resolve_artifact_specs(config: HydrogenConfig) -> list[ScenarioArtifactSpec]
                 granularity=str(raw["granularity"]) if raw.get("granularity") is not None else None,
                 validation_mode=validation_mode,
                 allow_forecast_origin_reconstruction=allow_reconstruction,
+                actuals_path=actuals_path,
+                scenario_set_size=int(raw["scenario_set_size"]) if raw.get("scenario_set_size") is not None else None,
             )
         )
     return specs
@@ -261,7 +309,20 @@ def load_scenarios_for_artifact(
             f"'{spec.artifact_key}' ({spec.validation_mode}): {spec.path}. "
             "Update scenario_catalog.yaml to an existing artifact path before running optimisation."
         )
-    frame = frame_override.copy() if frame_override is not None else pd.read_csv(spec.path)
+    frame = frame_override.copy() if frame_override is not None else _read_table(spec.path)
+    if spec.scenario_set_size is not None and "scenario_set_size" in frame.columns:
+        frame = frame[pd.to_numeric(frame["scenario_set_size"], errors="coerce") == int(spec.scenario_set_size)].copy()
+    if "actual_price_eur_per_mwh" not in frame.columns and "actual_price" not in frame.columns and "y_true" not in frame.columns:
+        if spec.actuals_path is None:
+            raise ValueError(
+                f"Scenario artifact '{spec.artifact_key}' contains no actuals and has no separate actuals_path."
+            )
+        if not spec.actuals_path.exists():
+            raise FileNotFoundError(f"Separate actuals artifact not found: {spec.actuals_path}")
+        pre_normalized = frame.rename(columns={"target_timestamp_utc": "delivery_start_utc"}).copy()
+        pre_normalized["forecast_origin_utc"] = pd.to_datetime(pre_normalized["forecast_origin_utc"], utc=True, errors="raise")
+        pre_normalized["delivery_start_utc"] = pd.to_datetime(pre_normalized["delivery_start_utc"], utc=True, errors="raise")
+        frame = _attach_separate_actuals(pre_normalized, actuals_path=spec.actuals_path, granularity=spec.granularity)
     normalized, used_reconstruction = _normalize_schema(
         frame,
         fallback_model_id=spec.model_id,

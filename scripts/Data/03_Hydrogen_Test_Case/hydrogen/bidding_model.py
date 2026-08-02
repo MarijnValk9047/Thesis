@@ -1,12 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from scripts.optimisation_performance import (
+    StructuralSignature,
+    StructuralTemplateCache,
+    dst_shape_for_steps,
+    stable_hash,
+    validate_performance_mode,
+)
 
 from .bidding import build_bid_curve_dataframe, validate_bid_price_grid
 from .bidding_metrics import (
@@ -28,6 +36,7 @@ from .optimisation_model import (
     pyo,
 )
 from .plant_parameters import HydrogenConfig, load_hydrogen_config
+from .production_target import WeeklyQuotaDeadlinePlan
 from .plots import (
     plot_scenario_cleared_used_unused_energy,
     plot_scenario_clearing_heatmap,
@@ -67,6 +76,21 @@ class StochasticBiddingSolveResult:
     cvar_loss_eur: float | None
     cvar_details: pd.DataFrame
     reserve_diagnostics: dict[str, Any]
+    performance: dict[str, Any] | None = None
+    warm_start_snapshot: "HydrogenWarmStartSnapshot | None" = None
+
+
+@dataclass(frozen=True)
+class HydrogenWarmStartSnapshot:
+    """Previous solve values; scenario states are guarded by source identity."""
+
+    q_by_timestamp_block: dict[tuple[str, int], float]
+    scenario_values: dict[tuple[str, str, str, str], float]
+    scenario_source_blocks: dict[str, str]
+    structural_signature: str
+
+
+_STRUCTURAL_TEMPLATE_CACHE = StructuralTemplateCache()
 
 
 @dataclass(frozen=True)
@@ -543,12 +567,19 @@ def _scenario_dispatch_from_pyomo(
     forecast_origin_utc: pd.Timestamp,
     timestep_hours: float,
     daily_target_kg: float,
+    extraction_time_indices: list[int] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     dispatch_rows: list[dict[str, Any]] = []
     clearing_rows: list[dict[str, Any]] = []
+    selected_indices = list(range(len(timestamps))) if extraction_time_indices is None else list(extraction_time_indices)
     for scenario_id in scenario_ids:
-        scenario_total_hydrogen = 0.0
-        for t, timestamp in enumerate(timestamps):
+        scenario_total_hydrogen = sum(
+            float(pyo.value(model.H_comp[scenario_id, t]) or 0.0)
+            for t in range(len(timestamps))
+        )
+        scenario_row_start = len(dispatch_rows)
+        for t in selected_indices:
+            timestamp = timestamps[t]
             cleared_energy = float(
                 timestep_hours
                 * sum(
@@ -564,7 +595,6 @@ def _scenario_dispatch_from_pyomo(
                 else 0.0
             )
             hydrogen_sold = float(pyo.value(model.H_comp[scenario_id, t]) or 0.0)
-            scenario_total_hydrogen += hydrogen_sold
             dispatch_rows.append(
                 {
                     "run_id": run_id,
@@ -616,9 +646,86 @@ def _scenario_dispatch_from_pyomo(
                     }
                 )
         above_target = max(scenario_total_hydrogen - daily_target_kg, 0.0)
-        for row in dispatch_rows[-len(timestamps):]:
+        for row in dispatch_rows[scenario_row_start:]:
             row["hydrogen_above_target_kg"] = above_target
     return pd.DataFrame(dispatch_rows), pd.DataFrame(clearing_rows)
+
+
+def _build_scenario_economics_from_pyomo(
+    model: Any,
+    *,
+    scenario_ids: list[str],
+    probabilities: dict[str, float],
+    total_probability: float,
+    price_lookup: dict[tuple[str, int], float],
+    acceptance_lookup: dict[tuple[str, int, int], int],
+    q_matrix: np.ndarray,
+    block_ids: list[int],
+    timestep_hours: float,
+    config: HydrogenConfig,
+    daily_target_kg: float,
+    shortfall_penalty_eur_per_kg: float,
+    emergency_import_price_eur_per_mwh: float | None,
+) -> pd.DataFrame:
+    """Compute full-horizon ledgers without constructing future-path frames."""
+    rows: list[dict[str, Any]] = []
+    horizon_steps = q_matrix.shape[0]
+    for scenario_id in scenario_ids:
+        cleared_by_t = np.asarray(
+            [
+                timestep_hours
+                * sum(acceptance_lookup[(scenario_id, t, b)] * q_matrix[t, b] for b in block_ids)
+                for t in range(horizon_steps)
+            ],
+            dtype=float,
+        )
+        prices = np.asarray([price_lookup[(scenario_id, t)] for t in range(horizon_steps)], dtype=float)
+        used = sum(float(pyo.value(model.used_energy[scenario_id, t]) or 0.0) for t in range(horizon_steps))
+        unused = sum(
+            float(pyo.value(model.unused_cleared_energy[scenario_id, t]) or 0.0)
+            for t in range(horizon_steps)
+        )
+        emergency = (
+            sum(float(pyo.value(model.emergency_import[scenario_id, t]) or 0.0) for t in range(horizon_steps))
+            if hasattr(model, "emergency_import") else 0.0
+        )
+        hydrogen_sold = sum(float(pyo.value(model.H_comp[scenario_id, t]) or 0.0) for t in range(horizon_steps))
+        hydrogen_produced = sum(float(pyo.value(model.H_prod[scenario_id, t]) or 0.0) for t in range(horizon_steps))
+        shortfall = float(pyo.value(model.shortfall[scenario_id]) or 0.0)
+        settlement = float(np.dot(prices, cleared_by_t))
+        revenue = float(config.economics.h2_sale_price_eur_per_kg * hydrogen_sold)
+        unused_penalty = float(config.economics.unused_energy_penalty_eur_per_mwh * unused)
+        emergency_cost = float((emergency_import_price_eur_per_mwh or 0.0) * emergency)
+        shortfall_penalty = float(shortfall_penalty_eur_per_kg * shortfall)
+        terminal_correction = float(
+            config.terminal_inventory_value_per_kg
+            * (
+                float(pyo.value(model.H_buf[scenario_id, horizon_steps - 1]) or 0.0)
+                - float(config.hydrogen_system.storage_initial_kg)
+            )
+        )
+        adjusted_profit = revenue - settlement - unused_penalty - emergency_cost - shortfall_penalty + terminal_correction
+        probability = float(probabilities[scenario_id])
+        cleared_total = float(cleared_by_t.sum())
+        rows.append(
+            {
+                "scenario_id": str(scenario_id), "scenario_probability": probability,
+                "probability_sum_check": total_probability, "settlement_cost_eur": settlement,
+                "hydrogen_revenue_eur": revenue, "unused_energy_penalty_eur": unused_penalty,
+                "emergency_import_mwh": emergency, "emergency_import_cost_eur": emergency_cost,
+                "shortfall_penalty_eur": shortfall_penalty,
+                "terminal_inventory_correction_eur": terminal_correction,
+                "adjusted_profit_eur": adjusted_profit,
+                "expected_adjusted_profit_contribution_eur": probability * adjusted_profit,
+                "cleared_energy_mwh": cleared_total, "used_energy_mwh": used,
+                "unused_cleared_energy_mwh": unused, "hydrogen_sold_kg": hydrogen_sold,
+                "hydrogen_produced_kg": hydrogen_produced,
+                "hydrogen_above_target_kg": max(hydrogen_sold - daily_target_kg, 0.0),
+                "shortfall_kg": shortfall,
+                "average_price_paid_eur_per_mwh": settlement / cleared_total if cleared_total > 0.0 else np.nan,
+            }
+        )
+    return pd.DataFrame(rows).sort_values("scenario_id").reset_index(drop=True)
 
 
 def _scenario_dispatch_from_pulp(
@@ -940,6 +1047,127 @@ def _build_summary(
     return pd.DataFrame([summary_row])
 
 
+def _scenario_source_block_map(scenarios: pd.DataFrame, scenario_ids: list[str]) -> dict[str, str]:
+    if "source_residual_block_id" not in scenarios.columns:
+        return {}
+    mapping: dict[str, str] = {}
+    for scenario_id in scenario_ids:
+        values = scenarios.loc[
+            scenarios["scenario_id"].astype(str).eq(str(scenario_id)), "source_residual_block_id"
+        ].dropna().astype(str).unique()
+        if len(values) == 1:
+            mapping[str(scenario_id)] = str(values[0])
+    return mapping
+
+
+def _hydrogen_structural_signature(
+    *,
+    config: HydrogenConfig,
+    granularity: str,
+    horizon: str,
+    timestep_count: int,
+    scenario_count: int,
+    bid_grid: list[float],
+    quota_structure: str,
+) -> StructuralSignature:
+    return StructuralSignature(
+        model_type=f"hydrogen_stochastic_da_{horizon}",
+        granularity=str(granularity),
+        timestep_count=int(timestep_count),
+        scenario_count=int(scenario_count),
+        bid_grid=tuple(float(value) for value in bid_grid),
+        dst_shape=dst_shape_for_steps(str(granularity), int(timestep_count)),
+        physical_config_hash=stable_hash(
+            {
+                "hydrogen_system": asdict(config.hydrogen_system),
+                "economics": asdict(config.economics),
+                "production": asdict(config.production),
+            }
+        ),
+        quota_structure=str(quota_structure),
+    )
+
+
+def _apply_hydrogen_warm_start(
+    model: Any,
+    *,
+    snapshot: HydrogenWarmStartSnapshot | None,
+    timestamps: pd.DatetimeIndex,
+    scenario_ids: list[str],
+    source_blocks: dict[str, str],
+    structural_signature: str,
+) -> tuple[str, int]:
+    if snapshot is None:
+        return "not_available", 0
+    if snapshot.structural_signature != structural_signature:
+        return "rejected_structural_signature", 0
+    applied = 0
+    timestamp_keys = [pd.Timestamp(value).isoformat() for value in timestamps]
+    for t, timestamp_key in enumerate(timestamp_keys):
+        for b in model.B:
+            value_in = snapshot.q_by_timestamp_block.get((timestamp_key, int(b)))
+            if value_in is not None:
+                model.q[t, b].value = float(value_in)
+                applied += 1
+    variable_names = (
+        "P_el", "u_el", "H_prod", "P_comp", "H_comp", "H_buf",
+        "used_energy", "unused_cleared_energy", "emergency_import",
+    )
+    for scenario_id in scenario_ids:
+        block_id = source_blocks.get(str(scenario_id))
+        if block_id is None or snapshot.scenario_source_blocks.get(str(scenario_id)) != block_id:
+            continue
+        for t, timestamp_key in enumerate(timestamp_keys):
+            for variable_name in variable_names:
+                component = getattr(model, variable_name, None)
+                if component is None:
+                    continue
+                value_in = snapshot.scenario_values.get(
+                    (variable_name, str(scenario_id), str(block_id), timestamp_key)
+                )
+                if value_in is not None:
+                    component[scenario_id, t].value = float(value_in)
+                    applied += 1
+    return ("applied" if applied else "rejected_no_safe_overlap"), applied
+
+
+def _capture_hydrogen_warm_start(
+    model: Any,
+    *,
+    timestamps: pd.DatetimeIndex,
+    scenario_ids: list[str],
+    source_blocks: dict[str, str],
+    structural_signature: str,
+) -> HydrogenWarmStartSnapshot:
+    timestamp_keys = [pd.Timestamp(value).isoformat() for value in timestamps]
+    q_values = {
+        (timestamp_keys[int(t)], int(b)): float(pyo.value(model.q[t, b]) or 0.0)
+        for t in model.T for b in model.B
+    }
+    scenario_values: dict[tuple[str, str, str, str], float] = {}
+    for scenario_id in scenario_ids:
+        block_id = source_blocks.get(str(scenario_id))
+        if block_id is None:
+            continue
+        for variable_name in (
+            "P_el", "u_el", "H_prod", "P_comp", "H_comp", "H_buf",
+            "used_energy", "unused_cleared_energy", "emergency_import",
+        ):
+            component = getattr(model, variable_name, None)
+            if component is None:
+                continue
+            for t, timestamp_key in enumerate(timestamp_keys):
+                scenario_values[(variable_name, str(scenario_id), str(block_id), timestamp_key)] = float(
+                    pyo.value(component[scenario_id, t]) or 0.0
+                )
+    return HydrogenWarmStartSnapshot(
+        q_by_timestamp_block=q_values,
+        scenario_values=scenario_values,
+        scenario_source_blocks=dict(source_blocks),
+        structural_signature=str(structural_signature),
+    )
+
+
 def _solve_with_pyomo(
     *,
     scenarios: pd.DataFrame,
@@ -962,6 +1190,14 @@ def _solve_with_pyomo(
     firm_bid_floor_mw: list[float] | tuple[float, ...] | np.ndarray | None,
     emergency_import_price_eur_per_mwh: float | None,
     reserve_obligations_by_hour: pd.DataFrame | None,
+    previous_electrolyser_power_mw: float | None,
+    weekly_quota_plan: WeeklyQuotaDeadlinePlan | None,
+    performance_mode: str,
+    granularity: str,
+    horizon: str,
+    warm_start_snapshot: HydrogenWarmStartSnapshot | None,
+    output_extraction_mode: str,
+    executed_timestamps_utc: pd.DatetimeIndex | None,
 ) -> StochasticBiddingSolveResult:
     if pyo is None:
         raise RuntimeError("Pyomo backend requested but Pyomo is not installed.")
@@ -977,6 +1213,34 @@ def _solve_with_pyomo(
         scenarios,
         bid_price_grid_eur_per_mwh,
     )
+    source_blocks = _scenario_source_block_map(scenarios, scenario_ids)
+    quota_structure = "none" if weekly_quota_plan is None else stable_hash(
+        [
+            {"indices": list(item.horizon_time_indices), "week_id": item.week_id}
+            for item in weekly_quota_plan.constraints
+        ]
+    )
+    structural_signature = _hydrogen_structural_signature(
+        config=config,
+        granularity=granularity,
+        horizon=horizon,
+        timestep_count=len(timestamps),
+        scenario_count=len(scenario_ids),
+        bid_grid=bid_price_grid_eur_per_mwh,
+        quota_structure=quota_structure,
+    )
+    performance_mode_value = validate_performance_mode(performance_mode)
+    if performance_mode_value == "optimized_equivalent":
+        cache_status, _ = _STRUCTURAL_TEMPLATE_CACHE.register(
+            structural_signature,
+            {
+                "timestep_count": len(timestamps),
+                "scenario_count": len(scenario_ids),
+                "bid_ladder_steps": len(block_ids),
+            },
+        )
+    else:
+        cache_status = "disabled_legacy_rebuild"
     total_probability = validate_toy_scenario_probabilities(scenarios)
     forecast_origin = pd.Timestamp(pd.to_datetime(scenarios["forecast_origin_utc"].iloc[0], utc=True, errors="raise"))
     scenario_model = str(scenarios["model_id"].dropna().iloc[0]) if "model_id" in scenarios.columns and not scenarios["model_id"].dropna().empty else "toy_artificial_phase4a"
@@ -1066,6 +1330,16 @@ def _solve_with_pyomo(
                     model.H_buf[scenario_id, t]
                     == inventory_start_kg_value + model.H_prod[scenario_id, t] - model.H_comp[scenario_id, t]
                 )
+                if previous_electrolyser_power_mw is not None:
+                    previous_power = float(previous_electrolyser_power_mw)
+                    model.constraints.add(
+                        model.P_el[scenario_id, t] - previous_power
+                        <= config.hydrogen_system.electrolyser_ramp_mw_per_h * timestep_hours
+                    )
+                    model.constraints.add(
+                        previous_power - model.P_el[scenario_id, t]
+                        <= config.hydrogen_system.electrolyser_ramp_mw_per_h * timestep_hours
+                    )
             else:
                 model.constraints.add(
                     model.H_buf[scenario_id, t]
@@ -1090,6 +1364,12 @@ def _solve_with_pyomo(
                     model.constraints.add(model.available_down_reserve_mw[scenario_id, t] >= required_down)
 
     for scenario_id in scenario_ids:
+        if weekly_quota_plan is not None:
+            for quota_constraint in weekly_quota_plan.constraints:
+                model.constraints.add(
+                    sum(model.H_comp[scenario_id, t] for t in quota_constraint.horizon_time_indices)
+                    >= float(quota_constraint.minimum_horizon_compression_kg)
+                )
         if str(production_target_mode).strip() in {"hard_daily_target", "weekly_hard_band_target"}:
             model.constraints.add(
                 sum(model.H_comp[scenario_id, t] for t in range(len(timestamps)))
@@ -1142,15 +1422,40 @@ def _solve_with_pyomo(
     else:
         model.objective = pyo.Objective(expr=expected_profit_expr - bid_regularisation, sense=pyo.maximize)
 
+    warm_start_status = "disabled_legacy_rebuild"
+    warm_start_values_applied = 0
+    if performance_mode_value == "optimized_equivalent":
+        warm_start_status, warm_start_values_applied = _apply_hydrogen_warm_start(
+            model,
+            snapshot=warm_start_snapshot,
+            timestamps=timestamps,
+            scenario_ids=scenario_ids,
+            source_blocks=source_blocks,
+            structural_signature=structural_signature.digest,
+        )
     model_build_time = perf_counter() - build_started
     solver, solver_name = _resolve_pyomo_solver(config.solver, solver_log_path)
     started = perf_counter()
     try:
+        solve_kwargs: dict[str, Any] = {"tee": False}
         if solver_log_path is not None:
-            results = solver.solve(model, tee=False, logfile=solver_log_path)
-        else:
-            results = solver.solve(model, tee=False)
-    except TypeError:
+            solve_kwargs["logfile"] = solver_log_path
+        if warm_start_values_applied:
+            solve_kwargs["warmstart"] = True
+        try:
+            results = solver.solve(model, **solve_kwargs)
+        except (TypeError, ValueError):
+            solve_kwargs.pop("warmstart", None)
+            solve_kwargs.pop("logfile", None)
+            if warm_start_values_applied:
+                warm_start_status = "values_loaded_solver_keyword_fallback"
+            results = solver.solve(model, **solve_kwargs)
+    except Exception:
+        if not warm_start_values_applied:
+            raise
+        warm_start_status = "solver_rejected_fallback_cold"
+        for variable in model.component_data_objects(pyo.Var, active=True):
+            variable.value = None
         results = solver.solve(model, tee=False)
     solver_runtime = perf_counter() - started
 
@@ -1171,6 +1476,17 @@ def _solve_with_pyomo(
         q_solution=q_matrix,
         timestep_hours=timestep_hours,
     )
+    lazy_extraction = str(output_extraction_mode).strip().lower() == "executed_day_only"
+    extraction_time_indices: list[int] | None = None
+    if lazy_extraction:
+        if executed_timestamps_utc is None:
+            raise ValueError("executed_timestamps_utc is required for executed_day_only extraction.")
+        requested = set(pd.DatetimeIndex(executed_timestamps_utc))
+        extraction_time_indices = [
+            index for index, timestamp in enumerate(timestamps) if pd.Timestamp(timestamp) in requested
+        ]
+        if not extraction_time_indices:
+            raise ValueError("executed_day_only extraction selected no horizon timestamps.")
     scenario_dispatch, scenario_clearing = _scenario_dispatch_from_pyomo(
         model,
         strategy=strategy_name,
@@ -1186,14 +1502,32 @@ def _solve_with_pyomo(
         forecast_origin_utc=forecast_origin,
         timestep_hours=timestep_hours,
         daily_target_kg=target_hydrogen_min_kg_value,
+        extraction_time_indices=extraction_time_indices,
     )
-    raw_scenario_economics = _build_scenario_economics(
-        scenario_dispatch=scenario_dispatch,
-        config=config,
-        total_probability=total_probability,
-        shortfall_penalty_eur_per_kg=effective_shortfall_penalty,
-        emergency_import_price_eur_per_mwh=emergency_import_price_value,
-    )
+    if lazy_extraction:
+        raw_scenario_economics = _build_scenario_economics_from_pyomo(
+            model,
+            scenario_ids=scenario_ids,
+            probabilities=probabilities,
+            total_probability=total_probability,
+            price_lookup=price_lookup,
+            acceptance_lookup=acceptance_lookup,
+            q_matrix=q_matrix,
+            block_ids=block_ids,
+            timestep_hours=timestep_hours,
+            config=config,
+            daily_target_kg=target_hydrogen_min_kg_value,
+            shortfall_penalty_eur_per_kg=effective_shortfall_penalty,
+            emergency_import_price_eur_per_mwh=emergency_import_price_value,
+        )
+    else:
+        raw_scenario_economics = _build_scenario_economics(
+            scenario_dispatch=scenario_dispatch,
+            config=config,
+            total_probability=total_probability,
+            shortfall_penalty_eur_per_kg=effective_shortfall_penalty,
+            emergency_import_price_eur_per_mwh=emergency_import_price_value,
+        )
     xi_lookup = None
     zeta_value = None
     if str(risk_measure) == "cvar" and float(cvar_gamma) > 0.0:
@@ -1241,11 +1575,22 @@ def _solve_with_pyomo(
         cvar_gamma=float(cvar_gamma),
         cvar_result=cvar_result,
     )
-    acceptance_table = build_scenario_acceptance_table(scenarios, bid_price_grid_eur_per_mwh)
+    acceptance_table = (
+        pd.DataFrame()
+        if lazy_extraction
+        else build_scenario_acceptance_table(scenarios, bid_price_grid_eur_per_mwh)
+    )
     reserve_diagnostics = _build_reserve_diagnostics(
         prepared_reserve,
         scenario_dispatch=scenario_dispatch,
         site_max_load_mw=site_max_load_mw,
+    )
+    next_warm_start = _capture_hydrogen_warm_start(
+        model,
+        timestamps=timestamps,
+        scenario_ids=scenario_ids,
+        source_blocks=source_blocks,
+        structural_signature=structural_signature.digest,
     )
     return StochasticBiddingSolveResult(
         submitted_bids=submitted_bids,
@@ -1263,6 +1608,26 @@ def _solve_with_pyomo(
         cvar_loss_eur=float(cvar_result.cvar),
         cvar_details=scenario_economics[["scenario_id", "loss_eur", "xi_loss_excess_eur", "zeta_loss_eur", "cvar_loss_eur"]].copy(),
         reserve_diagnostics=reserve_diagnostics,
+        performance={
+            "schema_version": "optimisation_performance_v1",
+            "performance_mode": performance_mode_value,
+            "structural_signature": structural_signature.digest,
+            "model_reuse_status": (
+                "disabled_legacy_rebuild"
+                if cache_status == "disabled_legacy_rebuild"
+                else
+                "static_structure_cache_hit_pyomo_rebuilt"
+                if cache_status == "hit"
+                else "static_structure_registered_pyomo_rebuilt"
+            ),
+            "cache_status": cache_status,
+            "warm_start_status": warm_start_status,
+            "warm_start_values_applied": int(warm_start_values_applied),
+            "pyomo_model_rebuilt": True,
+            "output_extraction_mode": str(output_extraction_mode),
+            "extracted_timestep_count": len(timestamps) if extraction_time_indices is None else len(extraction_time_indices),
+        },
+        warm_start_snapshot=next_warm_start,
     )
 
 
@@ -1288,6 +1653,8 @@ def _solve_with_pulp(
     firm_bid_floor_mw: list[float] | tuple[float, ...] | np.ndarray | None,
     emergency_import_price_eur_per_mwh: float | None,
     reserve_obligations_by_hour: pd.DataFrame | None,
+    previous_electrolyser_power_mw: float | None,
+    weekly_quota_plan: WeeklyQuotaDeadlinePlan | None,
 ) -> StochasticBiddingSolveResult:
     if pulp is None:
         raise RuntimeError("PuLP backend requested but PuLP is not installed.")
@@ -1366,6 +1733,10 @@ def _solve_with_pulp(
                 model += used_energy[(scenario_id, t)] + unused_energy[(scenario_id, t)] == cleared_energy_expr, f"cleared_balance_{scenario_id}_{t}"
             if t == 0:
                 model += h_buf[(scenario_id, t)] == inventory_start_kg_value + h_prod[(scenario_id, t)] - h_comp[(scenario_id, t)], f"storage_{scenario_id}_{t}"
+                if previous_electrolyser_power_mw is not None:
+                    previous_power = float(previous_electrolyser_power_mw)
+                    model += p_el[(scenario_id, t)] - previous_power <= config.hydrogen_system.electrolyser_ramp_mw_per_h * timestep_hours, f"boundary_ramp_up_{scenario_id}_{t}"
+                    model += previous_power - p_el[(scenario_id, t)] <= config.hydrogen_system.electrolyser_ramp_mw_per_h * timestep_hours, f"boundary_ramp_down_{scenario_id}_{t}"
             else:
                 model += h_buf[(scenario_id, t)] == h_buf[(scenario_id, t - 1)] + h_prod[(scenario_id, t)] - h_comp[(scenario_id, t)], f"storage_{scenario_id}_{t}"
                 model += p_el[(scenario_id, t)] - p_el[(scenario_id, t - 1)] <= config.hydrogen_system.electrolyser_ramp_mw_per_h * timestep_hours, f"ramp_up_{scenario_id}_{t}"
@@ -1381,6 +1752,12 @@ def _solve_with_pulp(
                     model += site_max_load_mw - (p_el[(scenario_id, t)] + p_comp[(scenario_id, t)]) >= required_down, f"reserve_down_{scenario_id}_{t}"
 
     for scenario_id in scenario_ids:
+        if weekly_quota_plan is not None:
+            for quota_index, quota_constraint in enumerate(weekly_quota_plan.constraints):
+                model += (
+                    pulp.lpSum(h_comp[(scenario_id, t)] for t in quota_constraint.horizon_time_indices)
+                    >= float(quota_constraint.minimum_horizon_compression_kg)
+                ), f"weekly_quota_{scenario_id}_{quota_index}"
         if str(production_target_mode).strip() in {"hard_daily_target", "weekly_hard_band_target"}:
             model += (
                 pulp.lpSum(h_comp[(scenario_id, t)] for t in range(len(timestamps)))
@@ -1573,6 +1950,14 @@ def solve_stochastic_hourly_bidding(
     firm_bid_floor_mw: list[float] | tuple[float, ...] | np.ndarray | None = None,
     emergency_import_price_eur_per_mwh: float | None = None,
     reserve_obligations_by_hour: pd.DataFrame | None = None,
+    previous_electrolyser_power_mw: float | None = None,
+    weekly_quota_plan: WeeklyQuotaDeadlinePlan | None = None,
+    performance_mode: str = "optimized_equivalent",
+    warm_start_snapshot: HydrogenWarmStartSnapshot | None = None,
+    output_extraction_mode: str = "full_audit",
+    executed_timestamps_utc: pd.DatetimeIndex | None = None,
+    _granularity: str = "hourly",
+    _horizon: str = "D_only",
 ) -> StochasticBiddingSolveResult:
     _ensure_solver_package(config.solver)
     _apply_gurobi_license_env(config.solver)
@@ -1610,6 +1995,14 @@ def solve_stochastic_hourly_bidding(
                 firm_bid_floor_mw=firm_bid_floor_mw,
                 emergency_import_price_eur_per_mwh=emergency_import_price_eur_per_mwh,
                 reserve_obligations_by_hour=reserve_obligations_by_hour,
+                previous_electrolyser_power_mw=previous_electrolyser_power_mw,
+                weekly_quota_plan=weekly_quota_plan,
+                performance_mode=performance_mode,
+                granularity=_granularity,
+                horizon=_horizon,
+                warm_start_snapshot=warm_start_snapshot,
+                output_extraction_mode=output_extraction_mode,
+                executed_timestamps_utc=executed_timestamps_utc,
             )
         except RuntimeError:
             if preference == "pyomo":
@@ -1635,7 +2028,36 @@ def solve_stochastic_hourly_bidding(
         firm_bid_floor_mw=firm_bid_floor_mw,
         emergency_import_price_eur_per_mwh=emergency_import_price_eur_per_mwh,
         reserve_obligations_by_hour=reserve_obligations_by_hour,
+        previous_electrolyser_power_mw=previous_electrolyser_power_mw,
+        weekly_quota_plan=weekly_quota_plan,
     )
+
+
+def solve_stochastic_da_bidding(
+    *,
+    granularity: str,
+    horizon: str,
+    **kwargs: Any,
+) -> StochasticBiddingSolveResult:
+    """Resolution-independent DA bidding entry point; legacy hourly API remains valid."""
+    result = solve_stochastic_hourly_bidding(
+        _granularity=str(granularity),
+        _horizon=str(horizon),
+        **kwargs,
+    )
+    for frame in (
+        result.submitted_bids,
+        result.scenario_clearing,
+        result.scenario_dispatch,
+        result.scenario_economics,
+        result.summary,
+    ):
+        if not frame.empty:
+            if "granularity" in frame.columns:
+                frame.loc[:, "granularity"] = str(granularity)
+            if "horizon" in frame.columns:
+                frame.loc[:, "horizon"] = str(horizon)
+    return result
 
 
 def write_stochastic_bidding_toy_run(

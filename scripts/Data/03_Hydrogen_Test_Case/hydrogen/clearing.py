@@ -105,6 +105,11 @@ def clear_hourly_bids(bid_curve: pd.DataFrame, actual_prices: pd.DataFrame) -> p
     return cleared.sort_values(["delivery_start_utc", "bid_block"]).reset_index(drop=True)
 
 
+def clear_da_bids(bid_curve: pd.DataFrame, actual_prices: pd.DataFrame) -> pd.DataFrame:
+    """Resolution-independent alias for the legacy hourly clearing implementation."""
+    return clear_hourly_bids(bid_curve, actual_prices)
+
+
 def aggregate_cleared_energy(clearing_result: pd.DataFrame) -> pd.DataFrame:
     required = {"delivery_start_utc", "bid_quantity_mw", "cleared_quantity_mw", "timestep_hours", "actual_price_eur_per_mwh"}
     missing = required.difference(clearing_result.columns)

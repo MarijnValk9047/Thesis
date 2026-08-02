@@ -1,0 +1,89 @@
+experiment_id: strict_lear_horizon_granularity_2026
+base_hydrogen_config: scripts/Data/03_Hydrogen_Test_Case/configs/base_hydrogen.yaml
+forecast_run_root: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03
+scenario_reduction_mapping_file: optimisation_inputs/scenario_reduction_30_to_10.csv
+episodes:
+  primary:
+    start: 2026-04-06
+    end: 2026-07-19
+    expected_days: 105
+    inferential: true
+  secondary:
+    start: 2026-03-18
+    end: 2026-03-28
+    expected_days: 11
+    inferential: false
+configurations:
+  H-D:
+    granularity: hourly
+    horizon_lead_days: [0]
+    artifact_ids:
+      30: strict_lear_hourly_donly_30_2026_support
+      10: strict_lear_hourly_donly_10_2026_support
+    scenario_files:
+      30: optimisation_inputs/hourly_donly_scenarios_30.parquet
+      10: optimisation_inputs/hourly_donly_scenarios_10.parquet
+  H-D4:
+    granularity: hourly
+    horizon_lead_days: [0, 1, 2, 3, 4]
+    artifact_ids:
+      30: strict_lear_hourly_dplus4_30_20260729
+      10: strict_lear_hourly_dplus4_10_20260729
+    scenario_files:
+      30: optimisation_inputs/hourly_scenarios_30.parquet
+      10: optimisation_inputs/hourly_scenarios_10.parquet
+  QH-D4:
+    granularity: quarter_hour
+    horizon_lead_days: [0, 1, 2, 3, 4]
+    artifact_ids:
+      30: strict_lear_qh_dplus4_30_20260729
+      10: strict_lear_qh_dplus4_10_20260729
+    scenario_files:
+      30: optimisation_inputs/quarterhour_scenarios_30.parquet
+      10: optimisation_inputs/quarterhour_scenarios_10.parquet
+attribution_control:
+  id: H-D4|D
+  base_configuration: H-D4
+  horizon_lead_days: [0]
+  scenario_count: 30
+policies: [stochastic_30, stochastic_10, ev_30, price_insensitive, true_pf]
+daily_target_kg: 19000.0
+emergency_import_price_eur_per_mwh: 3000.0
+risk_measure: risk_neutral
+cvar_gamma: 0.0
+cvar_alpha: 0.95
+weekly_quota_policy: included_day_prorated_hard_calendar_week
+bootstrap:
+  draws: 10000
+  seed: 42
+  primary_block_length_days: 7
+  sensitivity_block_lengths_days: [3, 14]
+solver:
+  mip_gap: 0.001
+  time_limit_seconds: 900
+  convergence_repair:
+    initial_time_limit_seconds: 300
+    repaired_case: primary_QH-D4_stochastic_30
+    reason: 7_of_105_initial_bidding_solves_reached_maxTimeLimit
+    invariant_settings: [forecast, scenarios, physics, quota, risk, bid_ladder, settlement, mip_gap]
+performance:
+  performance_mode: optimized_equivalent
+  legacy_mode: legacy_rebuild
+  input_cache_root: tmp/hydrogen_performance_cache
+  output_extraction: executed_day_only
+  audit_future_origins: []
+outputs:
+  run_root: scripts/Data/03_Hydrogen_Test_Case/runs
+  comparison_root: data/03_Hydrogen_Test_Case/horizon_granularity_comparison
+  parent_output_policy: thesis_report
+  child_output_policy: audit
+  run_class: full
+  lineage_role: thesis-candidate generated evaluation
+  save_executed_dispatch: true
+  save_future_plans: false
+methodological_warnings:
+  - extended_out_of_sample_not_untouched_holdout
+  - scenario_evaluation_undercoverage_no_calibrated_90pct_risk_claim
+  - conservative_two_stage_nonanticipative_dplus4_not_multistage_tree
+  - primary_episode_105_days_not_full_year
+  - primary_QH-D4_stochastic_30_required_a_predeclared_solver_time_limit_extension_from_300_to_900_seconds_without_changing_the_model_or_MIP_gap

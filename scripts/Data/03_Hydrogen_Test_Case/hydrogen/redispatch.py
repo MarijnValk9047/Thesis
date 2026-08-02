@@ -1,12 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from scripts.optimisation_performance import (
+    StructuralSignature,
+    StructuralTemplateCache,
+    dst_shape_for_steps,
+    stable_hash,
+    validate_performance_mode,
+)
 
 from .optimisation_model import (
     ModelStats,
@@ -22,6 +30,7 @@ from .optimisation_model import (
     pyo,
 )
 from .plant_parameters import HydrogenConfig
+from .production_target import WeeklyQuotaDeadlinePlan
 from .validation_checks import validate_dispatch_physical, validate_redispatch_solution
 
 
@@ -32,6 +41,10 @@ class RedispatchSolveResult:
     validation_checks: pd.DataFrame
     solver: SolverResult
     model_stats: ModelStats
+    performance: dict[str, Any] | None = None
+
+
+_REDISPATCH_TEMPLATE_CACHE = StructuralTemplateCache()
 
 
 def validate_cleared_profile_schema(cleared_profile: pd.DataFrame) -> pd.DataFrame:
@@ -225,6 +238,8 @@ def _solve_with_pyomo(
     shortfall_penalty_eur_per_kg: float,
     solver_log_path: str | None,
     emergency_import_price_eur_per_mwh: float | None,
+    previous_electrolyser_power_mw: float | None,
+    weekly_quota_plan: WeeklyQuotaDeadlinePlan | None,
 ) -> tuple[pd.DataFrame, SolverResult, ModelStats]:
     if pyo is None:
         raise RuntimeError("Pyomo backend requested but Pyomo is not installed.")
@@ -273,12 +288,23 @@ def _solve_with_pyomo(
             )
         if t == 0:
             m.constraints.add(m.H_buf[t] == inventory_start_kg + m.H_prod[t] - m.H_comp[t])
+            if previous_electrolyser_power_mw is not None:
+                previous_power = float(previous_electrolyser_power_mw)
+                m.constraints.add(m.P_el[t] - previous_power <= ramp_limit)
+                m.constraints.add(previous_power - m.P_el[t] <= ramp_limit)
         else:
             m.constraints.add(m.H_buf[t] == m.H_buf[t - 1] + m.H_prod[t] - m.H_comp[t])
             m.constraints.add(m.P_el[t] - m.P_el[t - 1] <= ramp_limit)
             m.constraints.add(m.P_el[t - 1] - m.P_el[t] <= ramp_limit)
         m.constraints.add(m.H_buf[t] >= reserve_kg)
         m.constraints.add(m.H_buf[t] <= config.hydrogen_system.storage_capacity_kg)
+
+    if weekly_quota_plan is not None:
+        for quota_constraint in weekly_quota_plan.constraints:
+            m.constraints.add(
+                sum(m.H_comp[t] for t in quota_constraint.horizon_time_indices)
+                >= float(quota_constraint.minimum_horizon_compression_kg)
+            )
 
     target_hydrogen_max_kg_value = (
         None if target_hydrogen_max_kg is None else float(target_hydrogen_max_kg)
@@ -386,6 +412,8 @@ def _solve_with_pulp(
     shortfall_penalty_eur_per_kg: float,
     solver_log_path: str | None,
     emergency_import_price_eur_per_mwh: float | None,
+    previous_electrolyser_power_mw: float | None,
+    weekly_quota_plan: WeeklyQuotaDeadlinePlan | None,
 ) -> tuple[pd.DataFrame, SolverResult, ModelStats]:
     if pulp is None:
         raise RuntimeError("PuLP backend requested but PuLP is not installed.")
@@ -422,12 +450,23 @@ def _solve_with_pulp(
             model += delta_t_hours * (p_el[t] + p_comp[t]) + unused[t] == cleared_lookup[t], f"cleared_energy_balance_{t}"
         if t == 0:
             model += h_buf[t] == inventory_start_kg + h_prod[t] - h_comp[t], f"buffer_state_{t}"
+            if previous_electrolyser_power_mw is not None:
+                previous_power = float(previous_electrolyser_power_mw)
+                model += p_el[t] - previous_power <= ramp_limit, f"boundary_ramp_up_{t}"
+                model += previous_power - p_el[t] <= ramp_limit, f"boundary_ramp_down_{t}"
         else:
             model += h_buf[t] == h_buf[t - 1] + h_prod[t] - h_comp[t], f"buffer_state_{t}"
             model += p_el[t] - p_el[t - 1] <= ramp_limit, f"ramp_up_{t}"
             model += p_el[t - 1] - p_el[t] <= ramp_limit, f"ramp_down_{t}"
         model += h_buf[t] >= reserve_kg, f"reserve_min_{t}"
         model += h_buf[t] <= config.hydrogen_system.storage_capacity_kg, f"buffer_max_{t}"
+
+    if weekly_quota_plan is not None:
+        for quota_index, quota_constraint in enumerate(weekly_quota_plan.constraints):
+            model += (
+                pulp.lpSum(h_comp[t] for t in quota_constraint.horizon_time_indices)
+                >= float(quota_constraint.minimum_horizon_compression_kg)
+            ), f"weekly_quota_{quota_index}"
 
     target_hydrogen_max_kg_value = (
         None if target_hydrogen_max_kg is None else float(target_hydrogen_max_kg)
@@ -522,8 +561,37 @@ def solve_actual_redispatch_from_cleared_energy(
     shortfall_penalty_eur_per_kg: float | None = None,
     solver_log_path: str | Path | None = None,
     emergency_import_price_eur_per_mwh: float | None = None,
+    previous_electrolyser_power_mw: float | None = None,
+    weekly_quota_plan: WeeklyQuotaDeadlinePlan | None = None,
+    performance_mode: str = "optimized_equivalent",
 ) -> RedispatchSolveResult:
     profile = validate_cleared_profile_schema(cleared_profile)
+    performance_mode_value = validate_performance_mode(performance_mode)
+    granularity = (
+        str(profile["granularity"].dropna().iloc[0])
+        if "granularity" in profile.columns and not profile["granularity"].dropna().empty
+        else ("quarter_hour" if abs(float(profile["timestep_hours"].iloc[0]) - 0.25) <= 1e-12 else "hourly")
+    )
+    signature = StructuralSignature(
+        model_type="hydrogen_actual_redispatch",
+        granularity=granularity,
+        timestep_count=len(profile),
+        scenario_count=1,
+        bid_grid=(),
+        dst_shape=dst_shape_for_steps(granularity, len(profile), 1),
+        physical_config_hash=stable_hash({"hydrogen_system": asdict(config.hydrogen_system)}),
+        quota_structure=(
+            "none"
+            if weekly_quota_plan is None
+            else stable_hash([list(item.horizon_time_indices) for item in weekly_quota_plan.constraints])
+        ),
+    )
+    if performance_mode_value == "optimized_equivalent":
+        cache_status, _ = _REDISPATCH_TEMPLATE_CACHE.register(
+            signature, {"timestep_count": len(profile), "scenario_count": 1}
+        )
+    else:
+        cache_status = "disabled_legacy_rebuild"
     inventory_start = float(config.hydrogen_system.storage_initial_kg if inventory_start_kg is None else inventory_start_kg)
     reserve_floor = float(config.hydrogen_system.reserve_kg if reserve_kg is None else reserve_kg)
     target_kg = float(config.economics.daily_target_kg if target_hydrogen_kg is None else target_hydrogen_kg)
@@ -553,6 +621,8 @@ def solve_actual_redispatch_from_cleared_energy(
                 shortfall_penalty_eur_per_kg=effective_shortfall_penalty,
                 solver_log_path=log_path,
                 emergency_import_price_eur_per_mwh=emergency_import_price_eur_per_mwh,
+                previous_electrolyser_power_mw=previous_electrolyser_power_mw,
+                weekly_quota_plan=weekly_quota_plan,
             )
         except RuntimeError:
             if preference == "pyomo":
@@ -569,6 +639,8 @@ def solve_actual_redispatch_from_cleared_energy(
                 shortfall_penalty_eur_per_kg=effective_shortfall_penalty,
                 solver_log_path=log_path,
                 emergency_import_price_eur_per_mwh=emergency_import_price_eur_per_mwh,
+                previous_electrolyser_power_mw=previous_electrolyser_power_mw,
+                weekly_quota_plan=weekly_quota_plan,
             )
     else:
         dispatch, solver, model_stats = _solve_with_pulp(
@@ -583,6 +655,8 @@ def solve_actual_redispatch_from_cleared_energy(
             shortfall_penalty_eur_per_kg=effective_shortfall_penalty,
             solver_log_path=log_path,
             emergency_import_price_eur_per_mwh=emergency_import_price_eur_per_mwh,
+            previous_electrolyser_power_mw=previous_electrolyser_power_mw,
+            weekly_quota_plan=weekly_quota_plan,
         )
 
     metadata = {}
@@ -620,4 +694,18 @@ def solve_actual_redispatch_from_cleared_energy(
         validation_checks=validation_checks.reset_index(drop=True),
         solver=solver,
         model_stats=model_stats,
+        performance={
+            "schema_version": "optimisation_performance_v1",
+            "performance_mode": performance_mode_value,
+            "structural_signature": signature.digest,
+            "model_reuse_status": (
+                "disabled_legacy_rebuild" if cache_status == "disabled_legacy_rebuild"
+                else "static_structure_cache_hit_pyomo_rebuilt" if cache_status == "hit"
+                else "static_structure_registered_pyomo_rebuilt"
+            ),
+            "cache_status": cache_status,
+            "warm_start_status": "not_applicable_continuous_redispatch",
+            "warm_start_values_applied": 0,
+            "pyomo_model_rebuilt": True,
+        },
     )

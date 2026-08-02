@@ -614,6 +614,8 @@ def resolve_input_slice(
         fingerprint_file(config.models.scenario_catalog, include_sha256=True).to_dict(),
         fingerprint_file(spec.path, include_sha256=False).to_dict(),
     ]
+    if spec.actuals_path is not None:
+        source_fingerprints.append(fingerprint_file(spec.actuals_path, include_sha256=False).to_dict())
     slice_fingerprint = build_input_slice_fingerprint(
         artifact_id=request.artifact_id,
         source_fingerprints=source_fingerprints,

@@ -1,6 +1,78 @@
 default_artifact: hourly_lear_strict
 
 artifacts:
+  strict_lear_hourly_dplus4_30_20260729:
+    path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/optimisation_inputs/hourly_scenarios_30.parquet
+    actuals_path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/evaluation_actuals.parquet
+    model_id: lear_lago_direct_dplus4_strict_no_future_1092
+    dataset_split: null
+    granularity: hourly
+    horizon: D_PLUS_4
+    scenario_set_size: 30
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: 20260729_strict_lear_dplus4_full_a03
+  strict_lear_hourly_dplus4_10_20260729:
+    path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/optimisation_inputs/hourly_scenarios_10.parquet
+    actuals_path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/evaluation_actuals.parquet
+    model_id: lear_lago_direct_dplus4_strict_no_future_1092
+    dataset_split: null
+    granularity: hourly
+    horizon: D_PLUS_4
+    scenario_set_size: 10
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: 20260729_strict_lear_dplus4_full_a03
+  strict_lear_qh_dplus4_30_20260729:
+    path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/optimisation_inputs/quarterhour_scenarios_30.parquet
+    actuals_path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/evaluation_actuals.parquet
+    model_id: qh-fs1__mean_shape__hourly_anchor__lear_strict
+    dataset_split: null
+    granularity: quarterhour
+    horizon: D_PLUS_4
+    scenario_set_size: 30
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: 20260729_strict_lear_dplus4_full_a03
+  strict_lear_qh_dplus4_10_20260729:
+    path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/optimisation_inputs/quarterhour_scenarios_10.parquet
+    actuals_path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/evaluation_actuals.parquet
+    model_id: qh-fs1__mean_shape__hourly_anchor__lear_strict
+    dataset_split: null
+    granularity: quarterhour
+    horizon: D_PLUS_4
+    scenario_set_size: 10
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: 20260729_strict_lear_dplus4_full_a03
+  strict_lear_hourly_donly_30_2026_support:
+    path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/optimisation_inputs/hourly_donly_scenarios_30.parquet
+    actuals_path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/evaluation_actuals.parquet
+    model_id: lear_strict_donly_1092_support_extension_2026
+    dataset_split: null
+    granularity: hourly
+    horizon: D_ONLY
+    scenario_set_size: 30
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: strict_lear_donly_1092_support_extension_2026
+  strict_lear_hourly_donly_10_2026_support:
+    path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/optimisation_inputs/hourly_donly_scenarios_10.parquet
+    actuals_path: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03/evaluation_actuals.parquet
+    model_id: lear_strict_donly_1092_support_extension_2026
+    dataset_split: null
+    granularity: hourly
+    horizon: D_ONLY
+    scenario_set_size: 10
+    validation_mode: thesis_grade
+    allow_forecast_origin_reconstruction: false
+    thesis_grade: true
+    source_run_id: strict_lear_donly_1092_support_extension_2026
   hourly_lear_strict:
     path: data/02_Forecasting/01_DA_prices/hourly_da/notebook_artifacts/01_da_price_scenario_generation_hourly_with_lear_strict/20260516_002902/scenario_prices_long.csv
     model_id: lear_strict_hourly_anchor_export

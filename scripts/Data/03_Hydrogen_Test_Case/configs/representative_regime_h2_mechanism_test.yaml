@@ -1,0 +1,46 @@
+run_id: representative_regime_h2_mechanism_test_v1
+output_policy: minimal
+run_class: diagnostic_validation
+lineage_role: short economic mechanism test only, not model selection or annual evidence
+base_hydrogen_config: scripts/Data/03_Hydrogen_Test_Case/configs/base_hydrogen.yaml
+strict_qh_run_root: data/02_Forecasting/01_DA_prices/scenario_evaluation/strict_lear_dplus4_finalisation/20260729_strict_lear_dplus4_full_a03
+study_run_root: data/02_Forecasting/01_DA_prices/scenario_evaluation/representative_regime_study/study_preparation/20260731_four_regime_inputs_s10_s30_v11
+output_root: data/03_Hydrogen_Test_Case/representative_regime_h2_mechanism_test
+
+cases:
+  observed_non_extreme:
+    week_start: '2026-05-18'
+    week_end: '2026-05-24'
+    selection_policy: smallest_robust_distance_to_complete_week_median_excluding_price_at_or_below_minus_499
+    observed_minimum_price_eur_per_mwh: -86.50
+  counterfactual_typical_winter:
+    week_id: typical_winter__2024-12-02
+    week_start: '2024-12-02'
+    week_end: '2024-12-08'
+    counterfactual: true
+
+arms: [A_hourly, B_qh_flat, C_qh_shape]
+policies: [stochastic_10, price_insensitive, true_pf]
+scenario_count: 10
+horizon_lead_days: [0]
+horizon_sweep: false
+scenario_count_sweep: false
+daily_target_kg: 19000.0
+emergency_import_price_eur_per_mwh: 3000.0
+weekly_quota_policy: included_day_prorated_hard_calendar_week
+risk_measure: risk_neutral
+cvar_gamma: 0.0
+cvar_alpha: 0.95
+solver:
+  mip_gap: 0.001
+  time_limit_seconds: 900
+performance:
+  performance_mode: optimized_equivalent
+  input_cache_root: tmp/hydrogen_representative_mechanism_cache
+  output_extraction: executed_day_only
+  audit_future_origins: []
+claims:
+  economic_improvement_required: false
+  annualisation_allowed: false
+  observed_2024_2025_qh_claim_allowed: false
+  steel_model_choice_affected: false

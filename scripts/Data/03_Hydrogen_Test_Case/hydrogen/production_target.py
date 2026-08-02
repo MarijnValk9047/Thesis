@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -108,6 +108,132 @@ class RollingUpRecoveryProxyBound:
     due_date: str
     cumulative_required_kg: float
     future_max_recoverable_output_kg: float
+
+
+@dataclass(frozen=True)
+class WeeklyQuotaDeadline:
+    week_id: str
+    week_start_date: str
+    due_date: str
+    included_delivery_days: tuple[str, ...]
+    required_quantity_kg: float
+
+
+@dataclass(frozen=True)
+class WeeklyQuotaConstraint:
+    week_id: str
+    constraint_kind: str
+    horizon_time_indices: tuple[int, ...]
+    realised_before_horizon_kg: float
+    required_quantity_kg: float
+    future_max_after_horizon_kg: float
+    minimum_horizon_compression_kg: float
+
+
+@dataclass(frozen=True)
+class WeeklyQuotaDeadlinePlan:
+    episode_id: str
+    daily_target_kg: float
+    deadlines: tuple[WeeklyQuotaDeadline, ...]
+    constraints: tuple[WeeklyQuotaConstraint, ...]
+
+
+def build_weekly_quota_deadlines(
+    *,
+    episode_id: str,
+    included_delivery_days: Sequence[str | pd.Timestamp],
+    daily_target_kg: float,
+) -> tuple[WeeklyQuotaDeadline, ...]:
+    """Build support-prorated calendar-week quotas without crossing episode gaps."""
+    if float(daily_target_kg) <= 0.0:
+        raise ValueError("daily_target_kg must be positive.")
+    days = sorted({pd.Timestamp(value).date() for value in included_delivery_days})
+    by_week: dict[date, list[date]] = {}
+    for delivery_day in days:
+        week_start = delivery_day - timedelta(days=delivery_day.weekday())
+        by_week.setdefault(week_start, []).append(delivery_day)
+    deadlines: list[WeeklyQuotaDeadline] = []
+    for week_start, week_days in sorted(by_week.items()):
+        ordered = sorted(week_days)
+        due_date = ordered[-1]
+        deadlines.append(
+            WeeklyQuotaDeadline(
+                week_id=f"week_{week_start:%Y%m%d}_{week_start + timedelta(days=6):%Y%m%d}",
+                week_start_date=week_start.isoformat(),
+                due_date=due_date.isoformat(),
+                included_delivery_days=tuple(day.isoformat() for day in ordered),
+                required_quantity_kg=float(len(ordered) * float(daily_target_kg)),
+            )
+        )
+    return tuple(deadlines)
+
+
+def build_weekly_quota_deadline_plan(
+    *,
+    episode_id: str,
+    included_delivery_days: Sequence[str | pd.Timestamp],
+    timestamps_utc: pd.DatetimeIndex,
+    realised_compression_by_week_kg: Mapping[str, float],
+    hydrogen: object,
+    daily_target_kg: float,
+    delta_t_hours: float,
+) -> WeeklyQuotaDeadlinePlan:
+    """Translate frozen weekly quota semantics into horizon-local hard constraints."""
+    timestamps = pd.DatetimeIndex(pd.to_datetime(timestamps_utc, utc=True))
+    if timestamps.empty:
+        raise ValueError("Weekly quota planning requires a non-empty horizon.")
+    local_dates = [timestamp.date() for timestamp in timestamps.tz_convert(PRODUCTION_TARGETS_TZ)]
+    horizon_end = max(local_dates)
+    deadlines = build_weekly_quota_deadlines(
+        episode_id=episode_id,
+        included_delivery_days=included_delivery_days,
+        daily_target_kg=daily_target_kg,
+    )
+    constraints: list[WeeklyQuotaConstraint] = []
+    for deadline in deadlines:
+        week_days = {date.fromisoformat(value) for value in deadline.included_delivery_days}
+        horizon_indices = tuple(index for index, local_day in enumerate(local_dates) if local_day in week_days)
+        if not horizon_indices:
+            continue
+        due_day = date.fromisoformat(deadline.due_date)
+        realised_before = float(realised_compression_by_week_kg.get(deadline.week_id, 0.0))
+        future_days = sorted(day for day in week_days if day > horizon_end)
+        future_max = sum(
+            conservative_max_deliverable_kg_for_local_day(
+                hydrogen=hydrogen,
+                local_day=future_day,
+                delta_t_hours=delta_t_hours,
+            )
+            for future_day in future_days
+        )
+        if due_day <= horizon_end:
+            kind = "deadline"
+            future_max = 0.0
+        else:
+            kind = "terminal_feasibility_guard"
+        minimum = max(
+            0.0,
+            float(deadline.required_quantity_kg) - realised_before - float(future_max),
+        )
+        if minimum <= 1e-9 and kind == "terminal_feasibility_guard":
+            continue
+        constraints.append(
+            WeeklyQuotaConstraint(
+                week_id=deadline.week_id,
+                constraint_kind=kind,
+                horizon_time_indices=horizon_indices,
+                realised_before_horizon_kg=realised_before,
+                required_quantity_kg=float(deadline.required_quantity_kg),
+                future_max_after_horizon_kg=float(future_max),
+                minimum_horizon_compression_kg=float(minimum),
+            )
+        )
+    return WeeklyQuotaDeadlinePlan(
+        episode_id=str(episode_id),
+        daily_target_kg=float(daily_target_kg),
+        deadlines=deadlines,
+        constraints=tuple(constraints),
+    )
 
 
 def validate_production_targets_mode(mode: str) -> str:

@@ -9,6 +9,11 @@ from typing import Any, Iterator
 
 import pandas as pd
 
+from scripts.optimisation_performance import (
+    PERFORMANCE_SCHEMA_VERSION,
+    peak_working_set_mb,
+)
+
 
 @dataclass(frozen=True)
 class RuntimeRecord:
@@ -16,6 +21,7 @@ class RuntimeRecord:
     started_utc: str
     finished_utc: str
     wall_time_seconds: float
+    peak_working_set_mb: float | None
     details: dict[str, Any]
 
 
@@ -38,6 +44,7 @@ class RuntimeProfiler:
                     started_utc=started_at.isoformat(),
                     finished_utc=finished_at.isoformat(),
                     wall_time_seconds=float(elapsed),
+                    peak_working_set_mb=peak_working_set_mb(),
                     details={str(key): value for key, value in details.items()},
                 )
             )
@@ -47,10 +54,13 @@ class RuntimeProfiler:
         for record in self._records:
             rows.append(
                 {
+                    "schema_version": PERFORMANCE_SCHEMA_VERSION,
                     "stage": record.stage,
+                    "solve_stage": record.stage,
                     "started_utc": record.started_utc,
                     "finished_utc": record.finished_utc,
                     "wall_time_seconds": record.wall_time_seconds,
+                    "peak_working_set_mb": record.peak_working_set_mb,
                     **record.details,
                 }
             )

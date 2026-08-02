@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -432,3 +433,26 @@ def run_cvar_gamma_validation_sweep(
             }
         )
     return pd.DataFrame(rows).sort_values("gamma").reset_index(drop=True)
+
+@dataclass
+class RollingHydrogenState:
+    """Realised boundary state carried between successive delivery days."""
+
+    episode_id: str
+    storage_inventory_kg: float
+    previous_electrolyser_power_mw: float = 0.0
+    previous_electrolyser_on: int = 0
+    realised_compression_by_week_kg: dict[str, float] = field(default_factory=dict)
+    fulfilled_quota_by_week_kg: dict[str, float] = field(default_factory=dict)
+    last_executed_timestamp_utc: pd.Timestamp | None = None
+
+    def copy(self) -> "RollingHydrogenState":
+        return RollingHydrogenState(
+            episode_id=str(self.episode_id),
+            storage_inventory_kg=float(self.storage_inventory_kg),
+            previous_electrolyser_power_mw=float(self.previous_electrolyser_power_mw),
+            previous_electrolyser_on=int(self.previous_electrolyser_on),
+            realised_compression_by_week_kg=dict(self.realised_compression_by_week_kg),
+            fulfilled_quota_by_week_kg=dict(self.fulfilled_quota_by_week_kg),
+            last_executed_timestamp_utc=self.last_executed_timestamp_utc,
+        )
