@@ -42,7 +42,7 @@ def test_breakthrough_caps_bind_import_and_named_ng_without_capping_wag() -> Non
             "execution_hours": 2,
             "reference_metrics": {
                 "gross_grid_import_mwh": 8.0,
-                "named_ng_mwh_lhv": 12.0,
+                "named_ng_mwh_lhv": 14.0,
                 "wag_generator_electricity_mwh": 10.0,
             },
         },
@@ -52,7 +52,7 @@ def test_breakthrough_caps_bind_import_and_named_ng_without_capping_wag() -> Non
     assert record["resource_caps_status"] == "pass"
     assert record["actual_metrics"]["wag_generator_electricity_mwh"] == 18.0
     assert model.phase5b_breakthrough_gross_import_cap.upper == 8.0
-    assert model.phase5b_breakthrough_named_ng_cap.upper == 12.0
+    assert model.phase5b_breakthrough_named_ng_cap.upper == 14.0
 
 
 def test_comparator_reference_metrics_are_exactly_block_specific() -> None:
