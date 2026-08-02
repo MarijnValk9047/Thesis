@@ -1,0 +1,9 @@
+residual_family,configuration,selected_share,annual_quantity,hourly_quantity,annual_unit,hourly_unit,classification,executable,status,notes
+electricity,C0,0.9,4.458259041214191,141.37046680663974,PJ/y,MWh_e/h,validation_selected_user_authorized_aggregate_electricity_baseload_abstraction,true,frozen_phase5k_candidate,Internal generation may serve the constant load before grid import.
+electricity,C1,0.9,4.977880260670008,157.8475475859338,PJ/y,MWh_e/h,validation_selected_user_authorized_aggregate_electricity_baseload_abstraction,true,frozen_phase5k_candidate,Internal generation may serve the constant load before grid import.
+natural_gas,C0,not_applicable,7.0,221.9685438863525,PJ_LHV/y,MWh_LHV/h,user_authorized_common_unrepresented_site_ng_service,true,frozen_phase5k_candidate,Common continuing site service; NG-only and non-displaceable by WAG or HSM.
+natural_gas,C1,not_applicable,7.0,221.9685438863525,PJ_LHV/y,MWh_LHV/h,user_authorized_common_unrepresented_site_ng_service,true,frozen_phase5k_candidate,Common continuing site service; NG-only and non-displaceable by WAG or HSM.
+residual_steam,C0,0,0,0,t/y,t/h,inactive_no_defensible_normal_operation_maximum,false,frozen_zero,No steam residual is activated.
+residual_steam,C1,0,0,0,t/y,t/h,inactive_no_defensible_normal_operation_maximum,false,frozen_zero,No steam residual is activated.
+residual_direct_co2,C0,not_applicable,2.0,228.31050228310502,MtCO2/y,tCO2/h,user_authorized_common_unmodelled_direct_emissions_reporting_abstraction,true,frozen_phase5k_candidate,Selected from the common 0.5-MtCO2/y grid after recalculating fuel emissions; reporting-only and not ETS-ready.
+residual_direct_co2,C1,not_applicable,2.0,228.31050228310502,MtCO2/y,tCO2/h,user_authorized_common_unmodelled_direct_emissions_reporting_abstraction,true,frozen_phase5k_candidate,Selected from the common 0.5-MtCO2/y grid after recalculating fuel emissions; reporting-only and not ETS-ready.

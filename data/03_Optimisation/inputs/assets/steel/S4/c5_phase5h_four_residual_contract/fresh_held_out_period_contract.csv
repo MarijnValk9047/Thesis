@@ -1,0 +1,5 @@
+period_id,dataset_split,frozen_forecast_start_origin_utc,split_weight,terminal_executed_hours,selection_basis,status
+phase5h_test_2024-10-07,test,2024-10-06T06:00:00+00:00,0.25,168,predeclared_quarterly_calendar_only,frozen_unopened
+phase5h_test_2025-02-03,test,2025-02-02T07:00:00+00:00,0.25,168,predeclared_quarterly_calendar_only,frozen_unopened
+phase5h_test_2025-04-07,test,2025-04-06T06:00:00+00:00,0.25,168,predeclared_quarterly_calendar_only,frozen_unopened
+phase5h_test_2025-07-07,test,2025-07-06T06:00:00+00:00,0.25,168,predeclared_quarterly_calendar_only,frozen_unopened

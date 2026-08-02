@@ -82,7 +82,7 @@ parameter ranges and sensitivity design.
 
 ## C. Anchor Categories
 
-The companion register currently contains 52 seed rows:
+The companion register currently contains 53 seed rows:
 
 | Category | Rows |
 |---|---:|
@@ -167,9 +167,10 @@ Current model-use status:
 
 | Status | Rows |
 |---|---:|
-| `blocked` | 1 |
-| `reporting_only` | 16 |
-| `residual_kpi` | 7 |
+| `blocked` | 2 |
+| `reporting_only` | 13 |
+| `residual_kpi` | 1 |
+| `scenario_definition` | 9 |
 | `sensitivity_scoring` | 11 |
 | `validation_only` | 17 |
 
@@ -181,7 +182,7 @@ The companion CSV includes:
 - current C5p_g residual electricity/NG anchor options;
 - C5p_h plant electricity/NG anchor coverage and CO2 boundary rows;
 - C5p_i source-card candidate overlay rows and migration recommendations;
-- open partial-provenance rows for official full-site electricity, grid-import, NG, and Scope 1 CO2 anchors inherited from prior source-card/candidate-register work; these remain excluded from primary scoring until exact locator, denominator, and boundary review is complete;
+- Phase 5E exact-locator primary rows for official full-site electricity, grid import, NG and Scope 1 CO2; stable legacy IDs are retained;
 - Athanasiadis Table 8/9 model-precedent seed rows supplied by the user in C5p_k; these are partial-locator Rank 3 / Tier B rows, not official Tata truth;
 - Badarinath qualitative precedent row, marked methodology/model-precedent rather than official site truth.
 
@@ -189,7 +190,7 @@ Source-rank coverage:
 
 | Source trust rank | Rows |
 |---|---:|
-| `Rank 1` | 28 |
+| `Rank 1` | 29 |
 | `Rank 3` | 8 |
 | `Rank 4` | 1 |
 | `Rank 5` | 3 |
@@ -200,17 +201,17 @@ Evidence-tier coverage:
 
 | Evidence tier | Rows |
 |---|---:|
-| `Tier A` | 12 |
+| `Tier A` | 20 |
 | `Tier B` | 9 |
 | `Tier C` | 3 |
-| `Tier E` | 1 |
-| `Tier F` | 16 |
+| `Tier E` | 2 |
+| `Tier F` | 8 |
 | `Tier X` | 1 |
 | `internal_diagnostic` | 10 |
 
-Important unresolved source-locator issues:
+Important source-locator status:
 
-- Official C0/C1 full-site electricity, grid import, full-site NG, and Scope 1 CO2 anchors now exist as open partial residual-KPI or validation anchors; they still need exact MER/Tata public locators before they can enter primary scoring or thesis claims.
+- Phase 5E resolves the official C0/C1 full-site electricity, grid import, full-site NG and Scope 1 CO2 locators through WD07 and promotes them to primary annual validation. Stable legacy row IDs containing `_missing` are retained for compatibility; their metadata now records exact locators and accepted status.
 - Athanasiadis Table 8/9 production denominator and natural-gas average basis remain unverified; these rows are user-supplied model-precedent seeds for sensitivity scoring only.
 - Badarinath context rows should only be promoted if exact Tata-case/model-precedent statements are located.
 
@@ -264,10 +265,10 @@ Current C0 NG handling:
 - report residual C0 NG alongside C1 residual NG as a diagnostic KPI with partial provenance, not as primary scoring or thesis truth;
 - classify full-site C0 NG as `residual_kpi` or `validation_only`, not executable process input.
 
-The requested C0 full-site NG example (`12.5 PJ/y`) is recorded as an open
-partial-provenance residual-KPI row inherited from prior C5 anchor work. It is
-usable for diagnostic residual reporting, but not for primary scoring or thesis
-claims until the exact MER/Tata locator and boundary are confirmed.
+The C0 full-site NG value (`12.5 PJ/y`) is now an exact-locator primary annual
+validation anchor, partitioned as 1.5 PJ/y ironmaking, 9.1 PJ/y steelmaking and
+rolling, and 1.9 PJ/y Vattenfall. These are fixed annual reporting services,
+not executable hourly plant inputs.
 
 ## J. Anchor Selection and Fallback Logic for Later Runners
 
@@ -307,8 +308,8 @@ any sensitivity runner is implemented.
 | Use this anchor register as canonical validation/reporting reference | GO with caveats. |
 | Residual electricity KPI reporting | GO as diagnostic/reporting, not dispatch. |
 | Residual NG KPI reporting | GO as diagnostic/reporting, not dispatch. |
-| C0 full-site NG residual reporting | GO as diagnostic/reporting with partial provenance; primary scoring remains NO-GO. |
-| Site-level CO2 anchor reporting | GO as validation/reporting with partial provenance; primary scoring remains NO-GO. |
+| C0 full-site NG annual validation | GO with exact WD07 locator and named annual service partition; hourly dispatch use remains NO-GO. |
+| Site-level CO2 anchor reporting | GO for primary annual validation with exact WD07 source classes; ETS-ready or marginal dispatch use remains NO-GO. |
 | Process-level CO2 implementation | NO-GO. |
 | WAG-explicit point-of-oxidation CO2 subtotal | GO diagnostic-only for represented BFG/COG/BOFG sinks; no consolidated site claim. |
 | Explicit CO2 for named modelled NG consumers | GO diagnostic-only; residual/background NG stays excluded. |

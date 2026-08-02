@@ -5,19 +5,20 @@
 - `source_type`: `academic thesis`
 - `authors_or_organisation`: `Ioannis Athanasiadis; TU Delft`
 - `year`: `2025`
-- `stable_url_or_file_reference`: `uploaded_local_reference_only`
-- `local_file_path_if_any`: `Master_Thesis_Report_Athanasiadis (1).pdf (repo-local file not found in 2026-06-14 scan)`
-- `public_or_confidential_status`: `uploaded_local_modelling_precedent`
-- `stage_relevance`: `governance_only; later`
-- `modelling_use_allowed`: `Tata-inspired modelling-structure precedent and redacted-values warning.`
-- `modelling_use_not_allowed`: `Do not use as an approved numerical input source for S2.`
+- `stable_url_or_file_reference`: `https://repository.tudelft.nl/record/7a0b891b-ceb8-4ceb-9d80-d0a5566dc618`
+- `official_pdf_reference`: `https://repository.tudelft.nl/file/File_8d0f5456-db95-4bfe-8c9d-cac6288b1c77`
+- `local_file_path_if_any`: `none in canonical repository; official PDF inspected transiently for Phase 5C`
+- `public_or_confidential_status`: `public TU Delft repository modelling precedent; thesis-specific/redacted Tata inputs remain non-public`
+- `stage_relevance`: `governance; deterministic economic-boundary interpretation; user-authorized Phase 5D source-emulation policy; later`
+- `modelling_use_allowed`: `Tata-inspired modelling-structure precedent; constant residual electricity, NG, steam and direct-CO2 terms as aggregate non-decision site services; objective-boundary precedent for CO2 cost and negative-marginal-cost WAG use; and, only inside the separate user-authorized emulation overlay, the already accepted 1.65-PJ-LHV/y normal-case NG allocation inside the conserved 3.07-PJ-LHV/y flexible other-site heat service.`
+- `modelling_use_not_allowed`: `Do not use the thesis as an approved numerical input source for the immutable strict S2 baseline; do not infer Tata-specific residual magnitudes, a residual-steam maximum, pressure/enthalpy/condensate basis, or plant-specific HSM, PEFA, boiler or generator NG shares from the aggregate site result.`
 - `parameter_categories_supported`: `governance_precedent; modelling_structure_precedent`
 - `validation_targets_supported`: `none`
 - `modelling_role_classification`: `governance_precedent; not_a_numerical_input_source`
 - `public_reportability_status`: `local_only_caveated`
 - `known_limitations`: `Contains thesis-specific modelling choices and redacted or non-public elements.`
-- `relevant_pages_or_sections`: `Methodology and confidentiality framing`
-- `confidence`: `medium`
+- `relevant_pages_or_sections`: `report p.20 / PDF p.34: non-decision secondary processes represented as mandatory electricity, NG or steam loads; report p.24 / PDF p.38: steam demand is plant operational demand plus a constant residual steam demand and boilers meet demand without ramping; report p.31 / PDF p.45, Figure 38: residual electricity load, residual NG load, residual steam load and residual CO2 emissions are distinct aggregate terms in the site network; report p.34 / PDF p.48: RESel is MW/time step, RESng is m3/time step, RESst is tonnes/time step and RESco2 is tonnes/time step; report p.22 / PDF p.36: seven cost inputs, CO2 cost and one WAG profit stream represented by a Link with negative marginal cost; report pp.93-94 / PDF pp.107-108: site NG sums plant, boiler and generator consumption and varies with monthly NG price; report p.97 / PDF p.111: Table 8 central-scenario average NG demand 33,243.63 m3 and total electricity 3.17 TWh`
+- `confidence`: `high for the cited modelling choices; medium for broader Tata applicability`
 - `may_support_executable_s2_assumptions_later`: `no`
 - `values_remain_non_approved_in_this_task`: `yes`
-- `notes`: `Use only as precedent and warning, not as executable evidence.`
+- `notes`: `Phase 5H visually verified the four residual nodes and their modelling role in the public PDF. The public thesis does not disclose the Tata-specific numerical magnitudes required to establish a residual-steam maximum. The Figure 38 evidence supports topology and abstraction only; it cannot turn startup steam, nameplate boiler capacity, steam spill or the retired 9-PJ value into demand. Phase 5C verified that the thesis objective includes CO2 cost and a negative-cost WAG-use term. These are not equivalent to an electricity-export contract and do not authorize ETS or WAG-credit promotion in the active model.`

@@ -1,0 +1,5 @@
+period_id,dataset_split,frozen_forecast_start_origin_utc,split_weight,terminal_executed_hours,selection_basis,status
+phase5k_test_2025-03-03,test,2025-03-02T07:00:00+00:00,0.25,168,timestamp_structure_only_no_price_dispatch_anchor_or_model_result_inspected,frozen_unopened
+phase5k_test_2025-04-21,test,2025-04-20T06:00:00+00:00,0.25,168,timestamp_structure_only_no_price_dispatch_anchor_or_model_result_inspected,frozen_unopened
+phase5k_test_2025-06-16,test,2025-06-15T06:00:00+00:00,0.25,168,timestamp_structure_only_no_price_dispatch_anchor_or_model_result_inspected,frozen_unopened
+phase5k_test_2025-08-25,test,2025-08-24T06:00:00+00:00,0.25,168,timestamp_structure_only_no_price_dispatch_anchor_or_model_result_inspected,frozen_unopened

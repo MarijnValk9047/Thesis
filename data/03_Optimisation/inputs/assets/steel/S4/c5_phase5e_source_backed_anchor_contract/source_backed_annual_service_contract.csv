@@ -1,0 +1,59 @@
+record_id,configuration,family,record_kind,component,value,unit,named_share,source_locator,quantity_origin,dispatch_role,notes
+c0_ng_total,C0,natural_gas,primary_total,full_site_natural_gas,12.5,PJ/y,false,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_reporting_only,Configuration-matched real-site total.
+c0_ng_ironmaking,C0,natural_gas,component,ironmaking,1.5,PJ/y,true,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_service_account,Includes the MER ironmaking boundary; no invented asset split.
+c0_ng_steel_downstream,C0,natural_gas,component,steelmaking_and_rolling,9.1,PJ/y,true,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_service_account,HSM and other downstream services remain aggregated at the source boundary.
+c0_ng_vattenfall,C0,natural_gas,component,Vattenfall_generators,1.9,PJ/y,true,WD07 Tables 4.2 and 6.5 report pp17 and 69-70,direct_mer_table_value,annual_service_account,Generator fuel category; not an hourly must-run instruction.
+c1_ng_total,C1,natural_gas,primary_total,full_site_natural_gas,46.7,PJ/y,false,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_reporting_only,Heracless gas-scenario total.
+c1_ng_existing_ironmaking,C1,natural_gas,component,existing_ironmaking_and_energy,2.0,PJ/y,true,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_service_account,Includes documented sinter and HO6 backup within the aggregate source boundary.
+c1_ng_existing_downstream,C1,natural_gas,component,existing_steelmaking_and_rolling,13.1,PJ/y,true,WD07 Tables 6.2 and 6.5 report pp65 and 69-70,direct_mer_table_value,annual_service_account,Source-backed category; no plant-level split claimed.
+c1_ng_vattenfall,C1,natural_gas,component,Vattenfall_generators,3.8,PJ/y,true,WD07 Tables 6.2 and 6.5 report pp65 and 69-70,direct_mer_table_value,annual_service_account,Increases as process-gas availability falls.
+c1_ng_dri,C1,natural_gas,component,DRI_factory,27.7,PJ/y,true,WD07 Tables 6.2 and 6.5 report pp65 and 69-70,direct_mer_table_value,production_linked_service,Consistent with 9.9 GJ-LHV/t H-DRI at the MER production basis.
+c1_ng_eaf,C1,natural_gas,component,EAF,0.1,PJ/y,true,WD07 Tables 6.2 and 6.5 report pp65 and 69-70,direct_mer_table_value,production_linked_service,Includes EAF gas service at the source boundary.
+c0_electricity_total,C0,electricity,primary_total,full_site_electricity,13.7,PJ/y,false,WD07 Table 6.6 report p71 / PDF p77,direct_mer_table_value,annual_reporting_only,Broader full-site electricity total.
+c0_electricity_ironmaking,C0,electricity,component,ironmaking,5.1,PJ/y,true,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_service_account,Named operating-process demand.
+c0_electricity_downstream,C0,electricity,component,steelmaking_and_rolling,4.5,PJ/y,true,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_service_account,Named operating-process demand.
+c0_electricity_oxygen,C0,electricity,component,oxygen_production,1.8,PJ/y,true,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_service_account,Named operating-process demand.
+c0_electricity_boundary,C0,electricity,boundary_component,third_party_and_electricity_boundary,2.3,PJ/y,false,WD07 Table 4.2 p17 and Table 6.6 p71,difference_between_two_independent_mer_totals,annual_boundary_remainder,13.7 full-site total less 11.4 rounded named categories; never enters dispatch.
+c0_electricity_operating_total,C0,electricity,secondary_total,stroomgebruik,11.5,PJ/y,false,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_reporting_only,Rounding differs by 0.1 PJ from named category sum.
+c1_electricity_total,C1,electricity,primary_total,full_site_electricity,17.8,PJ/y,false,WD07 Table 6.6 report p71 / PDF p77,direct_mer_table_value,annual_reporting_only,Broader full-site electricity total.
+c1_electricity_ironmaking,C1,electricity,component,ironmaking,5.0,PJ/y,true,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_service_account,Named operating-process demand.
+c1_electricity_downstream,C1,electricity,component,steelmaking_and_rolling,3.7,PJ/y,true,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_service_account,Named operating-process demand.
+c1_electricity_oxygen,C1,electricity,component,oxygen_production,1.2,PJ/y,true,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_service_account,Named operating-process demand.
+c1_electricity_dri,C1,electricity,component,DRI_factory,1.1,PJ/y,true,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,production_linked_service,Named DRI electricity demand.
+c1_electricity_eaf,C1,electricity,component,EAF,5.2,PJ/y,true,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,production_linked_service,Named EAF electricity demand.
+c1_electricity_boundary,C1,electricity,boundary_component,third_party_and_electricity_boundary,1.6,PJ/y,false,WD07 Table 6.2 p65 and Table 6.6 p71,difference_between_two_independent_mer_totals,annual_boundary_remainder,17.8 full-site total less 16.2 named process demand; never enters dispatch.
+c1_electricity_operating_total,C1,electricity,secondary_total,stroomgebruik,16.2,PJ/y,false,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_reporting_only,Named operating-process demand total.
+c0_scope1_total,C0,scope1_co2,primary_total,full_site_scope1,12.6,MtCO2/y,false,WD07 Table 4.3 report p18 / PDF p24,direct_mer_table_value,annual_reporting_only,Official reference Scope 1 total.
+c0_scope1_coal,C0,scope1_co2,component,coal_and_other_carbon,11.5,MtCO2/y,true,WD07 Table 4.3 report p18 / PDF p24,direct_mer_table_value,annual_source_class,Source-class emission category.
+c0_scope1_iron,C0,scope1_co2,component,iron_bearing_material,0.02,MtCO2/y,true,WD07 Table 4.3 report p18 / PDF p24,direct_mer_table_value,annual_source_class,Source-class emission category.
+c0_scope1_ng,C0,scope1_co2,component,natural_gas,0.7,MtCO2/y,true,WD07 Table 4.3 report p18 / PDF p24,direct_mer_table_value,annual_source_class,Source-class emission category.
+c0_scope1_flux,C0,scope1_co2,component,fluxes,0.4,MtCO2/y,true,WD07 Table 4.3 report p18 / PDF p24,direct_mer_table_value,annual_source_class,Source-class emission category.
+c1_scope1_total,C1,scope1_co2,primary_total,full_site_scope1,8.3,MtCO2/y,false,WD07 Table 6.1 report p63 / PDF p69,direct_mer_table_value,annual_reporting_only,Heracless gas-scenario Scope 1 total without CCS subtraction.
+c1_scope1_coal,C1,scope1_co2,component,coal_and_other_carbon,5.5,MtCO2/y,true,WD07 Table 6.1 report p63 / PDF p69,direct_mer_table_value,annual_source_class,Source-class emission category.
+c1_scope1_ng,C1,scope1_co2,component,natural_gas,2.6,MtCO2/y,true,WD07 Table 6.1 report p63 / PDF p69,direct_mer_table_value,annual_source_class,Source-class emission category.
+c1_scope1_flux,C1,scope1_co2,component,fluxes,0.2,MtCO2/y,true,WD07 Table 6.1 report p63 / PDF p69,direct_mer_table_value,annual_source_class,Source-class emission category.
+c0_wag_total,C0,wag_production,primary_total,total_process_gas_production,52.9,PJ/y,false,WD07 Table 6.5 report pp69-70 / PDF pp75-76,sum_of_direct_mer_carrier_values,annual_reporting_only,14.7 COG + 33.2 BFG + 5.0 BOFG; within 5% of rounded 54-PJ context.
+c0_wag_cog,C0,wag_production,component,COG,14.7,PJ/y,true,WD07 Table 6.5 report p69 / PDF p75,direct_mer_table_value,annual_carrier_account,Carrier-specific production.
+c0_wag_bfg,C0,wag_production,component,BFG,33.2,PJ/y,true,WD07 Table 6.5 report p69 / PDF p75,direct_mer_table_value,annual_carrier_account,Carrier-specific production.
+c0_wag_bofg,C0,wag_production,component,BOFG,5.0,PJ/y,true,WD07 Table 6.5 report p69 / PDF p75,direct_mer_table_value,annual_carrier_account,Carrier-specific production.
+c0_wag_context_54,C0,wag_production,secondary_total,rounded_recovered_process_gas_context,54.0,PJ/y,false,Tata MER technical overview context,direct_rounded_source_context,validation_only,Not used to tune carrier yields.
+c1_wag_total,C1,wag_production,primary_total,total_process_gas_production,25.1,PJ/y,false,WD07 Table 6.5 report pp69-70 / PDF pp75-76,sum_of_direct_mer_carrier_values,annual_reporting_only,8.1 COG + 14.8 BFG + 2.2 BOFG.
+c1_wag_cog,C1,wag_production,component,COG,8.1,PJ/y,true,WD07 Table 6.5 report p69 / PDF p75,direct_mer_table_value,annual_carrier_account,Carrier-specific production.
+c1_wag_bfg,C1,wag_production,component,BFG,14.8,PJ/y,true,WD07 Table 6.5 report p69 / PDF p75,direct_mer_table_value,annual_carrier_account,Carrier-specific production.
+c1_wag_bofg,C1,wag_production,component,BOFG,2.2,PJ/y,true,WD07 Table 6.5 report p69 / PDF p75,direct_mer_table_value,annual_carrier_account,Carrier-specific production.
+c0_generator_fuel_total,C0,generator_fuel,primary_total,total_generator_fuel,25.5,PJ/y,false,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_reporting_only,Vattenfall fuel input.
+c0_generator_fuel_bfg,C0,generator_fuel,component,BFG,18.6,PJ/y,true,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_carrier_account,Generator fuel.
+c0_generator_fuel_cog,C0,generator_fuel,component,COG,1.0,PJ/y,true,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_carrier_account,Generator fuel.
+c0_generator_fuel_bofg,C0,generator_fuel,component,BOFG,4.0,PJ/y,true,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_carrier_account,Generator fuel.
+c0_generator_fuel_ng,C0,generator_fuel,component,natural_gas,1.9,PJ/y,true,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_carrier_account,Generator fuel.
+c1_generator_fuel_total,C1,generator_fuel,primary_total,total_generator_fuel,14.1,PJ/y,false,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_reporting_only,Vattenfall fuel input.
+c1_generator_fuel_bfg,C1,generator_fuel,component,BFG,8.9,PJ/y,true,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_carrier_account,Generator fuel.
+c1_generator_fuel_cog,C1,generator_fuel,component,COG,0.0,PJ/y,true,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_carrier_account,Generator fuel.
+c1_generator_fuel_bofg,C1,generator_fuel,component,BOFG,1.4,PJ/y,true,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_carrier_account,Generator fuel.
+c1_generator_fuel_ng,C1,generator_fuel,component,natural_gas,3.8,PJ/y,true,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_carrier_account,Generator fuel.
+c0_generator_output,C0,generator_electricity,direct_primary_total,electricity_output,9.8,PJ/y,false,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_reporting_only,Total generator electricity output.
+c0_generator_loss,C0,generator_electricity,balance_component,conversion_losses_and_balance,15.7,PJ/y,false,WD07 Table 4.2 report p17 / PDF p23,direct_mer_table_value,annual_reporting_only,Completes 25.5-PJ generator input balance.
+c1_generator_output,C1,generator_electricity,direct_primary_total,electricity_output,5.9,PJ/y,false,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_reporting_only,Total generator electricity output.
+c1_generator_loss,C1,generator_electricity,balance_component,conversion_losses_and_balance,8.2,PJ/y,false,WD07 Table 6.2 report p65 / PDF p71,direct_mer_table_value,annual_reporting_only,Completes 14.1-PJ generator input balance.
+c0_coal_energy,C0,coal_energy,direct_primary_total,coal,120.8,PJ/y,false,WD07 Tables 4.2 and 6.6 report pp17 and 71,direct_mer_table_value,annual_reporting_only,Primary coal-energy anchor; older mass anchor remains definition-unresolved.
+c1_coal_energy,C1,coal_energy,direct_primary_total,coal,58.0,PJ/y,false,WD07 Tables 6.2 and 6.6 report pp65 and 71,direct_mer_table_value,annual_reporting_only,Primary Heracless coal-energy anchor.

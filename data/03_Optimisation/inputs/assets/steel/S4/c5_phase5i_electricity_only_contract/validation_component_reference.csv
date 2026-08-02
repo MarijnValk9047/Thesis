@@ -1,0 +1,9 @@
+mapping_id,configuration,source_component,source_value_pj_y,phase5h_10pct_validation_mapped_pj_y,comparison_rule,status
+P5G-C0-NG-IRON,C0,ironmaking,1.5,0,max_source_or_validation_plus_tolerance,compatible
+P5G-C0-NG-DOWN,C0,steelmaking_and_rolling,9.1,4.437789838881291,max_source_or_validation_plus_tolerance,compatible
+P5G-C0-NG-GEN,C0,Vattenfall_generators,1.9,0.07674913476991638,absolute_source_ceiling_plus_tolerance,compatible
+P5G-C1-NG-IRON,C1,existing_ironmaking_and_energy,2.0,0,max_source_or_validation_plus_tolerance,compatible
+P5G-C1-NG-DOWN,C1,existing_steelmaking_and_rolling,13.1,6.365028085718727,max_source_or_validation_plus_tolerance,compatible
+P5G-C1-NG-GEN,C1,Vattenfall_generators,3.8,0,max_source_or_validation_plus_tolerance,compatible
+P5G-C1-NG-DRI,C1,DRI_factory,27.7,27.111722878164294,max_source_or_validation_plus_tolerance,compatible
+P5G-C1-NG-EAF,C1,EAF,0.1,0.16079260984323673,max_source_or_validation_plus_tolerance,preexisting_rounded_source_row_caveat_not_enlarged_by_electricity

@@ -5,19 +5,20 @@
 - `source_type`: `academic thesis`
 - `authors_or_organisation`: `Mukunda Badarinath; TU Delft`
 - `year`: `2025`
-- `stable_url_or_file_reference`: `uploaded_local_reference_only`
-- `local_file_path_if_any`: `Master_Thesis_Mukunda_Badarinath.pdf (repo-local file not found in 2026-06-14 scan)`
-- `public_or_confidential_status`: `uploaded_local_modelling_precedent`
-- `stage_relevance`: `governance_only; later_market`
-- `modelling_use_allowed`: `Bidding-method, benchmark, and hydrogen-verification precedent only.`
+- `stable_url_or_file_reference`: `https://repository.tudelft.nl/record/uuid%3A53243369-394e-4991-9c54-213fd5a07b1d`
+- `official_pdf_reference`: `https://repository.tudelft.nl/file/File_8d9cfc54-6569-4336-85cd-3f860652d50f`
+- `local_file_path_if_any`: `none in canonical repository`
+- `public_or_confidential_status`: `public TU Delft repository record; reuse restrictions apply`
+- `stage_relevance`: `governance; behavioural-metric definition; later_market`
+- `modelling_use_allowed`: `Bidding-method, benchmark, hydrogen-verification and correctly defined directional-behaviour precedent only.`
 - `modelling_use_not_allowed`: `Do not use as an S2 numerical parameter source.`
 - `parameter_categories_supported`: `governance_precedent; benchmark_precedent`
-- `validation_targets_supported`: `none`
+- `validation_targets_supported`: `directional diagnostics only: capacity-normalised BF utilisation/efficiency framing and correlation of changes in DRI storage level with price; no exact numerical target promotion`
 - `modelling_role_classification`: `governance_precedent; not_a_numerical_input_source`
 - `public_reportability_status`: `local_only_caveated`
-- `known_limitations`: `Hydrogen and bidding thesis precedent rather than S2 parameter evidence.`
-- `relevant_pages_or_sections`: `Case-study and benchmark framing`
-- `confidence`: `medium`
+- `known_limitations`: `Bidding thesis precedent rather than S2 parameter evidence; different optimisation, economic and plant-detail boundary; exact correlations and BF operating shares are not Tata calibration targets.`
+- `relevant_pages_or_sections`: `PDF p.75: BF6 efficiency/utilisation discussion; Table C.6 / PDF p.115: correlation between changes in storage levels and day-ahead prices; repository abstract: configuration-dependent strategy conclusion`
+- `confidence`: `high for the cited metric definitions; medium for transfer to the active deterministic model`
 - `may_support_executable_s2_assumptions_later`: `no`
 - `values_remain_non_approved_in_this_task`: `yes`
-- `notes`: `Supports benchmark and method framing outside S2 numerical promotion.`
+- `notes`: `Phase 5C retires the historical absolute BF6>BF7-throughput check and replaces the historical DRI inventory-level correlation with same-hour price versus hourly DRI-inventory change. The corrected DRI direction passes both frozen DEVELOPMENT weeks; BF asset-specific efficiency remains non-comparable.`
