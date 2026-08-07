@@ -143,6 +143,29 @@ Contextual repair notes:
 | `WOBBE_CONSTRAINT_ACTIVE_FIRST_LP` | Explicit Wobbe-index constraint | false initially | Boolean | Athanasiadis modelling caveat; practical LP tractability | First LP simplification | Use energy-basis allocation first; add share/LHV/Wobbe constraints later only if needed. |
 | `DIRECT_WAG_MARKET_VALUE_ALLOWED` | Direct electricity-market valuation of WAG | false | Boolean | Project WAG policy and physical conversion logic | Economic policy | Value WAG only via useful-energy substitution or explicit conversion/interface. |
 
+### 3.7 Active C1 temporal route-scale reconciliation
+
+The public `KGF1_COKE_OUTPUT_C0_C1 = 1.0 Mt/y` value is an annual validation
+anchor, not an independently evidenced technical hourly minimum. In the active
+C1 fixed-reference temporal model, the KGF1 development floor is reconciled to
+the active BOF route scale:
+
+```text
+route_scale = 3,329,952.026 / 3,400,000
+route_scaled_KGF1_coke = 1,000,000 * route_scale
+dry_coal_floor = route_scaled_KGF1_coke * dry_coal_per_coke / 8,760
+               = 143.667350012 t dry coal/h
+```
+
+This is labelled
+`route_scaled_fixed_reference_development_floor_not_technical_minimum`. KGF1
+remains continuous/must-run and its existing 180 t dry-coal/h upper bound is
+unchanged. The reconciliation prevents the raw annual KGF1 anchor from being
+combined with a smaller fixed-reference BOF route as though both described the
+same physical scale. It does not establish an hourly Tata operating limit and
+must not be used as such outside this explicit deterministic development
+contract.
+
 ## 4. Derived annual C0/C1 estimates
 
 These annual estimates are useful for validation and reporting only. They should not be converted into hard hourly dispatch without explicit availability and annual-to-hourly methodology.
@@ -199,3 +222,42 @@ Do not claim that:
 The most defensible thesis wording is:
 
 > The public Tata-specific sources support the topology, KGF1/KGF2 production anchors, gas-cleaning logic and the qualitative priority of cleaned COG for coke-oven heating. Generic EU BREF and academic LCI literature provide candidate conversion coefficients. These coefficients are used as reviewed candidate assumptions and sensitivity ranges, not as confidential Tata truth.
+
+## C0 temporal development status (2026-08-05)
+
+For the maintenance-excluded C0 temporal development model, KGF1 and KGF2 use
+four-hour setpoints with at most 3 t/h change per setpoint. KGF2 inherits this
+only as controlled symmetry with KGF1. These are development constraints, not
+measured Tata control limits. In the accepted high-volatility example week both
+plants remain at the existing 150-t/h lower bound. The resulting annualised
+coke output is about 21.2% above the 6.75/7.2-scaled comparison anchor. This is
+retained as a source-contract gap; neither minimum nor anchor is silently tuned.
+
+### Superseding C0 development reconciliation (2026-08-05)
+
+Run `c0_c1_downstream_contract_week_20260805_16` supersedes the preceding C0
+example-week interpretation. The former 150--180 t/h ranges were not verified
+technical capacities and mixed the C1 coke/hot-metal recipe into C0. The C0
+development model now uses a governed 120--140 t/h operating envelope for
+KGF1 and KGF2 and a C0-specific annual reconciliation of 0.285714 t coke per
+t represented BF6/BF7 hot metal. Both values are labelled anchor-derived
+development assumptions, not Tata operating limits or technology recipes.
+
+The selected week keeps both coke plants at 120 t/h and annualises coke output
+to 1.636 Mt/y, 3.05% below the scaled 1.6875-Mt/y comparison anchor. This
+removes the earlier artificial 21.2% excess without claiming empirical plant
+flexibility; measured minimum stable loads and ramp/setpoint data remain an
+evidence need.
+
+### Hourly annual route-reconciliation evidence gap (2026-08-06)
+
+The active hourly C1 contract retains the route-scaled dry-coal reference with
+an absolute one-ton annual reconciliation tolerance. In the D-only
+perfect-foresight year, this combines with exact material balances and terminal
+recovery to create a proven day-352 conflict of 0.618331 t coke over the final
+336 hours. The public rounded ratio is 0.294118 t coke/t BOF liquid steel,
+whereas the active recipe implies 0.295816 t/t, a 0.57744% difference. A
+10-ppm diagnostic sensitivity closes the year, but is not active
+because it changes an annual route tolerance and has no separate source basis.
+This is therefore an explicit methodology decision point, not evidence for a
+technical KGF1 production tolerance.

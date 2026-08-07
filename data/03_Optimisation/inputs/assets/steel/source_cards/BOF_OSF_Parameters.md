@@ -117,3 +117,22 @@ implemented.
   anchors.
 - No BOFG market valuation, export revenue, DA bidding, stochasticity, CVaR,
   mFRR, ETS objective steering, or product revenue.
+
+## C1 Temporal-v2 Scrap-Origin Contract (2026-08-03)
+
+The active C1 BOF recipe remains 0.294 t scrap/t liquid steel, corresponding
+to approximately 1.0 Mt/y at the route anchor. Its demand is now covered
+exactly by two origin-tagged physical flows:
+
+```text
+external_scrap_to_BOF + internal_scrap_to_BOF = BOF_scrap_demand
+```
+
+Together with the corresponding EAF flows, external scrap is capped at
+1.3 Mt/y, internal reuse at 0.6 Mt/y and total site availability at 1.9 Mt/y.
+Route allocation is endogenous, but every tonne has one origin and one route.
+Only external scrap receives represented procurement cost. Internal reuse is
+not a free unbounded supply: it draws from the shared 0.6-Mt/y source. Any
+future explicit caster/HSM/DSP scrap-generation link must replace, rather than
+duplicate, that internal source. ISO 14021/WSA labels remain reporting
+classifications and do not create another physical supply.

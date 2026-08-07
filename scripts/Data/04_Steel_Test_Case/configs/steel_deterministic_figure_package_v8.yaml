@@ -1,0 +1,55 @@
+package_version: deterministic_plant_behaviour_figures_v8
+selection_policy: default_complete_selection_unless_explicit_subset_requested
+default_complete_selection:
+  - c0-weekly-results-table
+  - c1-weekly-results-table
+  - week-dashboard-c0-perfect_foresight_D
+  - week-dashboard-c0-price_insensitive
+  - week-dashboard-c1-perfect_foresight_D
+  - week-dashboard-c1-price_insensitive
+  - continuous-plant-capacities-c0
+  - continuous-plant-capacities-c1
+  - price-response-heatmap-c0
+  - price-response-heatmap-c1
+  - storage-utilisation-c0
+  - storage-utilisation-c1
+  - qh-h-grouped-economic-comparison
+  - stacked-procurement-cost-per-tonne
+  - procurement-cost-share-piecharts
+  - procurement-cost-hierarchy-sunburst
+  - represented-procurement-cost-table
+  - c1-drp-eaf-dri-example-day-h
+  - emissions-by-carrier-versus-mer-anchor
+formats: [png_300_dpi, svg]
+create_pdf_duplicates: false
+style:
+  human_readable_titles_units_legends: true
+  legends: right_of_axes
+  titles: separate_from_plot_for_cropping
+  time_axis: stop_at_last_observation
+  heatmap_palette: muted_blue_cream_red_with_cell_separators
+  dashboard_site_load_total_line: black
+  dashboard_process_panels: configuration_primary_load_plus_bf6_plus_kgf1
+  continuous_plant_price_panel: day_ahead_price_above_capacity_panels
+  standalone_site_load: omitted_dashboard_contains_same_view
+  storage_inventory_exclusions: [hot_iron_inventory_t]
+  storage_strategy_palette: distinct_muted_blue_and_amber
+  dri_buffer_unit: percent_of_capacity
+  eaf_occupancy_line: omitted
+  eaf_drp_axes: separate_y_axes
+  eaf_load_shape: pure_arc_at_available_resolution_with_optional_5_minute_display
+  eaf_total_line: omitted
+  eaf_explanatory_footer: omitted
+  hsm_load_shape: hourly_step_campaign_load
+  grouped_economic_palette: distinct_muted_blue_and_amber
+  stacked_column_order: descending_largest_at_base
+  emissions_data_labels: segment_when_readable_and_total
+  cost_data_labels: luminance_aware
+  cost_pie_legend: centered_right
+  cost_hierarchy: parent_aligned_nested_ring_with_within_parent_outer_percentages
+capacity_range_source: resolved_plant_capacity_contract.csv
+missing_capacity_range_policy: legacy_fallback_for_historical_runs_only
+scope:
+  qh_style_available: true
+  dam_and_mfrr_slots_reported_only_when_run: true
+  full_four_week_matrix_authorized: false

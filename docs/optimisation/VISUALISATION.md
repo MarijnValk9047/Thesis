@@ -95,3 +95,57 @@ Appendix figures should carry:
 - run-level validation traces;
 - sensitivity and robustness details;
 - intermediate physical ledgers.
+
+## Deterministic steel figure package
+
+The default deterministic C0/C1 package uses the following contracts:
+
+- package v8 reads its complete 19-figure selection and style settings from
+  `scripts/Data/04_Steel_Test_Case/configs/steel_deterministic_figure_package_v8.yaml`;
+  every run writes `resolved_figure_package_settings.json`, and generation
+  fails if a default figure silently disappears or an undeclared figure is
+  added;
+- continuous-plant panels read the exact bounds used by that run from
+  `resolved_plant_capacity_contract.csv`; hard-coded ranges are retained only
+  as a compatibility fallback for historical runs;
+
+- titles use a separate figure-level band and state period, granularity, and
+  physical or accounting boundary;
+- every axis and table value states its unit;
+- legends are placed to the right of the plotting area;
+- time axes end at the final observation and do not add right-hand padding;
+- price-response heatmaps use a muted centred blue-cream-red scale from -1 to
+  +1, with thin separators between cells;
+- continuous-plant panels place the common day-ahead price trace above the
+  plant-capacity panels;
+- site-load stacks show internal generation and grid import, with total load as
+  a black line over an opaque light-grey plotting background; this view belongs
+  in the configuration dashboard and is not duplicated as a stand-alone figure;
+- buffer figures use distinct muted strategy colours and one panel per material,
+  excluding hot iron because its very short-term inventory cycling obscures the
+  longer-duration storage comparison;
+- dashboards replace generic final-product throughput with HSM electricity for
+  C0 and EAF electricity for C1, followed by separate BF6 and KGF1 rate panels;
+- stacked columns place the largest aggregate segment at the base and the
+  smallest at the top; annualised emissions show readable segment labels and a
+  total above every column;
+- cost stacks are reported in EUR/t steel and include represented external
+  procurement only; in-segment labels switch between light and dark text based
+  on fill luminance, while small-segment callouts sit clearly outside the bar;
+- cost-share pies use the same luminance-aware labels, a compact panel layout,
+  and one figure-level legend centred at the right; the companion nested-ring
+  sunburst separates energy carriers from materials before showing purchased
+  cost items;
+- nested-ring cost figures group outer purchased items contiguously inside their
+  inner energy/material parent arc; outer percentages use their parent as the
+  denominator and legend order starts with the two main categories;
+- the DRP/EAF example-day figure gives EAF and DRP separate load axes, omits the
+  internal occupancy trace, and reports the cold-DRI inventory as percent of
+  its represented capacity;
+- emissions charts keep model oxidation carriers separate from MER full-site
+  source classes and state that the two stacks have different boundaries.
+
+Hourly and quarter-hour outputs may share this style only when their model
+support is otherwise matched. Unsolved QH, DAM-only, or mFRR variants must be
+labelled `not run`; they must never be plotted as numerical zeroes. mFRR revenue
+is `not applicable` for deterministic PI/PF benchmarks without an mFRR layer.

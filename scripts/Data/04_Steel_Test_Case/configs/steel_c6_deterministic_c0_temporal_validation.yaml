@@ -1,0 +1,206 @@
+run_family_id: steel_c6_deterministic_c0_temporal_validation_v1_20260805
+mode: deterministic_c0_scalar_temporal_behaviour_validation
+base_temporal_config: scripts/Data/04_Steel_Test_Case/configs/steel_c6_deterministic_temporal_repair.yaml
+behaviour_validation_config: scripts/Data/04_Steel_Test_Case/configs/steel_c6_deterministic_behaviour_anchor_validation.yaml
+temporal_contract_version: c0_deterministic_scalar_temporal_v6_hsm_block_campaign_scrap_cap_1p41Mt
+calendar_contract_version: normal_operation_maintenance_excluded_v1
+objective_mode: scalar_procurement_only
+output_root: data/03_Optimisation/runs/steel_c6_deterministic_c0_temporal_validation_v1_20260805
+four_week_run_contract:
+  regimes: [typical_winter, high_prices, high_volatility, typical_summer]
+  output_policy: thesis_report
+  run_class: diagnostic_validation
+  lineage_role: diagnostic_c0_c1_four_example_week_behaviour_and_economic_reporting
+  retention_status: local_ignored
+  git_eligible: false
+  expected_file_count: 300-330
+  expected_size_mb_upper_bound: 45
+  four_example_weeks_authorized: true
+  full_four_week_market_matrix_authorized: false
+output_policy: thesis_report
+run_class: diagnostic_validation
+lineage_role: diagnostic_c0_scalar_temporal_behaviour_and_anchor_evidence
+retention_status: local_ignored
+git_eligible: false
+
+solver:
+  time_limit_seconds: 6
+  fallback_time_limit_seconds: 60
+  mip_gap: 0.002
+  threads: 1
+  seed: 20260805
+  d5_tolerance: 0.001
+
+calendar:
+  execution_hours: 24
+  physical_horizon_hours: 48
+  maintenance_hours_represented: 0
+  maintenance_policy: normal_operation_maintenance_excluded
+
+c0_material_contract:
+  final_product_t_y: 6750000.0
+  reporting_final_product_t_y: 6750000.0
+  physical_bof_liquid_steel_t_y: 6750000.0
+  physical_final_product_t_y: 6468750.0
+  reporting_normalization_factor: 1.0434782608695652
+  raw_mer_liquid_steel_t_y: 7200000.0
+  denominator_policy: common_6.75_Mt_final_product_operational_basis_with_raw_7.2_Mt_C0_liquid_steel_validation_anchor
+  physical_minima_scaling_policy: do_not_scale_technical_minima_proportionally_to_annual_output
+  c0_anchor_scaling_factor: 0.9375
+  sinter_output_t_y: 3468750.0
+  pefa_output_t_y: 4312500.0
+  imported_pellets_t_y: 1406250.0
+  bof_hot_metal_t_per_t_liquid_steel: 0.875
+  bof_scrap_t_per_t_liquid_steel: 0.208
+  sinter_t_per_t_hot_metal: 0.5873015873015873
+  pellets_t_per_t_hot_metal: 0.9682539682539683
+  annual_external_scrap_cap_t_y: 847500.0
+  annual_internal_scrap_cap_t_y: 562500.0
+  annual_site_scrap_cap_t_y: 1410000.0
+  annual_bof_scrap_cap_t_y: 1410000.0
+  c0_coke_chain_reconciliation:
+    dry_coal_t_per_t_coke: 1.285
+    bf_coke_t_per_t_hot_metal: 0.2857142857142857
+    derivation: scaled_C0_coke_1.6875_Mt_divided_by_modelled_BF6_BF7_hot_metal_5.90625_Mt
+    methodological_status: anchor_reconciled_C0_development_factor_not_technology_recipe
+
+presentation_contract:
+  canonical_final_product_t_y: 6750000.0
+  headline_denominator: normalized_6.75_Mt_final_product
+  raw_mer_values_reporting_role: audit_and_provenance_only
+  physical_model_contract_unchanged: true
+  downstream_normalization:
+    C0:
+      raw_saleable_output_t_y: 6900000.0
+      hsm_final_output_t_y: 5282608.695652174
+      dsp_final_output_t_y: 1467391.3043478262
+    C1:
+      raw_saleable_output_t_y: 7000000.0
+      hsm_final_output_t_y: 5303571.428571428
+      dsp_final_output_t_y: 1446428.5714285714
+  figure_formats: [png]
+
+plant_dynamics:
+  operating_envelope_status: user_authorized_shared_C0_C1_development_bands_near_source_anchors_not_technical_capacity
+  active_operating_ranges_t_h:
+    coking_plant_1: [135.0, 180.0]
+    coking_plant_2: [105.0, 150.0]
+    sintering_plant: [200.0, 340.0]
+    blast_furnace_6: [120.0, 170.0]
+    blast_furnace_7: [170.0, 240.0]
+  normal_reference_rates_t_h:
+    coking_plant_1: 137.5
+    coking_plant_2: 110.0
+    sintering_plant: 307.0506
+    blast_furnace_6: 121.7069
+    blast_furnace_7: 185.448775
+  normalized_capacity_contract:
+    policy: shared_relative_envelope_around_accepted_flat_price_physical_reference
+    calibration_evidence_run: hw_week_hdri_cdri_figures_13
+    selection_rule: smallest_predeclared_asset_family_band_retaining_flat_rolling_feasibility
+    selected_candidate: 1
+    candidate_relative_half_widths:
+      coking_plant: [0.03, 0.05, 0.08]
+      sintering_plant: [0.20, 0.25, 0.30]
+      blast_furnace: [0.15, 0.20, 0.25]
+      pelletizing_plant: [0.03, 0.05, 0.08]
+    rejected_candidates:
+      - {candidate: 1_without_aggregate_floor, result: solver_proven_infeasible, case: C0_price_insensitive_day_7}
+      - {candidate: 2_without_aggregate_floor, result: solver_proven_infeasible, case: C0_price_insensitive_day_6}
+    aggregate_recoverability_floors: {}
+    superseded_aggregate_floor:
+      components: [blast_furnace_6, blast_furnace_7]
+      minimum_combined_rate_t_h: 304.61538462
+      superseded_by: c0_stateful_week_route_and_inventory_recoverability_v1
+      reason: constant_hourly_floor_was_independent_of_inventory_and_remaining_week_obligation
+    price_response_not_used_for_calibration: true
+    assets:
+      coking_plant_1: {display_name: KGF1, family: coking_plant, reference_rate_t_h: 137.5, relative_half_width: 0.03, resolved_minimum_t_h: 135.0, resolved_maximum_t_h: 180.0, ramp_fraction_of_reference_per_setpoint: 0.02, upper_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor, unscaled_source_annual_output_t_y: 1000000.0}
+      coking_plant_2: {display_name: KGF2, family: coking_plant, reference_rate_t_h: 110.0, relative_half_width: 0.03, resolved_minimum_t_h: 105.0, resolved_maximum_t_h: 150.0, ramp_fraction_of_reference_per_setpoint: 0.02, lower_policy: user_authorized_C0_KGF2_source_anchor_development_band, upper_policy: user_authorized_C0_KGF2_source_anchor_development_band, unscaled_source_annual_output_t_y: 800000.0}
+      sintering_plant: {display_name: SiFa, family: sintering_plant, reference_rate_t_h: 307.0506, relative_half_width: 0.20, resolved_minimum_t_h: 200.0, resolved_maximum_t_h: 340.0, ramp_fraction_of_reference_per_setpoint: 0.025, lower_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor, upper_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor}
+      blast_furnace_6: {display_name: BF6, family: blast_furnace, reference_rate_t_h: 121.7069, relative_half_width: 0.15, resolved_minimum_t_h: 120.0, resolved_maximum_t_h: 170.0, ramp_fraction_of_reference_per_setpoint: 0.02, upper_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor, unscaled_source_annual_output_t_y: 2500000.0}
+      blast_furnace_7: {display_name: BF7, family: blast_furnace, reference_rate_t_h: 185.448775, relative_half_width: 0.15, resolved_minimum_t_h: 170.0, resolved_maximum_t_h: 240.0, ramp_fraction_of_reference_per_setpoint: 0.02, upper_policy: user_authorized_C0_BF7_source_anchor_development_band, unscaled_source_annual_output_t_y: 3800000.0}
+      pefa_pellet_output_t: {display_name: PeFa, family: pelletizing_plant, reference_rate_t_h: 466.6603, relative_half_width: 0.03, resolved_minimum_t_h: 450.0, resolved_maximum_t_h: 600.0, ramp_fraction_of_reference_per_setpoint: 0.014, lower_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor, upper_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor, unscaled_source_annual_output_t_y: 4600000.0}
+  sifa:
+    ramp_t_h_per_qh: 7.676265
+    ramp_t_h_per_hour: 7.676265
+    minimum_direction_intervals: 8
+    movement_epsilon_t_h: 0.0001
+  bf6: {setpoint_block_hours: 1.0, maximum_step_t_h: 2.434138}
+  bf7: {setpoint_block_hours: 1.0, maximum_step_t_h: 3.708976}
+  kgf1: {setpoint_block_hours: 4.0, maximum_step_t_h: 2.400405}
+  kgf2: {setpoint_block_hours: 4.0, maximum_step_t_h: 2.400405}
+  pefa:
+    minimum_output_t_h: 450.0
+    maximum_output_t_h: 600.0
+    initial_output_t_h: 466.6603
+    setpoint_block_hours: 4.0
+    maximum_step_t_h: 6.533244
+    imported_pellets_t_y: 1406250.0
+    initial_inventory_t: 25000.0
+    inventory_capacity_t: 50000.0
+    capacity_policy: generic_bounded_bulk_pellet_buffer_development
+  downstream_temporal_contract:
+    hsm_setpoint_block_hours: 1.0
+    hsm_maximum_step_t_h: 200.0
+    hsm_initial_rate_t_h: 485.0
+    hsm_policy: user_authorized_blocked_hourly_development_policy_not_site_truth
+    dsp_setpoint_block_hours: 1.0
+    dsp_final_product_max_t_h: 171.23287671232876
+    capacity_basis: raw_DSP_1.5_Mt_y_divided_by_8760_uniform_development_envelope
+    methodological_status: shared_C0_C1_development_constraint_not_nameplate_capacity
+
+c0_hourly_rolling_contract:
+  contract_version: c0_stateful_week_route_and_inventory_recoverability_v1
+  objective_mode: scalar_procurement_plus_calibrated_inventory_continuation
+  quota_period_hours: 168
+  route_band_fraction: 0.01
+  route_band_basis: user_authorized_one_percent_tolerance_for_rounded_MER_route_anchors
+  route_annual_targets_t_y:
+    C0_BOF_crude_steel_output_t: 6750000.0
+    C0_HSM_final_product_t: 5062500.0
+    C0_DSP_final_product_t: 1406250.0
+  route_target_derivation: scaled_6.75_Mt_C0_liquid_steel_anchor_with_active_HSM_and_DSP_yields
+  active_conversion_reuse:
+    bf_hot_metal_t_per_t_activity: 2.1041666667
+    bof_hot_metal_t_per_t_liquid_steel: 0.875
+    coke_t_per_t_activity: 0.7782101167315175
+    coke_t_per_t_hot_metal: 0.2857142857142857
+    sinter_t_per_t_sifa_activity: 1.23
+    sinter_t_per_t_hot_metal: 0.5873015873015873
+  inventory_components:
+    coke_inventory_t: coke_inventory
+    sinter_inventory_t: sinter_inventory
+    hot_iron_inventory_t: hot_iron_inventory
+    cold_slab_inventory_t: cold_slab_inventory
+  inventory_value_calibration:
+    price_eur_per_mwh: 80.0
+    perturbation_fraction_of_capacity: 0.005
+    method: strict_flat_price_finite_difference_at_governed_terminal_target
+  week_terminal_policy: hard_existing_terminal_inventory_bands_and_route_bands
+  daily_policy: cumulative_week_recoverability_with_calibrated_executed_state_value
+  methodological_status: development_causal_continuation_not_source_nameplate_claim
+
+representative_week:
+  regime: high_volatility
+  strategies:
+    perfect_foresight_D: actual_counterfactual_qh_path
+    price_insensitive: 80.0
+  reporting_hourly_policy: aggregate_four_qh_after_solve
+  recorded_days: 7
+
+bounded_repairs:
+  maximum_iterations: 2
+  setpoint_block_multiplier: 2.0
+  maximum_step_multiplier: 0.5
+  automatic_relaxation_allowed: false
+
+forbidden_scope:
+  dam: true
+  bidding: true
+  mfrr: true
+  stochasticity: true
+  s10: true
+  ets_objective: true
+  full_four_week_matrix: true
+  full_four_week_matrix_authorized: false

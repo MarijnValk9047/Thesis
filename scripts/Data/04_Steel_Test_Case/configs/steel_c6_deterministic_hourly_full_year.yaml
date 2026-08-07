@@ -1,0 +1,64 @@
+run_family_id: steel_c6_deterministic_hourly_full_year_v1_20260806
+mode: deterministic_hourly_c0_c1_pi_pf_full_year
+calendar_contract_version: lear_strict_donly_native_dst_calendar_v1
+price_contract_version: lear_strict_donly_realised_price_repair_v1
+
+period:
+  start_local_date: '2024-10-01'
+  end_exclusive_local_date: '2025-10-01'
+  timezone: Europe/Amsterdam
+  expected_hours: 8760
+  expected_days: 365
+
+realised_price_source:
+  path: data/01_cleaned/Day_ahead_prices/DA_prices/hourly/da_prices_NL_hourly.csv
+  timestamp_column: timestamp_utc
+  price_column: price_eur_per_mwh
+  region_column: region
+  region: NL
+  method: lear_strict_day_local_linear_interpolation_then_daily_median_fallback
+  dst_extension: native_23_25_hour_delivery_days
+  statistical_interpolation_disclosed: true
+
+strategies:
+  - price_insensitive
+  - perfect_foresight_D
+price_insensitive_eur_per_mwh: 80.0
+configurations: [C0, C1]
+calibration:
+  c0_inventory_seed_run_id: hourly_annual_lear_strict_72h_20260806_01
+  reuse_contract: identical_initial_physics_except_annual_contract_label
+execution_order:
+  - C0__price_insensitive
+  - C0__perfect_foresight_D
+  - C1__price_insensitive
+  - C1__perfect_foresight_D
+
+solver:
+  time_limit_seconds: 6
+  fallback_time_limit_seconds: 60
+  mip_gap: 0.002
+  threads: 1
+  seed: 0
+
+reporting:
+  figure_package_version: deterministic_plant_behaviour_figures_v8
+  figure_example_week_start_local_date: '2025-05-12'
+  progress_update_every_days: 1
+  output_policy: thesis_report
+  run_class: diagnostic_validation
+  lineage_role: diagnostic_hourly_c0_c1_full_year_pi_pf_and_figure_evidence
+  retention_status: local_governed_ignored
+  git_eligible: false
+  expected_artifact_count_upper_bound: 3300
+  estimated_output_size_mb_upper_bound: 120
+
+scope:
+  hourly_only: true
+  qh: false
+  dam: false
+  bidding: false
+  mfrr: false
+  stochasticity: false
+  s10: false
+  full_four_week_matrix_authorized: false

@@ -419,3 +419,19 @@ electricity revenue, NG residuals, CO2 objective terms, or executable inputs.
 - Warning that real gas-network operation is more complex than hourly modelled behaviour.
 
 **Caveat:** Public thesis precedent. Not an official Tata public parameter table and not automatically executable/thesis-approved.
+
+## Deterministic temporal-repair development-policy note (2026-08-02)
+
+For `c1_deterministic_temporal_v2`, the user explicitly authorized a bounded
+development policy named `normal_operation_vn25_available`: VN25 is represented
+at 175--350 MW with a 210-MW/h ramp and IJ01 is fully off. At quarter-hour
+resolution this means 43.75--87.5 MWh electricity per interval and at most
+52.5 MW power change (13.125 MWh interval-energy change), including the rolling
+day boundary. Startup, minimum-up/down, outage and CHP features remain omitted.
+
+These minimum-output and ramp values are not derived from S1--S6 and must not
+be described as technical Tata-site truth. The first governed validation run
+stopped earlier on an independent sinter/BF/BOF source-contract infeasibility,
+so it did not validate this VN25 development policy. Its status remains
+explicitly user-authorized and unvalidated; it is not a replacement for the
+missing source evidence on stable load, ramping, CHP duty or availability.

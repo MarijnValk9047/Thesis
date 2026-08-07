@@ -1,0 +1,261 @@
+run_id: steel_c6_deterministic_scalar_temporal_repair_v2_20260803
+mode: deterministic_c1_scalar_temporal_contract_repair
+temporal_contract_version: c1_deterministic_scalar_temporal_v11_eaf_hsm_load_shape
+calendar_contract_version: normal_operation_maintenance_excluded_v1
+objective_mode: scalar_procurement_plus_linear_continuation
+output_policy: minimal
+run_class: diagnostic_validation
+lineage_role: diagnostic_superseding_lexicographic_temporal_evidence
+output_root: data/03_Optimisation/runs/steel_c6_deterministic_scalar_temporal_repair_v2_20260803
+retention_status: local_ignored
+git_eligible: false
+
+deterministic_temporal_repair:
+  base_context_config: scripts/Data/04_Steel_Test_Case/configs/steel_c6_phase6d_eaf_heat_state_one_day.yaml
+  configuration_id: C1_phase1_BF_BOF_plus_DRP_EAF
+  economic_horizon_hours: 24
+  physical_horizon_hours: 48
+  robustness_physical_horizon_hours: 72
+  offline_week_horizon_hours: 168
+  time_step_hours: 0.25
+  solver_time_limit_seconds: 900
+  operational_time_limit_seconds: 6
+  operational_fallback_time_limit_seconds: 60
+  feasibility_initial_time_limit_seconds: 60
+  feasibility_extended_time_limit_seconds: 900
+  strict_mip_gap: 0.0
+  runtime_mip_gap: 0.002
+  runtime_mip_focus: 1
+  solver_seed: 0
+  solver_threads: 1
+  represented_cost_preservation_tolerance: inherited_absolute_eur
+  annual_anchor_worsening_tolerance_fraction: 0.01
+  d5_annual_anchor_drift_tolerance_fraction: 0.001
+  d5_strict_time_limit_seconds: 120
+  d5_strict_relative_gap: 0.001
+  d5_strict_absolute_gap_eur: 1.0
+  d5_rate_tolerance_t_h: 0.1
+  d5_inventory_tolerance_t: 0.1
+  d5_route_tolerance_t: 0.1
+  d5_vn25_tolerance_mw: 0.01
+  d5_scrap_tolerance_t: 0.1
+
+  continuous_must_run_assets:
+    coking_plant_1: {minimum_rate_t_h: 135.0, maximum_rate_t_h: 180.0, quantity_role: bounded_price_responsive_dry_coal_activity_around_route_anchor, rate_unit: t_dry_coal/h}
+    sintering_plant: {minimum_rate_t_h: 200.0, maximum_rate_t_h: 340.0, quantity_role: represented_iron_ore_feed, rate_unit: t_iron_ore/h}
+    blast_furnace_6: {minimum_rate_t_h: 120.0, maximum_rate_t_h: 170.0, quantity_role: governed_represented_bf_activity_proxy, rate_unit: t_represented_bf_activity/h}
+    drp_pellet_input: {minimum_rate_t_h: 350.0, maximum_rate_t_h: 550.0}
+
+  kgf1_route_scale_reconciliation:
+    active: true
+    raw_kgf1_coke_anchor_t_y: 1000000.0
+    raw_bof_liquid_steel_anchor_t_y: 3400000.0
+    annual_dry_coal_target_t_y: 1258525.9861080882
+    derivation: raw_KGF1_coke_anchor_times_active_BOF_fixed_reference_scale_times_dry_coal_per_coke
+    status: route_scaled_fixed_reference_development_floor_not_technical_minimum
+    bounded_operating_min_t_h: 135.0
+    bounded_operating_max_t_h: 180.0
+    anchor_role: validation_only_mer_annual_reference_physical_coke_balance_drives_output
+
+  c1_bf_material_interface:
+    activity_quantity_role: governed_represented_bf_activity_proxy
+    activity_rate_unit: t_represented_bf_activity/h
+    hot_metal_t_per_t_represented_bf_activity: 2.1041666667
+    sinter_t_per_t_hot_metal: 1.0
+    annual_sinter_anchor_t_y: 2800000.0
+    annual_hot_metal_anchor_t_y: 2800000.0
+    sensitivity_sinter_t_per_t_hot_metal: 1.088
+    sensitivity_status: predetermined_offline_only
+
+  sifa_operating_metadata:
+    represented_iron_ore_feed_min_t_h: 160.0
+    represented_iron_ore_feed_max_t_h: 320.0
+    sinter_t_per_t_represented_ore: 1.230
+    line_policy: typically_two_of_three_active_one_standby_reporting_only
+    omitted_without_data: [line_binaries, maintenance_calendar]
+    normal_fuel: COG
+    named_ng_policy: explicit_KGF1_gas_cleaning_maintenance_only_not_price_choice
+
+  plant_dynamics:
+    methodological_status: user_authorized_development_policy_not_site_truth
+    normal_reference_rates_t_h:
+      coking_plant_1: 143.6674
+      sintering_plant: 250.6255
+      blast_furnace_6: 147.4095
+      drp_pellet_input: 350.0
+    normalized_capacity_contract:
+      policy: shared_relative_envelope_around_accepted_flat_price_physical_reference
+      calibration_evidence_run: hw_week_hdri_cdri_figures_13
+      selection_rule: smallest_predeclared_asset_family_band_retaining_flat_rolling_feasibility
+      selected_candidate: 1
+      candidate_relative_half_widths:
+        coking_plant: [0.03, 0.05, 0.08]
+        sintering_plant: [0.20, 0.25, 0.30]
+        blast_furnace: [0.15, 0.20, 0.25]
+        pelletizing_plant: [0.03, 0.05, 0.08]
+      rejected_candidates:
+        - {candidate: 1_without_aggregate_floor, result: solver_proven_infeasible, case: C0_price_insensitive_day_7}
+        - {candidate: 2_without_aggregate_floor, result: solver_proven_infeasible, case: C0_price_insensitive_day_6}
+      price_response_not_used_for_calibration: true
+      assets:
+          coking_plant_1: {display_name: KGF1, family: coking_plant, reference_rate_t_h: 143.6674, relative_half_width: 0.03, resolved_minimum_t_h: 135.0, resolved_maximum_t_h: 180.0, ramp_fraction_of_reference_per_setpoint: 0.02, lower_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor, upper_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor}
+          sintering_plant: {display_name: SiFa, family: sintering_plant, reference_rate_t_h: 250.6255, relative_half_width: 0.20, resolved_minimum_t_h: 200.0, resolved_maximum_t_h: 340.0, ramp_fraction_of_reference_per_setpoint: 0.025, lower_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor, upper_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor}
+          blast_furnace_6: {display_name: BF6, family: blast_furnace, reference_rate_t_h: 147.4095, relative_half_width: 0.15, resolved_minimum_t_h: 120.0, resolved_maximum_t_h: 170.0, ramp_fraction_of_reference_per_setpoint: 0.02, lower_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor, upper_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor}
+          pefa_pellet_output_t: {display_name: PeFa, family: pelletizing_plant, reference_rate_t_h: 541.0629, relative_half_width: 0.03, resolved_minimum_t_h: 450.0, resolved_maximum_t_h: 600.0, ramp_fraction_of_reference_per_setpoint: 0.014, lower_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor, upper_policy: user_authorized_shared_C0_C1_development_band_near_source_anchor}
+    sifa:
+      ramp_t_h_per_qh: 6.265638
+      ramp_t_h_per_hour: 6.265638
+      ramp_fraction_of_reference_per_qh: 0.025
+      minimum_direction_intervals: 8
+      minimum_direction_hours: 2.0
+      movement_epsilon_t_h: 0.0001
+      sensitivity_ramps_t_h_per_qh: [6.4, 9.6, 16.0]
+      sensitivity_direction_hours: [1.0, 3.0]
+    bf6:
+      setpoint_block_hours: 1.0
+      maximum_step_t_h: 2.94819
+      maximum_step_fraction_of_reference_per_hour: 0.02
+      bounded_response_reason: retained_reachability_after_half_ramp_proved_infeasible
+    kgf1:
+      setpoint_block_hours: 4.0
+      maximum_step_t_h: 2.873348
+      price_response_basis: Badarinath_precedent_user_authorized_bounded_development
+    drp:
+      setpoint_block_hours: 1.0
+      maximum_step_t_h: 12.5
+    pefa:
+      minimum_output_t_h: 450.0
+      maximum_output_t_h: 600.0
+      initial_output_t_h: 541.0629
+      setpoint_block_hours: 4.0
+      maximum_step_t_h: 7.574881
+      imported_pellets_t_y: 200000.0
+      bf_pellets_t_per_t_hot_metal: 0.506
+      initial_inventory_t: 50000.0
+      capacity_policy: practically_non_binding_bulk_solid_storage
+    downstream_block_sensitivity:
+      active: false
+      block_hours: 2.0
+      components: [basic_oxygen_furnace, hot_strip_mill]
+      sensitivity_block_hours: [1.0, 2.0, 4.0]
+      status: offline_only_pending_batch_and_caster_source_contract
+    downstream_temporal_contract:
+      hsm_setpoint_block_hours: 1.0
+      hsm_maximum_step_t_h: 200.0
+      hsm_initial_rate_t_h: 470.0
+      hsm_policy: user_authorized_blocked_hourly_development_policy_not_site_truth
+      dsp_setpoint_block_hours: 1.0
+      dsp_final_product_max_t_h: 171.23287671232876
+      capacity_basis: raw_DSP_1.5_Mt_y_divided_by_8760_uniform_development_envelope
+      methodological_status: shared_C0_C1_development_constraint_not_nameplate_capacity
+
+  maintenance_availability_sensitivity:
+    status: separately_reviewed_calendar_sensitivity_not_promoted_thesis_input
+    eaf_weekly_outage_hours: 8
+    eaf_annual_outage_days: 14
+    drp_monthly_outage_days: 1
+    drp_annual_outage_days: 21
+    timing_source_status: unspecified_use_predetermined_calendar_variants
+    overlap_source_status: unspecified_report_separately
+    drp_physical_shutdown_model_status: unavailable_no_warm_hold_bypass_coefficients
+    annual_calendar_variants: [staggered, clustered, maximum_overlap]
+
+  causal_flat_year:
+    calendar_contract_version: normal_operation_maintenance_excluded_v1
+    calendar_year: 2025
+    timezone: Europe/Amsterdam
+    output_root: data/03_Optimisation/runs/steel_c6_causal_flat_year_v1_20260803
+    output_policy: minimal
+    run_class: diagnostic_validation
+    lineage_role: diagnostic_annual_operational_anchor_re_evaluation
+    flat_electricity_price_eur_per_mwh: 75.0
+    maintenance_hours_represented: 0
+    annual_availability_comparable: false
+    major_outage_certified: false
+    heat_target_daily_tolerance: 4
+    routine_quota_normal_day_upper_taps: 29
+    final_product_daily_tolerance_fraction: 0.005
+    final_product_year_terminal_tolerance_t: 0.5
+    solver_feasibility_tolerance: 1.0e-9
+    core_material_anchor_relative_tolerance: 0.05
+    maximum_model_builds: 370
+    maximum_solve_attempts: 740
+    estimated_output_size_mb_upper_bound: 75
+    drp_outage_physical_status: reporting_only_missing_warm_hold_bypass_start_stop_contract
+
+  scrap_origin_contract:
+    annual_bof_scrap_cap_t_y: 1000000.0
+    annual_eaf_scrap_cap_t_y: 900000.0
+    annual_external_scrap_cap_t_y: 1300000.0
+    annual_internal_scrap_cap_t_y: 600000.0
+    annual_site_scrap_cap_t_y: 1900000.0
+    quota_period_hours: 8760
+    route_allocation: endogenous
+    availability_policy: rolling_horizon_cumulative_annual_quota_no_intrahorizon_profile
+    internal_source_policy: bounded_site_reuse_source_no_caster_hsm_dsp_link
+    reporting_classifications: ISO14021_WSA_nonphysical
+
+  c1_metallics_sensitivity:
+    mode: base
+    hbi_annual_cap_t_y: 0.0
+    eaf_hdri_t_per_t_liquid_steel: 0.8484848485
+    eaf_scrap_t_per_t_liquid_steel: 0.2727272727
+    dri_buffer_representation: cold_dri_timing_buffer_with_direct_hdri_feed
+    dri_buffer_active_capacity_t: 17760.0
+    dri_buffer_source_candidate_t: 15350.0
+    buffer_capacity_change_authorized: false
+    dri_thermal_state_mode: hdri_direct_plus_cdri_buffer
+    hdri_temperature_c: 600.0
+    cdri_temperature_c: 50.0
+    cold_dri_max_share_of_eaf_dri: 0.30
+    cold_dri_eaf_arc_electricity_premium_fraction: 0.25
+    thermal_state_policy_status: explicit_user_authorized_development_policy
+
+  generator_mode:
+    mode_id: normal_operation_vn25_available
+    vn25_minimum_output_mw: 175.0
+    vn25_maximum_output_mw: 350.0
+    vn25_ramp_mw_per_h: 210.0
+    ij01_forced_off: true
+    development_policy_authorization: explicit_user_authorized_development_policy_not_site_truth
+    prohibited_features: [startup, minimum_up_down, outage, chp]
+
+  eaf_heat_contract:
+    annual_route_basis_t: 3232012.260
+    external_mer_reference_t: 3300000.0
+    heat_size_t: 325.0
+    melting_qh_steps: 2
+    tapping_qh_steps: 1
+    normal_day_initial_lower_taps: 20
+    normal_day_initial_upper_taps: 32
+    fallback_lower_taps: 26
+    fallback_upper_taps: 28
+    normal_day_forbidden_taps: 34
+    quota_period_hours: 168
+
+  price_profiles_eur_per_mwh:
+    flat: {first_12h: 75.0, second_12h: 75.0}
+    cheap_to_expensive: {first_12h: 20.0, second_12h: 120.0}
+    expensive_to_cheap: {first_12h: 120.0, second_12h: 20.0}
+    negative_price: {first_12h: -50.0, second_12h: -50.0}
+  causal_week_daily_flat_prices_eur_per_mwh: [70.0, 20.0, 100.0, 60.0, 80.0, 40.0, 90.0]
+
+  planned_full_run:
+    model_build_count_upper_bound: 75
+    solve_attempt_count_upper_bound: 120
+    estimated_output_size_mb_upper_bound: 100
+    maximum_figure_count: 4
+    full_four_week_matrix_authorized: false
+
+forbidden_scope:
+  s10: true
+  bids: true
+  scenarios: true
+  probabilities: true
+  clearing: true
+  settlement: true
+  stochasticity: true
+  cvar: true
+  mfrr: true
+  final_periods: true
+  full_four_week_matrix: true

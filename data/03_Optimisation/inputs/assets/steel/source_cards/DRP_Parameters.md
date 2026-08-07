@@ -350,3 +350,28 @@ The following are **not** first-base inputs:
 - Selective CO2 by-product/storage/sale potential around 256 kg CO2/t DRI.
 - Uncaptured CO2 sensitivity around 200 kg CO2/t DRI for 100% NG fired-PGH case.
 - Electric process gas heater / E-PGH capacity values are deferred and not base model inputs.
+
+## Temporal-v3 HDRI/CDRI Buffer And HBI Boundary (2026-08-06)
+
+The deterministic rolling model now distinguishes direct HDRI from stored
+CDRI. DRP output is allocated either directly to the EAF as HDRI or to the
+cold-DRI timing buffer; EAF DRI input is covered by direct HDRI plus CDRI
+withdrawn from inventory. The currently inherited executable capacity remains
+17,760 t; the 15,350-t value above remains a provenance/development candidate.
+This difference is not resolved by changing capacity for feasibility.
+
+The executable temperatures are 600 °C for direct HDRI and 50 °C for CDRI.
+The former is the conservative lower end of the MER 600--700 °C discharge
+range; the latter is an explicit user-authorised development value. The model
+does not represent cooling time, heat loss, multiple silos, residence time or
+temperature decay within either state. CDRI withdrawn in an interval must have
+been present at the start of that interval, preventing newly produced HDRI
+from being cooled and re-used immediately as CDRI.
+
+HDRI from the DRP remains the active base EAF input. Imported HBI is exactly
+zero in the base case. A separate offline HBI sensitivity may import at most
+1.1 Mt/y and may only replace DRI-equivalent input at unchanged EAF liquid-steel
+output. It is neither DRP output nor free opening stock. No HBI storage,
+thermal advantage or energy coefficient is inferred. The DRP band remains
+1.9--2.8 Mt/y; any conflict between its lower bound, the 1.1-Mt/y HBI endpoint
+and fixed EAF output is reported as source rounding rather than tuned away.

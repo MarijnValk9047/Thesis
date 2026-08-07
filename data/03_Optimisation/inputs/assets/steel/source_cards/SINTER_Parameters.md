@@ -79,3 +79,24 @@ These ratios are development coupling coefficients for the current C5 route diag
 The first-step abstraction excludes limestone, lime, dolomite, coke breeze, return fines, residues, detailed chemistry, off-gas, dust, gas cleaning, cooler heat recovery, waste-heat recovery, Sinter off-gas useful-WAG modelling, ETS objective steering, product revenue, DA price response, and Sinter ramp/flex scheduling.
 
 Sinter aggregate CO2 is a diagnostic counter. When this aggregate counter is active, full Sinter COG or NG combustion CO2 must not also be booked as objective emissions or total direct CO2 unless a later governed carbon-accounting layer explicitly resolves the double-counting boundary.
+
+## C1 Temporal-v2 Material-Chain Interpretation (2026-08-03)
+
+The deterministic C1 temporal repair keeps SiFa continuous and must-run at
+160--320 t/h **represented iron-ore feed**. The executable development link is
+1.230 t sinter per tonne represented ore. This rate is not BF6 activity and is
+not relabelled as direct BF sinter consumption.
+
+For the configuration-matched C1 material interface, 2.8 Mt/y sinter and
+2.8 Mt/y BF6 hot metal imply a central development coupling of 1.0 t sinter/t
+hot metal. A ratio of 1.088 t/t is retained only as a predetermined offline
+sensitivity; it is not used to repair base feasibility.
+
+The MER/SiFa operating description is retained as source-card metadata:
+
+- normally two of three sinter lines operate and one is on standby;
+- no line binaries, maintenance calendar or ramp are introduced without
+  additional data;
+- COG is the normal represented SiFa fuel;
+- named NG is permitted only for an explicitly modelled KGF1 gas-cleaning
+  maintenance situation, never as an unconstrained price choice.

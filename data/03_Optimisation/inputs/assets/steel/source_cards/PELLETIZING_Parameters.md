@@ -301,3 +301,27 @@ Base modelling choice:
 Use Option A for first implementation.
 Do not impose a fixed Malerij/Branderij gas split unless diagnostics show false gas allocation.
 ```
+
+## C0 temporal development status (2026-08-05)
+
+The C0 temporal model represents PeFa production (4.3125 Mt/y comparison basis)
+and source-backed pellet imports (1.40625 Mt/y) as separate origins feeding a
+closed pellet inventory. PeFa uses 465.75--513.1875 t/h, four-hour setpoints and
+at most 6.9 t/h change per setpoint. These are development constraints, not
+source-certified operating limits. PeFa stays at its lower bound in the accepted
+high-volatility week; no artificial flexibility or bound widening was added.
+
+## Pellet-origin ledger status (2026-08-05)
+
+The deterministic C0/C1 temporal builders now conserve pellet origins
+explicitly. Internal PeFa pellets, external BF-grade pellets and external
+DR-grade pellets are separate accounting flows. In C0, the normalized
+1.40625-Mt/y external origin can feed only the BF route. In C1, the 0.2-Mt/y
+external origin can feed only the DRP; PeFa output supplies the remaining BF
+and DRP pellet demand through a carried internal inventory. Only the two
+external origins receive a pellet purchase price.
+
+This closes origin conservation and prevents all DRP pellet input from being
+misclassified as imported. It does not prove that every internal PeFa pellet
+meets DR-grade specifications: internal PeFa quality remains a generic fired-
+pellet proxy pending source evidence on product grades, blending and storage.

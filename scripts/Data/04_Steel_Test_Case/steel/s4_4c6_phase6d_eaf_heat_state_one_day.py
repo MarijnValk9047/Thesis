@@ -834,133 +834,43 @@ def _split_horizon_support(
 
 
 def _canonical_eaf_start_expression(model: Any) -> Any:
-    """Choose one reproducible EAF timing after preserving physical objectives.
+    """Return the v2-safe algebraic final tie-break.
 
-    Flat-price heat timing is otherwise non-unique.  An increasing timestamp
-    weight selects the earliest feasible pattern without changing production,
-    represented cost or the existing physical tie-break optimum.
+    Timestamp-weighted EAF starts were an ungoverned production-timing
+    incentive.  Historical stochastic paths are superseded under temporal
+    contract v2, so this compatibility hook may no longer steer a monitored
+    physical KPI.
     """
 
     if not hasattr(model, "eaf_heat_start"):
         raise Phase6DError("The Phase-6D C1 model has no EAF heat-start state.")
-    return sum(
-        (int(q) + 1) * model.eaf_heat_start[q]
-        for q in model.TIME
-    )
+    return 0.0 * sum(model.eaf_heat_start[q] for q in model.TIME)
 
 
 def _canonical_physical_path_expression(model: Any) -> Any:
-    """Select one granularity-independent path after primary optima are fixed."""
+    """Do not timestamp-weight inventories, production, energy or fuel."""
 
-    weighted_components = (
-        ("coke_inventory", 1e-6),
-        ("sinter_inventory", 1e-6),
-        ("hot_iron_inventory", 1e-6),
-        ("cold_slab_inventory", 1e-6),
-        ("dri_inventory", 1e-6),
-        ("final_product_output", 1e-4),
-        ("net_grid_import_mwh", 1e-5),
-        ("total_generator_electricity_mwh", 1e-5),
-        ("total_named_ng_procurement_mwh", 1e-5),
-    )
-    terms = []
-    for name, scale in weighted_components:
-        if not hasattr(model, name):
-            continue
-        component = getattr(model, name)
-        terms.extend(
-            float(scale) * (int(q) + 1) * component[q]
-            for q in model.TIME
-        )
-    if not terms:
+    if not hasattr(model, "final_product_output"):
         raise Phase6DError("No physical state is available for path canonicalisation.")
-    return sum(terms)
+    return 0.0 * sum(model.final_product_output[q] for q in model.TIME)
 
 
 def _handoff_state_tiebreak_expression(model: Any, execution_steps: int) -> Any:
-    """Project the frozen tie-break onto variables exported to the next replan."""
+    """Keep handoff state out of objectives under temporal contract v2."""
 
     handoff = int(execution_steps) - 1
     if handoff < 1:
         raise Phase6DError("The handoff tie-break requires at least two intervals.")
-    inventory_names = (
-        "coke_inventory",
-        "sinter_inventory",
-        "hot_iron_inventory",
-        "cold_slab_inventory",
-        "dri_inventory",
-    )
-    continuous_state = sum(
-        getattr(model, name)[handoff]
-        for name in inventory_names
-        if hasattr(model, name)
-    )
-    if hasattr(model, "drp_pellet_input"):
-        continuous_state += model.drp_pellet_input[handoff]
-    discrete_state = 0.0
-    if hasattr(model, "eaf_heat_start"):
-        discrete_state += (
-            model.eaf_heat_start[handoff]
-            + model.eaf_heat_start[handoff - 1]
-        )
-    if hasattr(model, "drp_on"):
-        discrete_state += model.drp_on[handoff]
-    return discrete_state + 1e-8 * continuous_state
+    return 0.0 * model.final_product_output[handoff]
 
 
 def _execution_window_tiebreak_expression(
     model: Any, execution_steps: int
 ) -> Any:
-    """Apply the frozen physical tie-break only to the executed 24-hour window."""
+    """Keep executed physical KPIs out of legacy tie-break objectives."""
 
     indices = tuple(range(int(execution_steps)))
-    process_names = (
-        "coking_plant_1",
-        "sintering_plant",
-        "blast_furnace_6",
-        "basic_oxygen_furnace",
-        "hot_strip_mill",
-    )
-    commitment = sum(model.eaf_heat_start[t] for t in indices)
-    commitment += sum(model.drp_on[t] for t in indices)
-    commitment += sum(
-        getattr(model, f"{name}_on")[t]
-        for name in process_names
-        for t in indices
-    )
-    inventory = 1e-8 * sum(
-        model.dri_inventory[t]
-        + model.coke_inventory[t]
-        + model.sinter_inventory[t]
-        + model.hot_iron_inventory[t]
-        + model.cold_slab_inventory[t]
-        for t in indices
-    )
-    flare = 1e-6 * sum(
-        model.bfg_flared[t] + model.cog_flared[t] + model.bofg_flared[t]
-        for t in indices
-    )
-    controller = sum(
-        model.hsm_carrier_precedence_penalty[t]
-        + 1e-5
-        * (
-            model.ng_to_pefa_malerij_mwh[t]
-            + model.ng_to_pefa_branderij_mwh[t]
-            + model.ng_to_boiler_mwh[t]
-            + model.generator_named_ng_mwh[t]
-        )
-        for t in indices
-    )
-    daily = 0.0
-    if hasattr(model, "COMMITMENT_DAY"):
-        execution_days = max(1, math.ceil(int(execution_steps) / 96))
-        daily = 1e-4 * sum(
-            getattr(model, f"{name}_day_on")[day]
-            for name in (*process_names, "drp")
-            for day in model.COMMITMENT_DAY
-            if int(day) < execution_days
-        )
-    return commitment + inventory + flare + controller + daily
+    return 0.0 * sum(model.final_product_output[t] for t in indices)
 
 
 def _planning_tiebreak_expression(
@@ -3747,6 +3657,11 @@ def solve_grouped_actual_redispatch(
     imbalance_penalty_eur_per_mwh: float | None = None,
     progress_callback: SolverProgressCallback | None = None,
 ) -> Phase6DRedispatchResult:
+    if rolling_state.temporal_contract_version is not None:
+        raise Phase6DError(
+            "Versioned deterministic temporal state cannot enter Phase-6D "
+            "market redispatch or reuse its checkpoints/warm starts."
+        )
     model, solver_record, _ = _solve_grouped_redispatch_model(
         context,
         configuration,

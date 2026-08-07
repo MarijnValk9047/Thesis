@@ -1,0 +1,60 @@
+run_family_id: steel_c6_deterministic_qh_full_year_v1_20260807
+mode: deterministic_qh_c0_c1_pi_pf_full_year
+calendar_contract_version: lear_strict_donly_native_dst_qh_calendar_v1
+price_contract_version: realised_hourly_anchor_plus_frozen_mean_preserving_qh_shape_v1
+
+period:
+  start_local_date: '2024-10-01'
+  end_exclusive_local_date: '2025-10-01'
+  timezone: Europe/Amsterdam
+  expected_hours: 8760
+  expected_qh_intervals: 35040
+  expected_days: 365
+
+qh_price_bundle:
+  path: data/03_Optimisation/runs/steel_c6_deterministic_qh_full_year_v1_20260807/qh_d0_price_calendar_20260807_01/annual_qh_price_ledger.parquet
+  summary_path: data/03_Optimisation/runs/steel_c6_deterministic_qh_full_year_v1_20260807/qh_d0_price_calendar_20260807_01/annual_qh_pricebundle_summary.json
+  path_kind: counterfactual_actual
+  scenario_id: ACTUAL
+  classification: counterfactual_mean_preserving_qh_prices_on_realised_hourly_anchor
+  observed_historical_qh_da_prices_claimed: false
+  random_seed: 20260731
+  mean_preservation_tolerance_eur_per_mwh: 1.0e-10
+
+strategies: [price_insensitive, perfect_foresight_D]
+price_insensitive_eur_per_mwh: 80.0
+configurations: [C0, C1]
+execution_order:
+  - C0__price_insensitive
+  - C0__perfect_foresight_D
+  - C1__price_insensitive
+  - C1__perfect_foresight_D
+
+solver:
+  time_limit_seconds: 6
+  fallback_time_limit_seconds: 60
+  mip_gap: 0.002
+  threads: 1
+  seed: 0
+
+reporting:
+  figure_package_version: deterministic_plant_behaviour_figures_v8
+  figure_example_week_start_local_date: '2025-05-12'
+  progress_update_every_days: 1
+  output_policy: thesis_report
+  run_class: diagnostic_validation
+  lineage_role: diagnostic_qh_c0_c1_full_year_pi_pf_mean_preserving_shape_evidence
+  retention_status: local_governed_ignored
+  git_eligible: false
+  expected_artifact_count_upper_bound: 3300
+  estimated_output_size_mb_upper_bound: 500
+
+scope:
+  hourly_only: false
+  qh: true
+  dam: false
+  bidding: false
+  mfrr: false
+  stochasticity: false
+  s10: false
+  full_four_week_matrix_authorized: false

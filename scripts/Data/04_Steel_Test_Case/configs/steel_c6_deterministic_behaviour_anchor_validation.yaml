@@ -1,0 +1,93 @@
+run_family_id: steel_c6_deterministic_behaviour_anchor_validation_v2_20260804
+mode: deterministic_c1_plant_behaviour_and_partial_year_anchor_validation
+temporal_contract_version: c1_deterministic_scalar_temporal_v11_eaf_hsm_load_shape
+calendar_contract_version: normal_operation_maintenance_excluded_v1
+objective_mode: scalar_procurement_plus_linear_continuation
+output_root: data/03_Optimisation/runs/steel_c6_deterministic_behaviour_anchor_validation_v2_20260804
+output_policy: thesis_report
+run_class: diagnostic_validation
+lineage_role: diagnostic_selected_week_c0_c1_behaviour_and_anchor_evidence
+retention_status: local_ignored
+git_eligible: false
+
+base_temporal_config: scripts/Data/04_Steel_Test_Case/configs/steel_c6_deterministic_temporal_repair.yaml
+continuation_calibration: data/03_Optimisation/runs/steel_c6_deterministic_scalar_temporal_repair_v2_20260803/normal_operation_maintenance_excluded_d1_d5_20260804_02/continuation_calibration.json
+partial_year_source_run: data/03_Optimisation/runs/steel_c6_causal_flat_year_v1_20260803/normal_operation_maintenance_excluded_anchor_validation_20260804_01
+partial_year_replay_days: 362
+
+representative_week_source:
+  root: data/02_Forecasting/01_DA_prices/scenario_evaluation/representative_regime_study/study_preparation/20260731_four_regime_inputs_s10_s30_v11
+  selected_weeks_file: selected_regime_weeks.csv
+  quarterhour_overlay_file: counterfactual_qh_overlay.parquet
+  deterministic_path_kind: point_shape
+  deterministic_scenario_id: POINT
+  price_field: quarterhour_price
+  counterfactual_not_observed_truth: true
+
+representative_week_strategies:
+  - strategy_id: perfect_foresight_D
+    optimisation_price: actual_counterfactual_qh_path
+  - strategy_id: price_insensitive
+    optimisation_price: fixed_80_eur_per_mwh
+    flat_price_eur_per_mwh: 80.0
+representative_week_reporting_hourly_policy: aggregate_four_qh_after_solve
+c0_current_temporal_coverage: unavailable_pending_c0_scalar_temporal_contract
+active_c1_calibration_bundle:
+  wag_self_use_diagnostic: true
+  generator_efficiency_418: true
+  process_electricity_overlay: true
+  ng_service_anchor_overlay: true
+  coal_wag_carbon_overlay: true
+  classification: user_authorized_experimental_anchor_calibration_bundle
+current_annual_anchor_source:
+  file: data/03_Optimisation/runs/steel_c6_deterministic_scalar_temporal_repair_v2_20260803/eff418_elec_ng_coal_wag_carbon_01/annual_operational_anchor_results.csv
+  evaluation_id: D3_causal_week
+  status: representative_period_annualised_current_calibration_bundle
+
+synthetic_cases:
+  flat: {first_12h: 75.0, second_12h: 75.0}
+  cheap_to_expensive: {first_12h: 20.0, second_12h: 120.0}
+  expensive_to_cheap: {first_12h: 120.0, second_12h: 20.0}
+  negative_price_block: {first_12h: -50.0, second_12h: 75.0}
+  positive_price_spike: {base: 75.0, spike_start_qh: 40, spike_end_qh: 48, spike: 250.0}
+
+behaviour_contract:
+  extend_time_limited_gate_cases: true
+  diagnostic_extended_time_limit_seconds: 60
+  continuous_incumbent_polish_time_limit_seconds: 15
+  bound_tolerance: 1.0e-5
+  movement_epsilon: 1.0e-4
+  maximum_avoidable_flare_plus_named_ng_mwh: 1.0e-6
+  balance_tolerance: 1.0e-6
+  correlation_lag_qh: 8
+  drp_maximum_direction_reversals_per_day: 12
+  downstream_free_qh_change_fraction_failure: 0.95
+
+partial_year_labels:
+  period_classification: partial_year_8688h
+  annualisation_label: provisional_annualised_diagnostic
+  validation_status: not_full_year_validated
+  represented_hours: 8688
+  source_prorata_factor: 0.9917808219178083
+  annualisation_factor: 1.0082872928176796
+
+planned_run:
+  synthetic_model_builds: 5
+  representative_week_model_builds: 56
+  partial_year_replay_model_builds: 365
+  maximum_model_builds: 400
+  maximum_solve_attempts: 800
+  estimated_runtime_minutes: 12
+  estimated_output_size_mb_upper_bound: 100
+  planned_artifact_count_upper_bound: 260
+  maximum_figure_count: 40
+
+forbidden_scope:
+  dam: true
+  bids: true
+  mfrr: true
+  stochasticity: true
+  cvar: true
+  s10: true
+  full_four_week_matrix: true
+  full_four_week_matrix_authorized: false

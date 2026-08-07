@@ -308,3 +308,32 @@ Do not claim that:
 Most defensible thesis wording:
 
 > BF6 and BF7 are represented as continuous, production-coupled blast-furnace links. Public Tata/MER material supports the topology and Heracless closure logic, while generic technical literature and governed development assumptions provide candidate coefficients. BFG is represented as a separate WAG carrier, with hot-stove self-use deducted before surplus BFG enters the site WAG network. BF CO2 is initially represented with an aggregate hot-metal counter to avoid double-counting BFG carbon before a fully WAG-explicit carbon ledger is implemented.
+
+## 13. C1 Temporal-v2 Activity And Material Interface (2026-08-03)
+
+This section supersedes the earlier temporal interpretation that treated the
+BF6 represented-activity bus as physical sinter. It does not rewrite the
+historical Gate-1 evidence.
+
+- `blast_furnace_6 = 120--170 t_represented_bf_activity/h` remains a governed
+  continuous, must-run activity proxy.
+- `bf6_hot_iron_output = 2.1041666667 * bf6_represented_activity` has units
+  t hot metal/h. The coefficient is therefore not a sinter-burden factor.
+- Physical C1 sinter consumption is a separate flow. The configuration-matched
+  base is `bf_sinter_input = 1.0 * bf6_hot_iron_output`, anchored by 2.8 Mt/y
+  sinter and 2.8 Mt/y hot metal.
+- `1.088 t sinter/t hot metal` is a predetermined offline sensitivity only.
+  It must not be selected endogenously or used to make the central case
+  feasible.
+
+The 120--170 range must consequently never be reported as t sinter/h. Neither
+the 1.0 central coupling nor the 1.088 sensitivity is a universal BF burden
+recipe.
+
+## C0 temporal development status (2026-08-05)
+
+C0 keeps BF6 and BF7 activity, hot-metal output and physical sinter/pellet
+consumption as separate quantities. BF6/BF7 use one-hour setpoints with at most
+3.4 t/h change per setpoint. BF7 inherits the dynamic form only under controlled
+symmetry; its existing bounds and yields remain configuration-specific. These
+ramps are bounded development assumptions and are not claimed as Tata limits.

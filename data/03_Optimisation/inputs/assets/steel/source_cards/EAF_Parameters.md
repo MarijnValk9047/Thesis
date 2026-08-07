@@ -429,3 +429,36 @@ The first heat-state model should not include:
 **Relevant locators:** semi-continuous EAF formulation, DRI-buffer decoupling, EAF maintenance/off constraints, DRP-EAF price responsiveness.
 **Use:** Supports semi-continuous formulation and the need to avoid treating the EAF as a free dimmer.
 **Caveat:** Secondary precedent; not source evidence for physical heat-cycle details.
+
+## C1 Temporal-v2 Metallics And Scrap-Origin Contract (2026-08-03)
+
+The central recipe uses approximately 2.8 Mt/y HDRI and 0.9 Mt/y scrap for
+3.3 Mt/y EAF liquid steel; the active route-progress basis remains
+3.232012260 Mt/y. EAF scrap demand is covered exactly by
+`external_scrap_to_EAF + internal_scrap_to_EAF`. These flows share the site
+caps of 1.3 Mt/y external, 0.6 Mt/y internal and 1.9 Mt/y total with BOF scrap.
+Only the external origin is purchased and priced. Rolling cumulative use is
+carried in state and constrained at the known quota endpoint; no arbitrary
+daily delivery profile is imposed and replanning cannot recreate used supply.
+
+Base HBI is exactly zero. The HBI case and high-scrap case are separate offline
+sensitivities and may not be stacked or chosen by the optimizer. HBI up to
+1.1 Mt/y replaces DRI-equivalent input. The predetermined high-scrap endpoint
+uses approximately 1.9 Mt/y DRI plus 1.8 Mt/y EAF scrap, with a 2.8-Mt/y site
+scrap cap. Both substitutions keep EAF liquid-steel output fixed; neither
+creates additional production.
+
+## C1 Temporal-v3 HDRI/CDRI EAF Interface (2026-08-06)
+
+The base deterministic model uses direct 600 °C HDRI and stored 50 °C CDRI as
+separate physical origins. Per interval, CDRI may supply at most 30% of total
+EAF DRI input, so at least 70% must arrive directly as HDRI from the DRP. CDRI
+incurs an additional electricity term equal to 25% of the represented EAF arc
+electricity for the liquid-steel-equivalent quantity attributable to CDRI.
+The 30% limit, 50 °C temperature and 25% premium are explicit user-authorised
+development policies, not Tata technical limits inferred from the MER.
+
+The cold-DRI inventory retains the existing 17,760-t executable capacity and
+the rolling/campaign terminal rules. No HBI is mixed into this base thermal
+interface; the separate HBI sensitivity automatically reverts to its generic
+DRI-equivalent accounting boundary.

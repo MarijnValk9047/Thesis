@@ -1126,12 +1126,12 @@ def test_analytical_canonical_bid_rejects_inconsistent_acceptance_set() -> None:
         )
 
 
-def test_canonical_eaf_tiebreak_uses_the_shared_internal_qh_index(
+def test_legacy_canonical_eaf_tiebreak_is_algebraic_zero_under_temporal_v2(
     c1_model,
 ) -> None:
     _, model = c1_model
     _set_single_heat(model, 4)
-    assert value(_canonical_eaf_start_expression(model)) == pytest.approx(5.0)
+    assert value(_canonical_eaf_start_expression(model)) == pytest.approx(0.0)
 
 
 def test_flat_price_hourly_qh_validator_uses_same_eaf_fields() -> None:
@@ -1161,11 +1161,16 @@ def test_flat_price_hourly_qh_validator_uses_same_eaf_fields() -> None:
     assert validate_flat_price_physics_identity(trajectories)["status"] == "pass"
 
 
-def test_c1_inherits_phase6b_commitment_and_scaled_drp_ramp_is_active(
+def test_c1_uses_ontology_must_run_and_scaled_drp_ramp_is_active(
     c1_model,
 ) -> None:
     context, model = c1_model
-    assert context.c1_continuous_activities == ()
+    assert context.c1_continuous_activities == (
+        "coking_plant_1",
+        "sintering_plant",
+        "blast_furnace_6",
+        "drp_pellet_input",
+    )
     for name in (
         "coking_plant_1_on",
         "sintering_plant_on",
@@ -1173,7 +1178,8 @@ def test_c1_inherits_phase6b_commitment_and_scaled_drp_ramp_is_active(
         "drp_on",
     ):
         variable = getattr(model, name)
-        assert any(not variable[q].fixed for q in model.TIME)
+        assert all(variable[q].fixed for q in model.TIME)
+        assert all(value(variable[q]) == pytest.approx(1.0) for q in model.TIME)
     assert len(model.drp_ramp_up) == 479
     assert len(model.drp_ramp_down) == 479
 

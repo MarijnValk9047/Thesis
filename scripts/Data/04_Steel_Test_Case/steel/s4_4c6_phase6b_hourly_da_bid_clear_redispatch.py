@@ -19,7 +19,7 @@ import time
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time as wall_time, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Collection, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -38,7 +38,10 @@ from pyomo.environ import (
 from pyomo.contrib.fbbt.fbbt import compute_bounds_on_expr
 
 from .model import collect_model_stats
-from .rolling_production_quota import build_rolling_production_quota_plan
+from .rolling_production_quota import (
+    build_rolling_production_quota_plan,
+    build_timestamped_rolling_production_quota_plan,
+)
 from .s4_4c5p_af_closed_loop_feasibility_anchor_reconciliation import (
     C0_CONFIGURATION,
     C1_CONFIGURATION,
@@ -338,6 +341,22 @@ class SteelRollingState:
     eaf_start_lag1: int = 0
     eaf_start_lag2: int = 0
     drp_last_pellet_input_t: float | None = None
+    temporal_contract_version: str | None = None
+    calendar_contract_version: str | None = None
+    last_continuous_rate_t_h: dict[str, float] = field(default_factory=dict)
+    last_vn25_output_mw: float | None = None
+    eaf_quota_period_id: str | None = None
+    eaf_quota_target_taps: int | None = None
+    eaf_quota_completed_taps: int = 0
+    cumulative_external_scrap_to_bof_t: float = 0.0
+    cumulative_external_scrap_to_eaf_t: float = 0.0
+    cumulative_internal_scrap_to_bof_t: float = 0.0
+    cumulative_internal_scrap_to_eaf_t: float = 0.0
+    sifa_trend_direction: str = "flat"
+    sifa_trend_cooldown_intervals: int = 0
+    pefa_last_output_t_h: float | None = None
+    pellet_inventory_t: float | None = None
+    hsm_last_input_t_h: float | None = None
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -356,7 +375,168 @@ class SteelRollingState:
                 if self.drp_last_pellet_input_t is None
                 else float(self.drp_last_pellet_input_t)
             ),
+            "temporal_contract_version": self.temporal_contract_version,
+            "calendar_contract_version": self.calendar_contract_version,
+            "last_continuous_rate_t_h": {
+                str(key): float(value)
+                for key, value in sorted(self.last_continuous_rate_t_h.items())
+            },
+            "last_vn25_output_mw": (
+                None
+                if self.last_vn25_output_mw is None
+                else float(self.last_vn25_output_mw)
+            ),
+            "eaf_quota_period_id": self.eaf_quota_period_id,
+            "eaf_quota_target_taps": (
+                None
+                if self.eaf_quota_target_taps is None
+                else int(self.eaf_quota_target_taps)
+            ),
+            "eaf_quota_completed_taps": int(self.eaf_quota_completed_taps),
+            "cumulative_external_scrap_to_bof_t": float(
+                self.cumulative_external_scrap_to_bof_t
+            ),
+            "cumulative_external_scrap_to_eaf_t": float(
+                self.cumulative_external_scrap_to_eaf_t
+            ),
+            "cumulative_internal_scrap_to_bof_t": float(
+                self.cumulative_internal_scrap_to_bof_t
+            ),
+            "cumulative_internal_scrap_to_eaf_t": float(
+                self.cumulative_internal_scrap_to_eaf_t
+            ),
+            "sifa_trend_direction": str(self.sifa_trend_direction),
+            "sifa_trend_cooldown_intervals": int(
+                self.sifa_trend_cooldown_intervals
+            ),
+            "pefa_last_output_t_h": (
+                None if self.pefa_last_output_t_h is None else float(self.pefa_last_output_t_h)
+            ),
+            "pellet_inventory_t": (
+                None if self.pellet_inventory_t is None else float(self.pellet_inventory_t)
+            ),
+            "hsm_last_input_t_h": (
+                None
+                if self.hsm_last_input_t_h is None
+                else float(self.hsm_last_input_t_h)
+            ),
         }
+
+    @classmethod
+    def from_snapshot(
+        cls,
+        payload: Mapping[str, Any],
+        *,
+        required_temporal_contract_version: str | None = None,
+        required_calendar_contract_version: str | None = None,
+    ) -> "SteelRollingState":
+        """Load a state while fail-closing incompatible temporal checkpoints."""
+
+        observed_version = payload.get("temporal_contract_version")
+        observed_calendar_version = payload.get("calendar_contract_version")
+        if (
+            required_temporal_contract_version is not None
+            and observed_version != required_temporal_contract_version
+        ):
+            raise Phase6BError(
+                "Rolling-state temporal contract mismatch: "
+                f"required {required_temporal_contract_version!r}, "
+                f"found {observed_version!r}."
+            )
+        if (
+            required_calendar_contract_version is not None
+            and observed_calendar_version != required_calendar_contract_version
+        ):
+            raise Phase6BError(
+                "Rolling-state calendar contract mismatch: "
+                f"required {required_calendar_contract_version!r}, "
+                f"found {observed_calendar_version!r}."
+            )
+        target_taps = payload.get("eaf_quota_target_taps")
+        return cls(
+            episode_id=str(payload["episode_id"]),
+            configuration_id=str(payload["configuration_id"]),
+            inventory_overrides={
+                str(key): float(value)
+                for key, value in dict(payload.get("inventory_overrides", {})).items()
+            },
+            cumulative_production_t=float(payload.get("cumulative_production_t", 0.0)),
+            executed_hours=int(payload.get("executed_hours", 0)),
+            executed_intervals=int(payload.get("executed_intervals", 0)),
+            last_executed_timestamp_utc=payload.get("last_executed_timestamp_utc"),
+            cumulative_route_progress_t={
+                str(key): float(value)
+                for key, value in dict(
+                    payload.get("cumulative_route_progress_t", {})
+                ).items()
+            },
+            eaf_start_lag1=int(payload.get("eaf_start_lag1", 0)),
+            eaf_start_lag2=int(payload.get("eaf_start_lag2", 0)),
+            drp_last_pellet_input_t=(
+                None
+                if payload.get("drp_last_pellet_input_t") is None
+                else float(payload["drp_last_pellet_input_t"])
+            ),
+            temporal_contract_version=(
+                None if observed_version is None else str(observed_version)
+            ),
+            calendar_contract_version=(
+                None
+                if observed_calendar_version is None
+                else str(observed_calendar_version)
+            ),
+            last_continuous_rate_t_h={
+                str(key): float(value)
+                for key, value in dict(
+                    payload.get("last_continuous_rate_t_h", {})
+                ).items()
+            },
+            last_vn25_output_mw=(
+                None
+                if payload.get("last_vn25_output_mw") is None
+                else float(payload["last_vn25_output_mw"])
+            ),
+            eaf_quota_period_id=payload.get("eaf_quota_period_id"),
+            eaf_quota_target_taps=(
+                None if target_taps is None else int(target_taps)
+            ),
+            eaf_quota_completed_taps=int(
+                payload.get("eaf_quota_completed_taps", 0)
+            ),
+            cumulative_external_scrap_to_bof_t=float(
+                payload.get("cumulative_external_scrap_to_bof_t", 0.0)
+            ),
+            cumulative_external_scrap_to_eaf_t=float(
+                payload.get("cumulative_external_scrap_to_eaf_t", 0.0)
+            ),
+            cumulative_internal_scrap_to_bof_t=float(
+                payload.get("cumulative_internal_scrap_to_bof_t", 0.0)
+            ),
+            cumulative_internal_scrap_to_eaf_t=float(
+                payload.get("cumulative_internal_scrap_to_eaf_t", 0.0)
+            ),
+            sifa_trend_direction=str(
+                payload.get("sifa_trend_direction", "flat")
+            ),
+            sifa_trend_cooldown_intervals=int(
+                payload.get("sifa_trend_cooldown_intervals", 0)
+            ),
+            pefa_last_output_t_h=(
+                None
+                if payload.get("pefa_last_output_t_h") is None
+                else float(payload["pefa_last_output_t_h"])
+            ),
+            pellet_inventory_t=(
+                None
+                if payload.get("pellet_inventory_t") is None
+                else float(payload["pellet_inventory_t"])
+            ),
+            hsm_last_input_t_h=(
+                None
+                if payload.get("hsm_last_input_t_h") is None
+                else float(payload["hsm_last_input_t_h"])
+            ),
+        )
 
 
 @dataclass
@@ -397,6 +577,8 @@ class SteelPhysicalContext:
     eaf_heat_state_parameters: EAFHeatStateParameters | None = None
     economic_horizon_hours: int | None = None
     physical_feasibility_tail_active: bool = False
+    temporal_contract_version: str | None = None
+    calendar_contract_version: str | None = None
 
 
 @dataclass
@@ -773,10 +955,12 @@ def prepare_physical_context(config: Mapping[str, Any]) -> SteelPhysicalContext:
         generator_unit_interface=generator, scrap_supply_ledger=scrap,
         source_coke_chain=source_coke, external_procurement_coefficients=external,
         c0_continuous_activities=tuple(continuous_must_run_activities(C0_CONFIGURATION)),
-        # Phase-6B/6C keep C1 availability endogenous.  Phase-6D changes only
-        # the EAF formulation and must not reopen the separate C1
-        # continuous-must-run reconciliation.
-        c1_continuous_activities=(),
+        # The canonical component ontology classifies KGF1, sinter, BF6 and
+        # DRP as continuous must-run in C1.  Availability is fixed on while
+        # the existing positive min/max throughput bounds remain untouched.
+        c1_continuous_activities=tuple(
+            continuous_must_run_activities(C1_CONFIGURATION)
+        ),
         c1_energy_boundary=c1_energy,
         wag_yields=wag_yields, bf_electricity_scales=bf_scales,
         generator_interface_cap_mode=generator_mode, hsm_rolling_electricity=hsm_electricity,
@@ -800,6 +984,11 @@ def prepare_physical_context(config: Mapping[str, Any]) -> SteelPhysicalContext:
         ),
         physical_feasibility_tail_active=bool(
             phase.get("physical_feasibility_tail_active", False)
+        ),
+        temporal_contract_version=(
+            None
+            if phase.get("temporal_contract_version") is None
+            else str(phase["temporal_contract_version"])
         ),
     )
 
@@ -827,11 +1016,27 @@ def _progress_contract(
     terminal_day: bool,
     planning_horizon_hours: int,
 ) -> tuple[Any, dict[str, Any]]:
-    plan = build_rolling_production_quota_plan(
-        planning_horizon_hours=int(planning_horizon_hours),
-        execution_block_hours=context.plan.execution_block_hours,
-        quota_per_execution_block_t=context.plan.quota_per_execution_block_t,
-    )
+    execution_hours = int(context.plan.execution_block_hours)
+    horizon_hours = int(planning_horizon_hours)
+    if horizon_hours % execution_hours == 0:
+        plan = build_rolling_production_quota_plan(
+            planning_horizon_hours=horizon_hours,
+            execution_block_hours=execution_hours,
+            quota_per_execution_block_t=context.plan.quota_per_execution_block_t,
+        )
+    else:
+        # A 23/25-hour local delivery day is followed by a physical tail whose
+        # endpoint need not be an integer multiple of that first day.  Keep
+        # the executed boundary and physical-horizon endpoint explicit rather
+        # than fabricating equal-length delivery blocks.
+        plan = build_timestamped_rolling_production_quota_plan(
+            planning_horizon_hours=horizon_hours,
+            execution_block_hours=execution_hours,
+            cumulative_deadline_hours=(execution_hours, horizon_hours),
+            quota_per_hour_t=(
+                float(context.plan.quota_per_execution_block_t) / execution_hours
+            ),
+        )
     base_multiplier = _model_target_multiplier(context.config, plan)
     cumulative = {key: 0.0 for key in CONFIGURATIONS}
     cumulative[state.configuration_id] = float(state.cumulative_production_t)
@@ -895,11 +1100,22 @@ def _horizon_dependent_interfaces(
     if c0_routing is not None:
         c0_routing["reference_band_deadline_hours"] = deadlines
     c1_routing["reference_band_deadline_hours"] = deadlines
-    generator = _generator_unit_interface(
-        context.config,
-        horizon_hours=plan.planning_horizon_hours,
-        deadline_hours=deadlines,
-    )
+    if context.temporal_contract_version is not None:
+        generator = copy.deepcopy(context.generator_unit_interface)
+        if generator is None:
+            raise Phase6BError(
+                "A versioned temporal context requires an explicit generator interface."
+            )
+        generator["ij01_total_fuel_horizon_cap_mwh"] = 0.0
+        generator["ij01_total_fuel_deadline_caps_mwh"] = {
+            int(deadline): 0.0 for deadline in deadlines
+        }
+    else:
+        generator = _generator_unit_interface(
+            context.config,
+            horizon_hours=plan.planning_horizon_hours,
+            deadline_hours=deadlines,
+        )
     scrap = _scrap_supply_ledger(
         context.config,
         horizon_hours=plan.planning_horizon_hours,
@@ -928,10 +1144,163 @@ def _horizon_dependent_interfaces(
     return c0_routing, c1_routing, generator, scrap
 
 
+def _temporal_origin_scrap_ledger(
+    contract: Mapping[str, Any],
+    state: SteelRollingState,
+    *,
+    planning_horizon_hours: int,
+    deadline_hours: Collection[int],
+) -> dict[str, Any]:
+    """Build a non-profiled, non-renewable rolling scrap quota ledger."""
+
+    payload = contract.get("scrap_origin_contract")
+    if not isinstance(payload, Mapping):
+        raise Phase6BError(
+            "Versioned deterministic temporal repair requires a scrap-origin contract."
+        )
+    annual_keys = {
+        "annual_site_scrap_cap_t_y",
+        "annual_bof_scrap_cap_t_y",
+        "annual_eaf_scrap_cap_t_y",
+        "annual_external_scrap_cap_t_y",
+        "annual_internal_scrap_cap_t_y",
+    }
+    missing = annual_keys.difference(payload)
+    if missing:
+        raise Phase6BError(
+            f"Temporal scrap-origin contract is missing: {sorted(missing)}"
+        )
+    annual = {key: float(payload[key]) for key in annual_keys}
+    if min(annual.values()) < 0.0:
+        raise Phase6BError("Temporal scrap-origin annual caps must be non-negative.")
+    quota_period_hours = int(payload.get("quota_period_hours", HOURS_PER_YEAR))
+    if quota_period_hours != HOURS_PER_YEAR:
+        raise Phase6BError("The active scrap quota period must remain one calendar year.")
+    if annual["annual_external_scrap_cap_t_y"] + annual[
+        "annual_internal_scrap_cap_t_y"
+    ] > annual["annual_site_scrap_cap_t_y"] + 1e-6:
+        raise Phase6BError(
+            "External plus internal scrap caps exceed the site-total cap."
+        )
+
+    cumulative = {
+        "bof": float(state.cumulative_external_scrap_to_bof_t)
+        + float(state.cumulative_internal_scrap_to_bof_t),
+        "eaf": float(state.cumulative_external_scrap_to_eaf_t)
+        + float(state.cumulative_internal_scrap_to_eaf_t),
+        "external": float(state.cumulative_external_scrap_to_bof_t)
+        + float(state.cumulative_external_scrap_to_eaf_t),
+        "internal": float(state.cumulative_internal_scrap_to_bof_t)
+        + float(state.cumulative_internal_scrap_to_eaf_t),
+    }
+    cumulative["site"] = cumulative["external"] + cumulative["internal"]
+
+    executed_hours = int(state.executed_hours)
+    horizon_end = executed_hours + int(planning_horizon_hours)
+    crosses_quota_reset = executed_hours < quota_period_hours < horizon_end
+    if executed_hours >= quota_period_hours or horizon_end > 2 * quota_period_hours:
+        raise Phase6BError(
+            "The rolling scrap ledger supports at most the first annual quota reset."
+        )
+
+    def remaining_at(
+        annual_key: str,
+        cumulative_key: str,
+        relative_endpoint_hour: int,
+    ) -> float:
+        horizon_endpoint_hour = int(state.executed_hours) + int(
+            relative_endpoint_hour
+        )
+        if horizon_endpoint_hour <= quota_period_hours:
+            result = (
+                annual[annual_key] * horizon_endpoint_hour / HOURS_PER_YEAR
+                - cumulative[cumulative_key]
+            )
+        else:
+            remaining_old_quota = annual[annual_key] - cumulative[cumulative_key]
+            new_period_hours = horizon_endpoint_hour - quota_period_hours
+            result = (
+                remaining_old_quota
+                + annual[annual_key] * new_period_hours / HOURS_PER_YEAR
+            )
+        if result < -1e-5:
+            available_at_horizon = cumulative[cumulative_key] + result
+            raise Phase6BError(
+                "Executed scrap exceeds its cumulative rolling-horizon quota: "
+                f"{cumulative_key} has {cumulative[cumulative_key]:.6f} t, "
+                f"but only {available_at_horizon:.6f} t is available by "
+                f"hour {horizon_endpoint_hour}."
+            )
+        return max(0.0, result)
+
+    cap_specs = {
+        "site_total_scrap_supply": ("annual_site_scrap_cap_t_y", "site"),
+        "bof_scrap_supply": ("annual_bof_scrap_cap_t_y", "bof"),
+        "eaf_scrap_supply": ("annual_eaf_scrap_cap_t_y", "eaf"),
+        "external_scrap_supply": ("annual_external_scrap_cap_t_y", "external"),
+        "internal_scrap_supply": ("annual_internal_scrap_cap_t_y", "internal"),
+    }
+    ledger = {
+        f"{prefix}_cap_t": remaining_at(
+            annual_key, cumulative_key, int(planning_horizon_hours)
+        )
+        for prefix, (annual_key, cumulative_key) in cap_specs.items()
+    }
+    ledger["annual_quota_reset_crossed_in_physical_tail"] = crosses_quota_reset
+    execution_checkpoint_hours = contract.get("scrap_execution_checkpoint_hours")
+    if execution_checkpoint_hours is not None:
+        checkpoint = int(execution_checkpoint_hours)
+        if checkpoint <= 0 or checkpoint >= int(planning_horizon_hours):
+            raise Phase6BError(
+                "Scrap execution checkpoint must lie inside the physical horizon."
+            )
+        for prefix, (annual_key, cumulative_key) in cap_specs.items():
+            ledger[f"{prefix}_deadline_caps_t"] = {
+                checkpoint: remaining_at(annual_key, cumulative_key, checkpoint)
+            }
+    # No daily arrival profile is evidenced.  The operational 48 h horizon
+    # therefore retains one cumulative endpoint cap.  A longer tail
+    # sensitivity must additionally preserve that same 48 h quota checkpoint;
+    # otherwise its larger annual-quota slice can be borrowed inside D and
+    # changes the executed dispatch.  This is a calendar-quota checkpoint, not
+    # an invented daily delivery profile.
+    recovery_hours = int(
+        contract.get("recursive_recovery_horizon_hours", planning_horizon_hours)
+    )
+    if (
+        str(contract.get("inventory_terminal_policy"))
+        == "recoverable_physical_tail"
+        and
+        int(planning_horizon_hours) > recovery_hours
+        and recovery_hours in {int(hour) for hour in deadline_hours}
+    ):
+        for prefix, (annual_key, cumulative_key) in cap_specs.items():
+            existing = dict(ledger.get(f"{prefix}_deadline_caps_t", {}))
+            existing[recovery_hours] = remaining_at(
+                annual_key, cumulative_key, recovery_hours
+            )
+            ledger[f"{prefix}_deadline_caps_t"] = existing
+    ledger.update(
+        {
+            "origin_policy": (
+                "external_purchase_plus_bounded_internal_reuse_rolling_horizon_quota"
+            ),
+            "internal_source_policy": (
+                "bounded_site_reuse_source_no_caster_hsm_dsp_link_no_double_count"
+            ),
+            "reporting_classification_policy": (
+                "ISO14021_WSA_reporting_only_not_second_physical_supply"
+            ),
+        }
+    )
+    return ledger
+
+
 _RATE_FIELD_SUFFIXES = ("_mwh_h", "_t_h", "_nm3_h", "_max_t_h")
 _RATE_FIELD_NAMES = {
     "electrical_capacity_mw",
     "vn25_electric_capacity_mw",
+    "vn25_min_electric_output_mw",
 }
 
 
@@ -1007,10 +1376,235 @@ def _scale_interfaces_to_time_grid(
             "site_total_scrap_supply_deadline_caps_t",
             "bof_scrap_supply_deadline_caps_t",
             "eaf_scrap_supply_deadline_caps_t",
+            "external_scrap_supply_deadline_caps_t",
+            "internal_scrap_supply_deadline_caps_t",
         ):
             if key in scrap_scaled:
                 scrap_scaled[key] = _convert_deadline_keys(scrap_scaled[key], grid)
     return c0, c1, gen, scrap_scaled
+
+
+def _add_c1_recursive_handoff_recoverability(
+    model: ConcreteModel,
+    inputs: Any,
+    context: SteelPhysicalContext,
+    temporal_repair_contract: Mapping[str, Any],
+    grid: ModelTimeGrid,
+) -> None:
+    """Keep the executed coke/hot-iron state viable for the next C1 horizon.
+
+    A bounded tail proves only that the executed state has one continuation.
+    Rolling replanning additionally needs that state to admit a fresh complete
+    physical horizon.  These algebraic cuts are necessary consequences of the
+    existing KGF1/BF6 minima, coke/hot-iron capacities and BOF route upper;
+    they introduce no new throughput, inventory or route bound.
+    """
+
+    recovery_hours = int(
+        temporal_repair_contract["recursive_recovery_horizon_hours"]
+    )
+    recovery_steps = grid.hours_to_steps(recovery_hours)
+    execution_index = grid.execution_steps - 1
+    if recovery_steps > len(model.TIME):
+        raise Phase6BError(
+            "Recursive recovery horizon exceeds the available physical model."
+        )
+    retained = inputs.retained_bf_bof
+    if retained is None:
+        raise Phase6BError("Recursive C1 recovery requires retained BF-BOF inputs.")
+    interface = temporal_repair_contract.get("c1_bf_material_interface")
+    if not isinstance(interface, Mapping):
+        raise Phase6BError("Recursive C1 recovery requires the explicit BF interface.")
+    hot_metal_per_activity = float(
+        interface["hot_metal_t_per_t_represented_bf_activity"]
+    )
+    dry_coal_per_coke = float(context.source_coke_chain["dry_coal_t_per_t_coke"])
+    coke_per_hot_metal = float(
+        context.source_coke_chain["bf_coke_t_per_t_hot_metal"]
+    )
+    coke_per_activity = coke_per_hot_metal * hot_metal_per_activity
+    if min(hot_metal_per_activity, dry_coal_per_coke, coke_per_activity) <= 0.0:
+        raise Phase6BError("Recursive C1 recovery coefficients must be positive.")
+    coking_min = float(retained.process_limits["coking_plant_1"][0])
+    bf_min = float(retained.process_limits["blast_furnace_6"][0])
+    bf_max = float(retained.process_limits["blast_furnace_6"][1])
+    minimum_coke_output = coking_min * recovery_steps / dry_coal_per_coke
+    minimum_bf_activity = bf_min * recovery_steps
+    maximum_bf_activity = bf_max * recovery_steps
+    bof_hot_metal_per_liquid_steel = float(
+        context.config["bof_material_balance"][
+            "hot_metal_t_per_t_liquid_steel"
+        ]
+    )
+    if bof_hot_metal_per_liquid_steel <= 0.0:
+        raise Phase6BError("Recursive C1 recovery requires a positive BOF recipe.")
+    bof_yield = 1.0 / bof_hot_metal_per_liquid_steel
+    route_upper_name = (
+        f"c1_reference_deadline_bof_liquid_steel_{recovery_steps}h_upper"
+    )
+    route_upper_constraint = model.find_component(route_upper_name)
+    if route_upper_constraint is not None and route_upper_constraint.active:
+        route_upper_t = float(value(route_upper_constraint.upper))
+        route_upper_basis = "maintenance_free_reference_route_upper"
+    elif str(
+        temporal_repair_contract.get("route_reference_policy", "")
+    ) == "annual_recoverable_calendar":
+        route_upper_t = (
+            float(retained.process_limits["basic_oxygen_furnace"][1])
+            * recovery_steps
+            * bof_yield
+        )
+        route_upper_basis = "source_process_capacity_calendar_recovery_upper"
+    else:
+        raise Phase6BError(
+            f"Recursive C1 recovery requires active {route_upper_name}."
+        )
+    coke_at_handoff = model.coke_inventory[execution_index]
+    hot_iron_at_handoff = model.hot_iron_inventory[execution_index]
+    coke_driven_bf_activity = (
+        coke_at_handoff
+        + minimum_coke_output
+        - float(retained.coke_store_capacity_t)
+    ) / coke_per_activity
+    model.temporal_coke_capacity_recursive_recoverability = Constraint(
+        expr=(
+            coke_at_handoff
+            + minimum_coke_output
+            - coke_per_activity * maximum_bf_activity
+            <= float(retained.coke_store_capacity_t)
+        )
+    )
+    model.temporal_coke_hot_iron_route_recursive_recoverability = Constraint(
+        expr=(
+            bof_yield
+            * (
+                hot_iron_at_handoff
+                + hot_metal_per_activity * coke_driven_bf_activity
+                - float(retained.hot_iron_store_capacity_t)
+            )
+            <= route_upper_t
+        )
+    )
+    model.temporal_bf_min_hot_iron_route_recursive_recoverability = Constraint(
+        expr=(
+            bof_yield
+            * (
+                hot_iron_at_handoff
+                + hot_metal_per_activity * minimum_bf_activity
+                - float(retained.hot_iron_store_capacity_t)
+            )
+            <= route_upper_t
+        )
+    )
+    model.temporal_recursive_recovery_horizon_hours = recovery_hours
+    model.temporal_recursive_recovery_horizon_steps = recovery_steps
+    model.temporal_recursive_recovery_handoff_index = execution_index
+    model.temporal_recursive_recovery_route_upper_t = route_upper_t
+    model.temporal_recursive_recovery_route_upper_basis = route_upper_basis
+    model.temporal_recursive_recovery_minimum_coke_output_t = minimum_coke_output
+    model.temporal_recursive_recovery_status = (
+        "necessary_coke_hot_iron_bof_viability_cut"
+    )
+    if recovery_steps < len(model.TIME):
+        # A longer sensitivity tail must retain the same recovery checkpoint
+        # as the operational 48 h model.  Otherwise cyclic DRI/cold-slab
+        # recovery silently moves to the later artificial endpoint and changes
+        # the executed feasible set.  Reproduce exactly the terminal state of
+        # the finite 48 h heat model before allowing the extra continuation.
+        if recovery_steps < 2:
+            raise Phase6BError("The fixed recovery checkpoint is too short.")
+        model.temporal_fixed_recovery_dri_terminal = Constraint(
+            expr=model.dri_inventory[recovery_steps - 2]
+            == float(inputs.dri_buffer_initial_t)
+        )
+        model.temporal_fixed_recovery_cold_slab_terminal = Constraint(
+            expr=model.cold_slab_inventory[recovery_steps - 1]
+            == float(retained.cold_slab_store_initial_t)
+        )
+        if not bool(getattr(model, "eaf_heat_state_active", False)):
+            raise Phase6BError(
+                "The fixed recovery checkpoint requires the EAF heat-state model."
+            )
+        for interval in (recovery_steps - 2, recovery_steps - 1):
+            model.eaf_heat_start[interval].fix(0.0)
+        model.temporal_fixed_recovery_checkpoint_hours = recovery_hours
+        model.temporal_fixed_recovery_checkpoint_steps = recovery_steps
+        model.temporal_extended_tail_policy = (
+            "preserve_48h_recovery_checkpoint_then_extend_feasibility"
+        )
+
+
+def _apply_c1_temporal_kgf1_route_scale_reconciliation(
+    inputs: Any,
+    context: SteelPhysicalContext,
+    temporal_repair_contract: Mapping[str, Any],
+    c1_routing: Mapping[str, Any],
+    grid: ModelTimeGrid,
+) -> tuple[Any, dict[str, float | str]]:
+    """Align the KGF1 development floor with the fixed-reference BOF scale."""
+
+    payload = temporal_repair_contract.get("kgf1_route_scale_reconciliation")
+    if not isinstance(payload, Mapping) or not bool(payload.get("active")):
+        raise Phase6BError(
+            "Temporal C1 requires the explicit KGF1 route-scale reconciliation."
+        )
+    raw_kgf_coke_t_y = float(payload["raw_kgf1_coke_anchor_t_y"])
+    raw_bof_t_y = float(payload["raw_bof_liquid_steel_anchor_t_y"])
+    if min(raw_kgf_coke_t_y, raw_bof_t_y) <= 0.0:
+        raise Phase6BError("KGF1 and BOF raw anchors must be positive.")
+    reference_bands = c1_routing.get("reference_validation_bands")
+    band = (
+        reference_bands.get("bof_liquid_steel")
+        if isinstance(reference_bands, Mapping)
+        else c1_routing.get("temporal_kgf1_reference_bof_band")
+    )
+    if not isinstance(band, Mapping):
+        raise Phase6BError("KGF1 reconciliation requires the active BOF band.")
+    bof_central_horizon_t = (
+        float(band["lower_t"]) + float(band["upper_t"])
+    ) / 2.0
+    bof_central_t_y = (
+        bof_central_horizon_t * 8_760.0 / float(grid.horizon_hours)
+    )
+    route_scale = bof_central_t_y / raw_bof_t_y
+    if not 0.0 < route_scale <= 1.0:
+        raise Phase6BError("KGF1 reconciliation resolved an invalid route scale.")
+    dry_coal_per_coke = float(
+        context.source_coke_chain["dry_coal_t_per_t_coke"]
+    )
+    kgf_coke_t_y = raw_kgf_coke_t_y * route_scale
+    dry_coal_floor_t_h = kgf_coke_t_y * dry_coal_per_coke / 8_760.0
+    retained = inputs.retained_bf_bof
+    if retained is None:
+        raise Phase6BError("KGF1 reconciliation requires retained BF-BOF inputs.")
+    process_limits = dict(retained.process_limits)
+    bounded_min_t_h = float(payload.get("bounded_operating_min_t_h", dry_coal_floor_t_h))
+    bounded_max_t_h = float(payload.get("bounded_operating_max_t_h", 0.0))
+    if not bounded_min_t_h < dry_coal_floor_t_h < bounded_max_t_h:
+        raise Phase6BError(
+            "The KGF1 price-responsive band must strictly surround its route anchor."
+        )
+    process_limits["coking_plant_1"] = (
+        bounded_min_t_h * grid.time_step_hours,
+        bounded_max_t_h * grid.time_step_hours,
+    )
+    inputs = replace(
+        inputs,
+        retained_bf_bof=replace(retained, process_limits=process_limits),
+    )
+    return inputs, {
+        "status": "bounded_price_responsive_band_around_route_anchor",
+        "raw_kgf1_coke_anchor_t_y": raw_kgf_coke_t_y,
+        "raw_bof_liquid_steel_anchor_t_y": raw_bof_t_y,
+        "fixed_reference_bof_central_t_y": bof_central_t_y,
+        "route_scale": route_scale,
+        "route_scaled_kgf1_coke_t_y": kgf_coke_t_y,
+        "dry_coal_floor_t_h": dry_coal_floor_t_h,
+        "bounded_operating_min_t_h": bounded_min_t_h,
+        "bounded_operating_max_t_h": bounded_max_t_h,
+        "anchor_role": "validation_only_mer_annual_reference_physical_coke_balance_drives_output",
+        "technical_minimum_claim": "false",
+    }
 
 
 def _build_physical_model(
@@ -1021,12 +1615,63 @@ def _build_physical_model(
     terminal_day: bool,
     planning_horizon_hours: int = 120,
     terminal_hour_in_horizon: int | None = None,
+    temporal_repair_contract: Mapping[str, Any] | None = None,
 ) -> ConcreteModel:
+    recoverable_handoff_execution_steps: int | None = None
+    recursive_recovery_horizon_hours: int | None = None
+    inventory_terminal_policy: str | None = None
+    if temporal_repair_contract is not None:
+        if configuration not in {C0_CONFIGURATION, C1_CONFIGURATION}:
+            raise Phase6BError(
+                "The deterministic temporal-repair contract supports C0 and C1 only."
+            )
+        contract_configuration = str(
+            temporal_repair_contract.get("configuration_id", configuration)
+        )
+        if contract_configuration != configuration:
+            raise Phase6BError(
+                "Temporal contract configuration does not match the rolling model."
+            )
+        required_version = str(
+            temporal_repair_contract["temporal_contract_version"]
+        )
+        if state.temporal_contract_version != required_version:
+            raise Phase6BError(
+                "The rolling state is incompatible with the requested temporal "
+                f"contract: {state.temporal_contract_version!r} != "
+                f"{required_version!r}."
+            )
+        inventory_terminal_policy = str(
+            temporal_repair_contract["inventory_terminal_policy"]
+        )
+        if inventory_terminal_policy not in {
+            "recoverable_physical_tail",
+            "hard_terminal",
+        }:
+            raise Phase6BError(
+                "Unsupported deterministic temporal inventory-terminal policy: "
+                f"{inventory_terminal_policy!r}."
+            )
     grid = ModelTimeGrid(
         horizon_hours=int(planning_horizon_hours),
         execution_hours=context.time_grid.execution_hours,
         time_step_hours=context.time_grid.time_step_hours,
     )
+    if (
+        temporal_repair_contract is not None
+        and inventory_terminal_policy == "recoverable_physical_tail"
+    ):
+        recoverable_handoff_execution_steps = grid.execution_steps
+        recursive_recovery_horizon_hours = int(
+            temporal_repair_contract["recursive_recovery_horizon_hours"]
+        )
+        if (
+            recursive_recovery_horizon_hours <= 0
+            or recursive_recovery_horizon_hours > int(planning_horizon_hours)
+        ):
+            raise Phase6BError(
+                "Recursive recovery horizon must fit inside the physical model."
+            )
     plan, progress = _progress_contract(
         context,
         state,
@@ -1041,15 +1686,121 @@ def _build_physical_model(
         state,
         campaign_endpoint_active=terminal_hour_in_horizon is not None,
     )
+    if temporal_repair_contract is not None:
+        scrap = _temporal_origin_scrap_ledger(
+            temporal_repair_contract,
+            state,
+            planning_horizon_hours=plan.planning_horizon_hours,
+            deadline_hours=sorted(plan.cumulative_deadline_targets_t),
+        )
+        route_reference_policy = str(
+            temporal_repair_contract.get(
+                "route_reference_policy", "maintenance_free_daily_reference"
+            )
+        )
+        if (
+            configuration == C0_CONFIGURATION
+            and route_reference_policy == "annual_recoverable_calendar"
+        ):
+            c0_routing = copy.deepcopy(c0_routing)
+            if c0_routing is None:
+                raise Phase6BError("C0 temporal operation requires route routing.")
+            c0_routing.pop("reference_validation_bands", None)
+            c0_routing.pop("reference_deadline_bands", None)
+            c0_routing.pop("reference_band_deadline_hours", None)
+        elif route_reference_policy == "annual_recoverable_calendar":
+            c1_routing = copy.deepcopy(c1_routing)
+            original_reference_bands = dict(
+                c1_routing.get("reference_validation_bands", {})
+            )
+            c1_routing["temporal_kgf1_reference_bof_band"] = copy.deepcopy(
+                original_reference_bands.get("bof_liquid_steel")
+            )
+            c1_routing["reference_validation_bands"] = None
+            c1_routing.pop("reference_deadline_bands", None)
+            c1_routing.pop("reference_band_deadline_hours", None)
+            reference_hours = float(context.plan.planning_horizon_hours)
+            annual_dsp_cap_t = (
+                float(
+                    context.c1_reference_routing[
+                        "dsp_final_product_horizon_cap_t"
+                    ]
+                )
+                / reference_hours
+                * HOURS_PER_YEAR
+            )
+            completed_dsp_t = float(
+                state.cumulative_route_progress_t.get(
+                    "C1_DSP_final_product_output_t", 0.0
+                )
+            )
+            annual_imported_slab_cap_t = (
+                float(context.config["imported_slab_annual_cap_mt_y"])
+                * 1_000_000.0
+            )
+            completed_imported_slab_t = float(
+                state.cumulative_route_progress_t.get(
+                    "C1_imported_slab_to_HSM_t_h", 0.0
+                )
+            )
+            c1_routing["dsp_final_product_horizon_cap_t"] = max(
+                0.0, annual_dsp_cap_t - completed_dsp_t
+            )
+            c1_routing["imported_slab_horizon_cap_t"] = max(
+                0.0,
+                annual_imported_slab_cap_t - completed_imported_slab_t,
+            )
+            c1_routing["rolling_annual_horizon_cap_policy"] = (
+                "remaining_annual_cap_not_rebased_average_times_model_horizon"
+            )
+        elif route_reference_policy == "maintenance_free_daily_reference":
+            if configuration != C1_CONFIGURATION:
+                raise Phase6BError(
+                    "C0 temporal operation requires annual recoverable routing."
+                )
+            c1_routing = copy.deepcopy(c1_routing)
+            reference_bands = dict(
+                c1_routing.get("reference_validation_bands", {})
+            )
+            reference_bands.pop("eaf_liquid_steel", None)
+            c1_routing["reference_validation_bands"] = reference_bands
+            explicit_deadlines = c1_routing.get("reference_deadline_bands")
+            if isinstance(explicit_deadlines, Mapping):
+                c1_routing["reference_deadline_bands"] = {
+                    key: copy.deepcopy(value)
+                    for key, value in explicit_deadlines.items()
+                    if key != "eaf_liquid_steel"
+                }
+        else:
+            raise Phase6BError(
+                f"Unknown temporal route-reference policy: {route_reference_policy}."
+            )
     c0_routing, c1_routing, generator, scrap = _scale_interfaces_to_time_grid(
         grid, c0_routing, c1_routing, generator, scrap
     )
+    if configuration == C1_CONFIGURATION and c1_routing is not None:
+        c1_routing["eaf_slab_initial_t"] = float(
+            state.inventory_overrides.get("eaf_slab_initial_t", 0.0)
+        )
     multiplier = float(progress["target_multiplier_by_configuration"][configuration])
     deadline_targets = {
         grid.hours_to_steps(int(hour)): float(target)
         for hour, target in progress["deadline_targets_by_configuration_t"][configuration].items()
     }
-    commitment_day_lengths = [grid.hours_to_steps(24)] * (plan.planning_horizon_hours // 24)
+    commitment_day_lengths_hours = (
+        temporal_repair_contract.get("commitment_day_lengths_hours")
+        if temporal_repair_contract is not None
+        else None
+    )
+    commitment_day_lengths = (
+        [
+            grid.hours_to_steps(int(hours))
+            for hours in commitment_day_lengths_hours
+        ]
+        if commitment_day_lengths_hours is not None
+        else [grid.hours_to_steps(24)]
+        * (plan.planning_horizon_hours // 24)
+    )
     hsm_source_mix = copy.deepcopy(
         context.config["hsm_source_mix_policy_by_configuration"][configuration]
     )
@@ -1067,6 +1818,23 @@ def _build_physical_model(
             horizon_hours_override=plan.planning_horizon_hours,
             target_multiplier=multiplier,
         )
+        if temporal_repair_contract is not None:
+            dynamics = temporal_repair_contract.get("plant_dynamics", {})
+            active_ranges = dynamics.get("active_operating_ranges_t_h", {})
+            if active_ranges:
+                process_limits = dict(inputs.process_limits)
+                for asset, bounds in active_ranges.items():
+                    if asset not in process_limits or len(bounds) != 2:
+                        raise Phase6BError(
+                            f"Invalid C0 temporal operating envelope for {asset}."
+                        )
+                    lower_t_h, upper_t_h = (float(bounds[0]), float(bounds[1]))
+                    if not 0.0 <= lower_t_h < upper_t_h:
+                        raise Phase6BError(
+                            f"Invalid C0 temporal operating bounds for {asset}."
+                        )
+                    process_limits[str(asset)] = (lower_t_h, upper_t_h)
+                inputs = replace(inputs, process_limits=process_limits)
         inputs = _apply_wag_generation_yield_overrides(inputs, context.wag_yields.get(configuration))
         inputs = _apply_c0_initial_inventory_overrides(inputs, state.inventory_overrides)
         inputs = scale_c0_inputs_to_time_grid(inputs, grid)
@@ -1075,12 +1843,28 @@ def _build_physical_model(
             fix_binary_schedule=False, enable_minimal_wag_layer=True,
             enable_internal_wag_power=True,
             development_controller_activation=str(context.config["development_controller_activation"]),
-            rolling_production_deadline_targets_t=deadline_targets,
+            rolling_production_deadline_targets_t=(
+                None if temporal_repair_contract is not None else deadline_targets
+            ),
             commitment_granularity=str(context.config["commitment_granularity"]),
             commitment_day_lengths=commitment_day_lengths,
             continuous_must_run_activities=context.c0_continuous_activities,
-            c0_coke_chain_reconciliation=context.source_coke_chain,
+            c0_coke_chain_reconciliation=(
+                temporal_repair_contract.get("c0_coke_chain_reconciliation")
+                if temporal_repair_contract is not None
+                and temporal_repair_contract.get("c0_coke_chain_reconciliation")
+                is not None
+                else context.source_coke_chain
+            ),
             c0_downstream_reference_routing=c0_routing,
+            c0_bf_material_interface=(
+                None
+                if temporal_repair_contract is None
+                else temporal_repair_contract.get("c0_bf_material_interface")
+            ),
+            scrap_supply_ledger=(
+                None if temporal_repair_contract is None else scrap
+            ),
             linde_n2_auxiliary_electricity_mwh_h=context.linde_n2_mwh_h * grid.time_step_hours,
             site_background_electricity_mwh_h=float(context.site_background_by_configuration[configuration]) * grid.time_step_hours,
             site_baseload_ng_mwh_h=float(context.site_ng_by_configuration[configuration]) * grid.time_step_hours,
@@ -1091,8 +1875,37 @@ def _build_physical_model(
             aggregate_generator_technical_interface=aggregate_generator,
             full_site_energy_bridge=context.c0_full_site_energy_bridge,
             hsm_source_mix_policy=hsm_source_mix,
+            enforce_final_product_requirement=temporal_repair_contract is None,
+            recoverable_handoff_execution_steps=(
+                recoverable_handoff_execution_steps
+            ),
+            temporal_plant_dynamics=(
+                None
+                if temporal_repair_contract is None
+                else temporal_repair_contract.get("plant_dynamics")
+            ),
+            initial_continuous_rate_t_h=(
+                None
+                if temporal_repair_contract is None
+                else {
+                    **state.last_continuous_rate_t_h,
+                    "pefa_pellet_output_t": float(state.pefa_last_output_t_h),
+                    "hot_strip_mill": float(state.hsm_last_input_t_h),
+                }
+            ),
         )
+        model.temporal_process_limits_t_per_interval = {
+            name: tuple(float(item) for item in bounds)
+            for name, bounds in inputs.process_limits.items()
+        }
+        model.temporal_beginning_inventories_t = {
+            "coke_store_initial_t": float(inputs.coke_store_initial_t),
+            "sinter_store_initial_t": float(inputs.sinter_store_initial_t),
+            "hot_iron_store_initial_t": float(inputs.hot_iron_store_initial_t),
+            "cold_slab_store_initial_t": float(inputs.cold_slab_store_initial_t),
+        }
     elif configuration == C1_CONFIGURATION:
+        kgf1_route_scale_reconciliation: dict[str, float | str] | None = None
         inputs = _build_c1_inputs(
             context.tables,
             horizon_hours_override=plan.planning_horizon_hours,
@@ -1100,8 +1913,22 @@ def _build_physical_model(
             include_retained_bf_bof=True,
         )
         inputs = _apply_wag_generation_yield_overrides(inputs, context.wag_yields.get(configuration))
-        inputs = _apply_c1_initial_inventory_overrides(inputs, state.inventory_overrides)
+        retained_inventory_overrides = dict(state.inventory_overrides)
+        retained_inventory_overrides.pop("eaf_slab_initial_t", None)
+        inputs = _apply_c1_initial_inventory_overrides(
+            inputs, retained_inventory_overrides
+        )
         inputs = scale_c1_inputs_to_time_grid(inputs, grid)
+        if temporal_repair_contract is not None:
+            inputs, kgf1_route_scale_reconciliation = (
+                _apply_c1_temporal_kgf1_route_scale_reconciliation(
+                    inputs,
+                    context,
+                    temporal_repair_contract,
+                    c1_routing,
+                    grid,
+                )
+            )
         heat_state = (
             replace(
                 context.eaf_heat_state_parameters,
@@ -1112,19 +1939,78 @@ def _build_physical_model(
             if context.eaf_heat_state_parameters is not None
             else None
         )
+        eaf_material_balance = context.config["eaf_material_balance"]
+        metallics_sensitivity = None
+        if temporal_repair_contract is not None:
+            raw_metallics = temporal_repair_contract.get(
+                "c1_metallics_sensitivity"
+            )
+            if not isinstance(raw_metallics, Mapping):
+                raise Phase6BError(
+                    "Temporal repair requires an explicit C1 metallics mode."
+                )
+            metallics_sensitivity = dict(raw_metallics)
+            required_recipe = {
+                "eaf_hdri_t_per_t_liquid_steel",
+                "eaf_scrap_t_per_t_liquid_steel",
+            }
+            missing_recipe = required_recipe.difference(metallics_sensitivity)
+            if missing_recipe:
+                raise Phase6BError(
+                    f"C1 metallics recipe is missing: {sorted(missing_recipe)}"
+                )
+            mode = str(metallics_sensitivity.get("mode", "base"))
+            expected_recipe = {
+                "base": (2.8 / 3.3, 0.9 / 3.3),
+                "hbi": (2.8 / 3.3, 0.9 / 3.3),
+                "high_scrap": (1.9 / 3.3, 1.8 / 3.3),
+            }
+            if mode not in expected_recipe:
+                raise Phase6BError(f"Unsupported C1 metallics mode: {mode!r}.")
+            recipe = (
+                float(
+                    metallics_sensitivity[
+                        "eaf_hdri_t_per_t_liquid_steel"
+                    ]
+                ),
+                float(
+                    metallics_sensitivity[
+                        "eaf_scrap_t_per_t_liquid_steel"
+                    ]
+                ),
+            )
+            if any(
+                not math.isclose(observed, expected, abs_tol=1e-9)
+                for observed, expected in zip(recipe, expected_recipe[mode])
+            ):
+                raise Phase6BError(
+                    "C1 metallics modes must use the predetermined MER endpoint recipe."
+                )
+            eaf_material_balance = {
+                "hdri_t_per_t_liquid_steel": recipe[0],
+                "scrap_t_per_t_liquid_steel": recipe[1],
+            }
         model = _build_c1_model(
             inputs, time_step_hours=grid.time_step_hours,
             enable_minimal_wag_layer=True, enable_c1_retained_bf_bof_route=True,
             enable_internal_wag_power=True,
             development_controller_activation=str(context.config["development_controller_activation"]),
             hsm_rolling_electricity_mwh_per_t_hrc_override=context.hsm_rolling_electricity,
-            rolling_production_deadline_targets_t=deadline_targets,
+            rolling_production_deadline_targets_t=(
+                None if temporal_repair_contract is not None else deadline_targets
+            ),
             fix_c1_hybrid_schedule=False, c1_retained_route_policy="quota_driven_topology",
             commitment_granularity=str(context.config["commitment_granularity"]),
             commitment_day_lengths=commitment_day_lengths,
-            eaf_material_balance=context.config["eaf_material_balance"],
+            eaf_material_balance=eaf_material_balance,
             bof_material_balance=context.config["bof_material_balance"],
             scrap_supply_ledger=scrap,
+            c1_bf_material_interface=(
+                None
+                if temporal_repair_contract is None
+                else temporal_repair_contract.get("c1_bf_material_interface")
+            ),
+            c1_metallics_sensitivity=metallics_sensitivity,
             downstream_origin_routing=c1_routing,
             c1_liquid_steel_route_band=None,
             continuous_must_run_activities=context.c1_continuous_activities,
@@ -1144,28 +2030,128 @@ def _build_physical_model(
             bf_electricity_intensity_scale=float(context.bf_electricity_scales[configuration]),
             eaf_heat_state_parameters=heat_state,
             initial_drp_pellet_input_t=state.drp_last_pellet_input_t,
+            initial_vn25_output_mw=state.last_vn25_output_mw,
+            enforce_final_product_requirement=temporal_repair_contract is None,
+            recoverable_handoff_execution_steps=(
+                recoverable_handoff_execution_steps
+            ),
+            temporal_plant_dynamics=(
+                None
+                if temporal_repair_contract is None
+                else temporal_repair_contract.get("plant_dynamics")
+            ),
+            initial_continuous_rate_t_h=(
+                None
+                if temporal_repair_contract is None
+                else {
+                    **state.last_continuous_rate_t_h,
+                    "pefa_pellet_output_t": float(state.pefa_last_output_t_h),
+                    "hot_strip_mill": float(state.hsm_last_input_t_h),
+                }
+            ),
+            recoverable_dri_tail_state=(
+                temporal_repair_contract is not None
+                and str(
+                    temporal_repair_contract.get("route_reference_policy", "")
+                )
+                == "annual_recoverable_calendar"
+            ),
+            experimental_self_use_calibration=(
+                None
+                if temporal_repair_contract is None
+                else temporal_repair_contract.get("experimental_self_use_calibration")
+            ),
+            experimental_process_electricity_overlay=(
+                None if temporal_repair_contract is None else temporal_repair_contract.get("experimental_process_electricity_overlay")
+            ),
+            experimental_ng_service_calibration=(
+                None
+                if temporal_repair_contract is None
+                else temporal_repair_contract.get("experimental_ng_service_calibration")
+            ),
+            experimental_coal_wag_calibration=(
+                None
+                if temporal_repair_contract is None
+                else temporal_repair_contract.get("experimental_coal_wag_calibration")
+            ),
         )
+        retained = inputs.retained_bf_bof
+        if retained is None:
+            raise Phase6BError(
+                "C1 temporal builds require retained BF-BOF inventory inputs."
+            )
+        model.temporal_process_limits_t_per_interval = {
+            name: tuple(float(item) for item in bounds)
+            for name, bounds in retained.process_limits.items()
+        }
+        model.temporal_beginning_inventories_t = {
+            "coke_store_initial_t": float(retained.coke_store_initial_t),
+            "sinter_store_initial_t": float(retained.sinter_store_initial_t),
+            "hot_iron_store_initial_t": float(retained.hot_iron_store_initial_t),
+            "cold_slab_store_initial_t": float(retained.cold_slab_store_initial_t),
+            "dri_buffer_initial_t": float(inputs.dri_buffer_initial_t),
+        }
+        if kgf1_route_scale_reconciliation is not None:
+            model.c1_kgf1_route_scale_reconciliation = (
+                kgf1_route_scale_reconciliation
+            )
+        if recursive_recovery_horizon_hours is not None:
+            _add_c1_recursive_handoff_recoverability(
+                model,
+                inputs,
+                context,
+                temporal_repair_contract,
+                grid,
+            )
     else:
         raise Phase6BError(f"Unknown steel configuration: {configuration}.")
-    _add_rolling_production_progress_tracking(
-        model, execution_block_hours=grid.execution_steps,
-        next_execution_target_t=float(progress["progress_target_by_configuration_t"][configuration]),
-        hard_exact_execution_target=terminal_day,
-        exact_deadline_hour=(
-            grid.hours_to_steps(int(terminal_hour_in_horizon))
-            if terminal_hour_in_horizon is not None
-            else None
-        ),
-        exact_deadline_target_t=(
-            float(context.config["annual_reference_target_mt_y"])
-            * 1_000_000.0
-            * float(state.executed_hours + int(terminal_hour_in_horizon))
-            / HOURS_PER_YEAR
-            - float(state.cumulative_production_t)
-            if terminal_hour_in_horizon is not None
-            else None
-        ),
-    )
+    if temporal_repair_contract is None:
+        _add_rolling_production_progress_tracking(
+            model, execution_block_hours=grid.execution_steps,
+            next_execution_target_t=float(progress["progress_target_by_configuration_t"][configuration]),
+            hard_exact_execution_target=terminal_day,
+            exact_deadline_hour=(
+                grid.hours_to_steps(int(terminal_hour_in_horizon))
+                if terminal_hour_in_horizon is not None
+                else None
+            ),
+            exact_deadline_target_t=(
+                float(context.config["annual_reference_target_mt_y"])
+                * 1_000_000.0
+                * float(state.executed_hours + int(terminal_hour_in_horizon))
+                / HOURS_PER_YEAR
+                - float(state.cumulative_production_t)
+                if terminal_hour_in_horizon is not None
+                else None
+            ),
+        )
+    else:
+        execution_lower = float(
+            temporal_repair_contract["final_product_execution_lower_t"]
+        )
+        execution_upper = float(
+            temporal_repair_contract["final_product_execution_upper_t"]
+        )
+        _add_rolling_production_progress_tracking(
+            model,
+            execution_block_hours=grid.execution_steps,
+            next_execution_target_t=float(
+                progress["progress_target_by_configuration_t"][configuration]
+            ),
+            execution_lower_bound_t=execution_lower,
+            execution_upper_bound_t=execution_upper,
+            zero_deviation_inside_recoverability_band=True,
+        )
+        model.temporal_contract_version = str(
+            temporal_repair_contract["temporal_contract_version"]
+        )
+        if configuration == C1_CONFIGURATION:
+            model.eaf_daily_route_band_replaced_by_heat_recoverability = True
+            model.eaf_annual_route_basis_t_y = float(
+                temporal_repair_contract["eaf_annual_route_basis_t_y"]
+            )
+        else:
+            model.c0_scalar_continuation_policy = "none_procurement_only"
     if terminal_hour_in_horizon is not None:
         _add_rolling_terminal_inventory_band(
             model,
@@ -1196,6 +2182,17 @@ def _represented_cost_expression(
         attributes = str(flow["model_component_attribute"]).split(";")
         is_grid = str(flow["price_id"]) == "grid_electricity_flat_nl"
         for attribute in attributes:
+            if context.temporal_contract_version is not None:
+                attribute = {
+                    "c0_bof_scrap_input": "external_scrap_to_bof_t",
+                    "bof_scrap_supply_t": "external_scrap_to_bof_t",
+                    "eaf_scrap_supply_t": "external_scrap_to_eaf_t",
+                }.get(attribute, attribute)
+                if getattr(model, "experimental_coal_wag_policy", "inactive") != "inactive":
+                    attribute = {
+                        "coking_plant_1": "c1_adjusted_coking_coal_input_t",
+                        "bf_pci_input_t": "c1_adjusted_pci_input_t",
+                    }.get(attribute, attribute)
             if not hasattr(model, attribute):
                 raise Phase6BError(f"Frozen physical cost component is missing: {attribute}.")
             component = getattr(model, attribute)
@@ -1602,6 +2599,10 @@ def _inventory_overrides(model: ConcreteModel, configuration: str, index: int) -
     }
     if configuration == C1_CONFIGURATION:
         result["dri_buffer_initial_t"] = _component_value(model, "dri_inventory", index)
+        if hasattr(model, "eaf_slab_inventory"):
+            result["eaf_slab_initial_t"] = _component_value(
+                model, "eaf_slab_inventory", index
+            )
     return result
 
 
@@ -1682,6 +2683,11 @@ def advance_steel_state(
     previous_state: SteelRollingState,
     redispatch_result: SteelRedispatchResult,
 ) -> SteelRollingState:
+    if previous_state.temporal_contract_version is not None:
+        raise Phase6BError(
+            "Versioned deterministic temporal state must use the executed-D "
+            "deterministic state exporter, not the legacy market redispatch path."
+        )
     if previous_state.configuration_id != redispatch_result.configuration_id:
         raise Phase6BError("State and redispatch configuration identities differ.")
     if redispatch_result.delivery_day and previous_state.last_executed_timestamp_utc:

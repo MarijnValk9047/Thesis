@@ -198,6 +198,94 @@ authorise real DAM dispatch, bidding, clearing, settlement, export or revenue;
 IJ01 remains non-price-responsive and the missing historical/unit operating
 features remain explicit limitations.
 
+## 1B. Active deterministic C1 scalar temporal formulation
+
+The active C1 temporal-repair contract is
+`c1_deterministic_scalar_temporal_v3`. In this formulation, `r` denotes only
+the rolling replan and `rho` denotes a material route. Further indices are
+`i` for process assets, `d` for calendar days, `b` for inventory materials,
+`g` for energy carriers, `k` for represented energy consumers and `m` for
+externally purchased materials. The executed time set is a strict subset of
+the physical planning set:
+
+```text
+T_exec[r] subset_of T_phys[r]
+```
+
+The mixed decision vector `u[r]` contains the existing process rates,
+commitment states, inventories, route flows, carrier allocations, named NG,
+grid import, internal generation and flare variables:
+
+```text
+x[i,r,t], z[i,r,d], I[b,r,t], F[rho,r,t], w[g,k,r,t], n[k,r,t],
+P_grid[r,t], P_gen[r,t], F_flare[g,r,t]
+```
+
+EAF heat starts and taps are explicit binaries `y_start[r,t]` and
+`y_tap[r,t]`. The executed daily heat count is an expression, not a separate
+integer variable:
+
+```text
+H[r] = sum(t in T_exec[r], y_tap[r,t])
+```
+
+The operational model has exactly one objective:
+
+```text
+minimise J[r] = C_proc[r] + V0(s[r+1])
+V0(s[r+1]) = kappa_heat * R_tap[r+1]
+R_tap[r+1] = R_tap[r] - H[r]
+```
+
+`C_proc[r]` contains represented external procurement in the executed day
+only. In rate notation this is:
+
+```text
+C_proc[r] = sum(t in T_exec[r], dt[t] * (
+    price_el[t] * P_grid[r,t]
+  + price_NG[t] * (N_base[c] + sum(k in K_NG[c], n[k,r,t]))
+  + sum(m in M_ext[c], price_mat[m,t] * Q_ext[m,r,t])
+))
+```
+
+The Pyomo builder stores electricity as interval MWh and material deliveries
+as interval tonnes. Those implementation variables therefore already include
+`dt[t]` and are not multiplied by it a second time. Internal BFG, COG, BOFG,
+steam and internal electricity have no direct purchase price. Export revenue,
+product revenue, ETS and annual validation anchors are absent from the
+objective.
+
+All material and energy balances, capacities, must-run contracts, production
+progress, EAF occupancy, origin-tagged scrap quotas, inventories, route bands,
+week recoverability and terminal closure are hard constraints. Daily taps obey
+the stateful bounds:
+
+```text
+L[r] = max(L_phys[r], R_tap[r] - sum(d > r, U_phys[d]))
+U[r] = min(U_phys[r], R_tap[r] - sum(d > r, L_phys[d]))
+L[r] <= H[r] <= U[r]
+```
+
+The physical bounds depend on calendar-day length and EAF carry-in. Only the
+state at the end of `T_exec[r]` is exported; the later feasibility-tail state
+is never carried into the next replan. Normalized total variation and the
+quota-neutral heat-count deviation are reporting KPIs, not objective terms.
+
+The temporary linear continuation coefficient is calibrated offline from
+strict fixed-26 and fixed-28 procurement-cost endpoints in the same state:
+
+```text
+kappa_heat = (C_proc_fixed_28 - C_proc_fixed_26) / 2
+```
+
+This flat-price calibration can make several heat counts scalar-equivalent.
+Consequently, D5 tests a free 72-hour model for the same certified scalar
+optimum and separately proves that the canonical executed 48-hour-prefix
+solution has a feasible 72-hour continuation with the same exported state.
+It does not add an unevidenced heat-count tie-break. Annual anchors remain
+validation-only and partial-boundary comparisons do not establish complete
+real-plant behaviour.
+
 ## 2. Bid-Clearing Logic
 
 The bidding layer sits on top of the physical model.
@@ -348,3 +436,126 @@ This file does not claim that:
 - the current equations here are the final thesis notation.
 
 It is a roadmap document for repository structure and modelling intent.
+
+## 9. Downstream temporal development contract
+
+For both deterministic configurations, HSM and DSP routing rates are constant
+within each aligned one-hour block. DSP final-product flow additionally obeys
+the uniform development envelope
+
+```text
+0 <= F_DSP_final[t] / dt <= 1_500_000 / 8_760  t/h.
+```
+
+This quotient is an annual service envelope, not a sourced nameplate capacity.
+No DSP/HSM ramp or minimum-up/down time follows from it.
+
+In C1, EAF-origin slab can bridge the execution/physical-tail boundary:
+
+```text
+I_EAF_slab[t] = I_EAF_slab[t-1] + EAF_slab[t] - draw_EAF_to_HSM[t]
+I_BOF_cold_slab[t] + I_EAF_slab[t] <= I_shared_cold_slab_max.
+```
+
+The executed inventory is carried in the rolling state. Recoverable physical
+tails do not impose exact EAF-slab closure, while true week/campaign closure
+remains governed separately. Origin-specific HSM/final-product accounting is
+preserved; this is not a material or capacity plug.
+
+## 10. C1 HDRI/CDRI temporal interface
+
+The C1 base model distinguishes hot direct feed from cold stored DRI:
+
+```text
+DRI_DRP[t] = HDRI_direct[t] + HDRI_to_CDRI_store[t]
+DRI_EAF[t] = HDRI_direct[t] + CDRI_from_store[t]
+I_CDRI[t] = I_CDRI[t-1] + HDRI_to_CDRI_store[t] - CDRI_from_store[t]
+CDRI_from_store[t] <= 0.30 * DRI_EAF[t]
+CDRI_from_store[t] <= I_CDRI[t-1].
+```
+
+The last inequality prevents material produced in an interval from being
+cooled and withdrawn again in that same interval. The inherited 17,760-t
+inventory capacity and rolling/campaign terminal rules remain unchanged.
+Direct HDRI is represented at 600 °C and CDRI at 50 °C. For the
+liquid-steel-equivalent amount supplied by CDRI, EAF arc electricity receives
+a 25% premium:
+
+```text
+E_CDRI_extra[t]
+  = 0.25 * e_EAF_arc * CDRI_from_store[t] / a_HDRI_per_LS.
+```
+
+The temperatures, 30% share and 25% premium are development-policy inputs;
+the model does not infer cooling time, thermal degradation or detailed silo
+physics from them. The HBI sensitivity remains a separate non-stacked case.
+
+## 11. Normalized continuous-plant development envelopes
+
+For the common C0/C1 continuous-asset families, the active development
+envelope is defined around an accepted flat-price physical reference
+`x_ref[i,c]`:
+
+```text
+x_ref[i,c] * (1 - alpha[family(i)]) <= x[i,c,t] / dt
+x[i,c,t] / dt <= x_ref[i,c] * (1 + alpha[family(i)]).
+```
+
+The resolved bound may be clipped by a retained governed plant bound, but is
+never expanded beyond the relative candidate. Ramps use the same
+configuration-specific reference:
+
+```text
+abs(x_rate[i,c,t] - x_rate[i,c,t-1])
+  <= beta[family(i)] * x_ref[i,c].
+```
+
+The active relative half-widths are 3% for KGF, 20% for SiFa, 15% for BF and
+3% for PeFa. These are flat-trajectory-calibrated development envelopes, not
+measured technical nameplate ranges and not tuned on price response.
+
+C0 has two blast furnaces. Independent normalized envelopes alone allowed the
+combined BF activity to fall below the previously retained joint minimum,
+depleted the cold-slab handoff inventory and made the flat rolling week
+infeasible. C0 therefore retains the pre-normalization aggregate floor:
+
+```text
+x_BF6[C0,t] / dt + x_BF7[C0,t] / dt >= 304.61538462 t/h.
+```
+
+This preserves route recoverability while leaving endogenous BF6/BF7 load
+sharing. It is a development aggregate activity floor, not a physical hot-metal
+identity or Tata nameplate claim.
+
+### Hourly execution and physical-feasibility timesets
+
+The active hourly rolling model separates the executed and physical timesets:
+
+```text
+T_exec = {0, ..., 23}
+T_phys = {0, ..., 71}
+T_tail = T_phys \ T_exec.
+```
+
+All physical balances, plant dynamics, batch states and inventory limits hold
+on `T_phys`. Represented procurement cost contains variables from `T_exec`
+only. The 48 tail hours contain no forecast or realised price information and
+serve only to prove that the state exported after hour 23 has a feasible
+continuation. If a week or annual terminal lies inside `T_phys`, its route and
+inventory conditions are imposed on the corresponding physical endpoint.
+
+For the active route-scaled annual KGF1 dry-coal reference
+\(Q^{KGF1,ref}\), hourly annual recoverability currently imposes
+
+```text
+Q_KGF1,completed + Q_KGF1,remaining
+    in [Q_KGF1,ref - 1 t, Q_KGF1,ref + 1 t].
+```
+
+This absolute band remains a governed development contract, not a statement of
+MER source precision. Once the year endpoint lies inside `T_phys`, all
+abstract future-residual variables and capacity envelopes are disabled and the
+exact physical plant, material, route, inventory and EAF constraints determine
+the terminal witness. The resulting v41 C1 perfect-foresight year has a proven
+0.618331-t coke reconciliation conflict on day 352; resolving it requires an
+explicit decision on annual KGF1 anchor semantics or tolerance.

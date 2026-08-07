@@ -62,9 +62,6 @@ from .wag_development_controller_contract import (
     load_development_controller_profile,
 )
 from .validation_tolerance_policy import (
-    POLICY_FINGERPRINT as VALIDATION_TOLERANCE_POLICY_FINGERPRINT,
-    POLICY_ID as VALIDATION_TOLERANCE_POLICY_ID,
-    POLICY_VERSION as VALIDATION_TOLERANCE_POLICY_VERSION,
     SOLVER_NUMERICAL_TOLERANCE,
     TERMINAL_STATE_TOLERANCE_T,
     ValidationTolerancePolicyError,
@@ -6207,6 +6204,7 @@ def _add_rolling_production_progress_tracking(
     exact_deadline_target_t: float | None = None,
     execution_lower_bound_t: float | None = None,
     execution_upper_bound_t: float | None = None,
+    zero_deviation_inside_recoverability_band: bool = False,
 ) -> None:
     """Add a lexicographic target for the next executed rolling block.
 
@@ -6227,20 +6225,31 @@ def _add_rolling_production_progress_tracking(
         )
     model.rolling_production_progress_surplus_t = Var(domain=NonNegativeReals)
     model.rolling_production_progress_deficit_t = Var(domain=NonNegativeReals)
-    model.rolling_production_progress_identity = Constraint(
-        expr=(
-            sum(
-                model.final_product_output[t]
-                for t in range(execution_block_hours)
-            )
-            - float(next_execution_target_t)
-            == model.rolling_production_progress_surplus_t
-            - model.rolling_production_progress_deficit_t
-        )
-    )
     executed_output = sum(
         model.final_product_output[t] for t in range(execution_block_hours)
     )
+    if zero_deviation_inside_recoverability_band:
+        if execution_lower_bound_t is None or execution_upper_bound_t is None:
+            raise S44CModelBuilderError(
+                "Band-neutral production progress requires both recoverability bounds."
+            )
+        model.rolling_production_progress_above_band = Constraint(
+            expr=executed_output - float(execution_upper_bound_t)
+            <= model.rolling_production_progress_surplus_t
+        )
+        model.rolling_production_progress_below_band = Constraint(
+            expr=float(execution_lower_bound_t) - executed_output
+            <= model.rolling_production_progress_deficit_t
+        )
+    else:
+        model.rolling_production_progress_identity = Constraint(
+            expr=(
+                executed_output
+                - float(next_execution_target_t)
+                == model.rolling_production_progress_surplus_t
+                - model.rolling_production_progress_deficit_t
+            )
+        )
     if execution_lower_bound_t is not None:
         model.rolling_production_recoverability_lower = Constraint(
             expr=executed_output >= float(execution_lower_bound_t)
@@ -6299,6 +6308,9 @@ def _add_rolling_production_progress_tracking(
     model.rolling_production_progress_execution_hours = int(execution_block_hours)
     model.rolling_production_hard_exact_execution_target = bool(
         hard_exact_execution_target
+    )
+    model.rolling_production_zero_deviation_inside_recoverability_band = bool(
+        zero_deviation_inside_recoverability_band
     )
 
 
@@ -6392,6 +6404,133 @@ def _add_rolling_terminal_inventory_band(
     model.rolling_terminal_inventory_replaced_cyclic_constraints = tuple(
         replaced_cyclic_constraints
     )
+
+
+def _apply_c1_inventory_terminal_policy(
+    model: ConcreteModel,
+    *,
+    recoverable_handoff_execution_steps: int | None,
+    recoverable_dri_tail_state: bool = False,
+) -> None:
+    """Distinguish a bounded look-ahead tail from a genuine hard terminal.
+
+    With no execution boundary the shared C1 builder retains its exact cyclic
+    inventory closure.  With a boundary, the executed state is certified by
+    the remaining bounded physical continuation; the artificial tail endpoint
+    does not become a second coke/sinter/hot-iron production deadline.
+    """
+
+    if recoverable_handoff_execution_steps is None:
+        model.c1_inventory_terminal_policy = "hard_cyclic_or_campaign_terminal"
+        model.temporal_tail_cyclic_closures_replaced = ()
+        return
+    execution_steps = int(recoverable_handoff_execution_steps)
+    horizon_steps = len(model.TIME)
+    if execution_steps <= 0 or execution_steps >= horizon_steps:
+        raise S44CModelBuilderError(
+            "A recoverable C1 handoff requires an execution boundary strictly "
+            "inside the physical horizon."
+        )
+    for name in (
+        "coke_capacity",
+        "sinter_capacity",
+        "hot_iron_capacity",
+        "cold_slab_capacity",
+    ):
+        if not hasattr(model, name) or not getattr(model, name).active:
+            raise S44CModelBuilderError(
+                f"A recoverable C1 handoff requires active {name}."
+            )
+    replaced: list[str] = []
+    for name in (
+        "coke_terminal",
+        "sinter_terminal",
+        "hot_iron_terminal",
+        "cold_slab_terminal",
+    ):
+        if not hasattr(model, name) or not getattr(model, name).active:
+            raise S44CModelBuilderError(
+                f"A recoverable C1 handoff expected active cyclic {name}."
+            )
+        getattr(model, name).deactivate()
+        replaced.append(name)
+    if hasattr(model, "pellet_terminal"):
+        model.pellet_terminal.deactivate()
+        replaced.append("pellet_terminal")
+    if hasattr(model, "eaf_slab_terminal"):
+        model.eaf_slab_terminal.deactivate()
+        replaced.append("eaf_slab_terminal")
+    if recoverable_dri_tail_state:
+        if not hasattr(model, "dri_terminal_equality") or not model.dri_terminal_equality.active:
+            raise S44CModelBuilderError(
+                "A recoverable DRI tail expected the active finite-tail equality."
+            )
+        model.dri_terminal_equality.deactivate()
+        replaced.append("dri_terminal_equality")
+    model.c1_inventory_terminal_policy = (
+        "executed_state_with_bounded_physical_continuation_no_cyclic_tail_closure"
+    )
+    model.temporal_tail_handoff_policy = model.c1_inventory_terminal_policy
+    model.temporal_tail_cyclic_closures_replaced = tuple(replaced)
+    model.temporal_executed_handoff_index = execution_steps - 1
+    model.temporal_physical_tail_steps = horizon_steps - execution_steps
+    model.temporal_dri_tail_state_policy = (
+        "capacity_bounded_rolling_state_no_artificial_tail_cycle"
+        if recoverable_dri_tail_state
+        else "finite_tail_cyclic_reference"
+    )
+
+
+def _apply_c0_inventory_terminal_policy(
+    model: ConcreteModel,
+    *,
+    recoverable_handoff_execution_steps: int | None,
+) -> None:
+    """Remove artificial C0 tail closure while retaining bounded continuation."""
+
+    if recoverable_handoff_execution_steps is None:
+        model.c0_inventory_terminal_policy = "hard_cyclic_or_campaign_terminal"
+        model.temporal_tail_cyclic_closures_replaced = ()
+        return
+    execution_steps = int(recoverable_handoff_execution_steps)
+    horizon_steps = len(model.TIME)
+    if execution_steps <= 0 or execution_steps >= horizon_steps:
+        raise S44CModelBuilderError(
+            "A recoverable C0 handoff needs an execution boundary inside the horizon."
+        )
+    required_capacity = (
+        "coke_capacity",
+        "sinter_capacity",
+        "hot_iron_capacity",
+        "cold_slab_capacity",
+        "pellet_capacity",
+    )
+    for name in required_capacity:
+        if not hasattr(model, name) or not getattr(model, name).active:
+            raise S44CModelBuilderError(
+                f"A recoverable C0 handoff requires active {name}."
+            )
+    replaced: list[str] = []
+    for name in (
+        "coke_terminal",
+        "sinter_terminal",
+        "hot_iron_terminal",
+        "cold_slab_terminal",
+        "pellet_terminal",
+    ):
+        if not hasattr(model, name) or not getattr(model, name).active:
+            raise S44CModelBuilderError(
+                f"A recoverable C0 handoff expected active {name}."
+            )
+        getattr(model, name).deactivate()
+        replaced.append(name)
+    model.c0_inventory_terminal_policy = (
+        "executed_state_with_bounded_physical_continuation_no_cyclic_tail_closure"
+    )
+    model.temporal_tail_handoff_policy = model.c0_inventory_terminal_policy
+    model.temporal_tail_cyclic_closures_replaced = tuple(replaced)
+    model.temporal_executed_handoff_index = execution_steps - 1
+    model.temporal_physical_tail_steps = horizon_steps - execution_steps
 
 
 def _add_final_product_requirement(
@@ -6527,23 +6666,28 @@ def _add_day_commitment_layer(
     it selects plant availability from physical demand without prescribing
     operating hours. Existing hourly maximum capacities remain binding.
     """
+    explicit_day_lengths = commitment_day_lengths is not None
     day_lengths = (
         [int(value) for value in commitment_day_lengths]
-        if commitment_day_lengths is not None
+        if explicit_day_lengths
         else [int(round(24.0 / time_step_hours))]
         * int(round(horizon_hours * time_step_hours / 24.0))
     )
+    full_local_day_hours = {23.0, 24.0, 25.0}
+    complete_segments = day_lengths[:-1] if explicit_day_lengths else day_lengths
+    final_segment_hours = round(day_lengths[-1] * time_step_hours, 10) if day_lengths else 0.0
     if (
         not day_lengths
         or sum(day_lengths) != horizon_hours
-        or any(
-            round(value * time_step_hours, 10) not in {23.0, 24.0, 25.0}
-            for value in day_lengths
+        or any(round(value * time_step_hours, 10) not in full_local_day_hours for value in complete_segments)
+        or (
+            final_segment_hours not in full_local_day_hours
+            and not (explicit_day_lengths and 0.0 < final_segment_hours < 23.0)
         )
     ):
         raise S44CModelBuilderError(
-            "Daily commitment requires complete 23/24/25-hour local delivery days "
-            "expressed in model intervals."
+            "Daily commitment requires complete 23/24/25-hour local delivery days; "
+            "an explicit physical-tail partition may end in one partial final day."
         )
     boundaries: list[tuple[int, int]] = []
     start = 0
@@ -6556,6 +6700,12 @@ def _add_day_commitment_layer(
         for hour in range(day_start, day_end)
     }
     model.COMMITMENT_DAY = RangeSet(0, len(day_lengths) - 1)
+    model.commitment_final_segment_partial = (
+        final_segment_hours not in full_local_day_hours
+    )
+    model.commitment_day_lengths_hours = tuple(
+        float(value) * time_step_hours for value in day_lengths
+    )
     for commitment_id, (activity_name, on_name, minimum_rate) in commitment_definitions.items():
         day_on_name = f"{commitment_id}_day_on"
         setattr(model, day_on_name, Var(model.COMMITMENT_DAY, domain=Binary))
@@ -6731,6 +6881,7 @@ def _add_c0_minimal_wag_layer(
     hsm_source_mix_policy: Mapping[str, Any] | None = None,
     generator_interface_cap_mode: str = "inherited_profile",
     generator_unit_interface: Mapping[str, Any] | None = None,
+    initial_vn25_output_mw: float | None = None,
     aggregate_generator_technical_interface: Mapping[str, Any] | None = None,
     full_site_energy_bridge: Mapping[str, Any] | None = None,
     eaf_secondary_electricity_mwh_per_t_ls_override: float | None = None,
@@ -6739,6 +6890,10 @@ def _add_c0_minimal_wag_layer(
     dsp_output_activity_rule: Any | None = None,
     bf_hot_metal_activity_rule: Any | None = None,
     bf_electricity_intensity_scale: float = 1.0,
+    experimental_self_use_calibration: Mapping[str, Any] | None = None,
+    experimental_process_electricity_overlay: Mapping[str, Any] | None = None,
+    experimental_ng_service_calibration: Mapping[str, Any] | None = None,
+    experimental_coal_wag_calibration: Mapping[str, Any] | None = None,
     electricity_sale_sensitivity: Mapping[str, Any] | None = None,
 ) -> None:
     lhv_mj_per_nm3, combustion_t_per_mwh = load_governed_wag_factor_maps()
@@ -6759,6 +6914,82 @@ def _add_c0_minimal_wag_layer(
         raise S44CModelBuilderError("DSP electricity override must be non-negative.")
     if bf_electricity_intensity_scale <= 0.0:
         raise S44CModelBuilderError("BF electricity-intensity scale must be positive.")
+    calibration = dict(experimental_self_use_calibration or {})
+    electricity_overlay = dict(experimental_process_electricity_overlay or {})
+    ng_service_calibration = dict(experimental_ng_service_calibration or {})
+    coal_wag_calibration = dict(experimental_coal_wag_calibration or {})
+    if electricity_overlay and (
+        electricity_overlay.get("classification")
+        != "experimental_proportional_process_electricity_not_source_proven"
+        or float(electricity_overlay.get("mwh_per_t_activity", -1.0)) < 0.0
+    ):
+        raise S44CModelBuilderError("Invalid experimental process-electricity overlay.")
+    if calibration:
+        required_calibration = {
+            "classification",
+            "additional_cog_mwh_per_t_kgf_activity",
+            "additional_cog_mwh_per_t_sinter",
+            "additional_bofg_mwh_per_t_pellet",
+        }
+        missing_calibration = required_calibration.difference(calibration)
+        if missing_calibration:
+            raise S44CModelBuilderError(
+                f"Experimental self-use calibration is missing: {sorted(missing_calibration)}"
+            )
+        if calibration["classification"] != "experimental_carrier_self_use_calibration_not_source_proven":
+            raise S44CModelBuilderError("Unexpected experimental self-use classification.")
+        if any(float(calibration[key]) < 0.0 for key in required_calibration - {"classification"}):
+            raise S44CModelBuilderError("Experimental self-use coefficients must be non-negative.")
+    if ng_service_calibration:
+        required_ng_service = {
+            "classification",
+            "ironmaking_target_pj_y",
+            "ironmaking_basis_t_y",
+            "downstream_target_pj_y",
+            "downstream_basis_t_y",
+        }
+        missing_ng_service = required_ng_service.difference(ng_service_calibration)
+        if missing_ng_service:
+            raise S44CModelBuilderError(
+                f"Experimental NG service calibration is missing: {sorted(missing_ng_service)}"
+            )
+        if ng_service_calibration["classification"] != (
+            "user_authorized_c1_origin_explicit_ng_service_calibration"
+        ):
+            raise S44CModelBuilderError("Unexpected experimental NG service classification.")
+        if any(
+            float(ng_service_calibration[key]) <= 0.0
+            for key in required_ng_service - {"classification"}
+        ):
+            raise S44CModelBuilderError(
+                "Experimental NG service targets and production bases must be positive."
+            )
+    if coal_wag_calibration:
+        required_coal_wag = {
+            "classification",
+            "coal_procurement_multiplier",
+            "bfg_mwh_per_t_hot_metal",
+            "cog_mwh_per_t_kgf_activity",
+            "bofg_mwh_per_t_bof_steel",
+            "cog_self_use_scale",
+        }
+        missing_coal_wag = required_coal_wag.difference(coal_wag_calibration)
+        if missing_coal_wag:
+            raise S44CModelBuilderError(
+                f"Experimental coal/WAG calibration is missing: {sorted(missing_coal_wag)}"
+            )
+        if coal_wag_calibration["classification"] != (
+            "user_authorized_c1_coal_completion_carrier_wag_calibration"
+        ):
+            raise S44CModelBuilderError("Unexpected coal/WAG calibration classification.")
+        if float(coal_wag_calibration["coal_procurement_multiplier"]) < 1.0:
+            raise S44CModelBuilderError("Coal completion may not reduce represented procurement.")
+        if any(
+            float(coal_wag_calibration[key]) <= 0.0
+            for key in required_coal_wag
+            - {"classification", "coal_procurement_multiplier"}
+        ):
+            raise S44CModelBuilderError("Carrier-specific WAG intensities must be positive.")
 
     # Every eligible carrier stays separately balanced.  The active HSM
     # development controller defaults to the source-backed QRA COG/NG
@@ -6887,6 +7118,24 @@ def _add_c0_minimal_wag_layer(
     hsm_output_activity = hsm_output_activity_rule or (lambda m, t: m.hot_strip_mill[t])
     dsp_output_activity = dsp_output_activity_rule or (lambda m, t: m.dsp_final_product_output[t])
     bf_hot_metal_activity = bf_hot_metal_activity_rule or (lambda m, t: m.bf6_hot_iron_output[t])
+    overlay_coefficient = float(electricity_overlay.get("mwh_per_t_activity", 0.0))
+    model.experimental_process_electricity_overlay_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: overlay_coefficient * (
+            m.coking_plant_1[t] + m.sinter_output[t] + bf_hot_metal_activity(m, t)
+            + m.bof_crude_steel_output[t]
+            + (
+                m.pefa_pellet_output_t[t]
+                if hasattr(m, "pefa_pellet_output_t")
+                else (
+                    development_profile.pefa_pellets_t_h * time_step_hours
+                    if development_profile is not None
+                    else 0.0
+                )
+            )
+            + hsm_output_activity(m, t) + dsp_output_activity(m, t)
+        ),
+    )
 
     def _controller_profile_weight(controller_key: str, t: int) -> float:
         """Return an optional fixed diagnostic timing weight for one demand row.
@@ -6912,27 +7161,42 @@ def _add_c0_minimal_wag_layer(
                 f"Representative-profile weight for {controller_key} at hour {int(t)} must be non-negative."
             )
         return weight
+    bfg_mwh_per_t_hot_metal = float(
+        coal_wag_calibration.get(
+            "bfg_mwh_per_t_hot_metal", inputs.bfg_mwh_per_t_hot_iron
+        )
+    )
+    cog_mwh_per_t_kgf_activity = float(
+        coal_wag_calibration.get(
+            "cog_mwh_per_t_kgf_activity", inputs.cog_mwh_per_t_coke
+        )
+    )
+    bofg_mwh_per_t_bof_steel = float(
+        coal_wag_calibration.get(
+            "bofg_mwh_per_t_bof_steel", inputs.bofg_mwh_per_t_liquid_steel
+        )
+    )
     model.bfg_prod_bf6 = Expression(
         model.TIME,
-        rule=lambda m, t: inputs.bfg_mwh_per_t_hot_iron * m.bf6_hot_iron_output[t],
+        rule=lambda m, t: bfg_mwh_per_t_hot_metal * m.bf6_hot_iron_output[t],
     )
     model.bfg_prod_bf7 = Expression(
         model.TIME,
-        rule=lambda m, t: inputs.bfg_mwh_per_t_hot_iron * m.bf7_hot_iron_output[t],
+        rule=lambda m, t: bfg_mwh_per_t_hot_metal * m.bf7_hot_iron_output[t],
     )
     model.bfg_generated = Expression(model.TIME, rule=lambda m, t: m.bfg_prod_bf6[t] + m.bfg_prod_bf7[t])
     model.cog_prod_kgf1 = Expression(
         model.TIME,
-        rule=lambda m, t: inputs.cog_mwh_per_t_coke * m.coking_plant_1[t],
+        rule=lambda m, t: cog_mwh_per_t_kgf_activity * m.coking_plant_1[t],
     )
     model.cog_prod_kgf2 = Expression(
         model.TIME,
-        rule=lambda m, t: inputs.cog_mwh_per_t_coke * m.coking_plant_2[t],
+        rule=lambda m, t: cog_mwh_per_t_kgf_activity * m.coking_plant_2[t],
     )
     model.cog_generated = Expression(model.TIME, rule=lambda m, t: m.cog_prod_kgf1[t] + m.cog_prod_kgf2[t])
     model.bofg_prod_bof = Expression(
         model.TIME,
-        rule=lambda m, t: inputs.bofg_mwh_per_t_liquid_steel * m.bof_crude_steel_output[t],
+        rule=lambda m, t: bofg_mwh_per_t_bof_steel * m.bof_crude_steel_output[t],
     )
     model.bofg_generated = Expression(model.TIME, rule=lambda m, t: m.bofg_prod_bof[t])
 
@@ -6968,7 +7232,13 @@ def _add_c0_minimal_wag_layer(
     )
     model.cog_to_kgf1 = Expression(
         model.TIME,
-        rule=lambda m, t: inputs.kgf_underfiring_mwh_per_t_coke * kgf_underfiring_activity(m, t),
+        rule=lambda m, t: (
+            float(coal_wag_calibration.get("cog_self_use_scale", 1.0))
+            * (
+                inputs.kgf_underfiring_mwh_per_t_coke
+                + float(calibration.get("additional_cog_mwh_per_t_kgf_activity", 0.0))
+            )
+        ) * kgf_underfiring_activity(m, t),
     )
     model.cog_to_kgf2 = Expression(
         model.TIME,
@@ -6976,7 +7246,13 @@ def _add_c0_minimal_wag_layer(
     )
     model.cog_to_sinter = Expression(
         model.TIME,
-        rule=lambda m, t: inputs.sinter_cog_mwh_per_t_sinter * m.sinter_output[t],
+        rule=lambda m, t: (
+            float(coal_wag_calibration.get("cog_self_use_scale", 1.0))
+            * (
+                inputs.sinter_cog_mwh_per_t_sinter
+                + float(calibration.get("additional_cog_mwh_per_t_sinter", 0.0))
+            )
+        ) * m.sinter_output[t],
     )
 
     if (enable_hsm_controller or enable_pefa_controller or enable_boiler_scaffold or enable_generator_interface or enable_electricity_boundary_controller) and development_profile is None:
@@ -7048,9 +7324,19 @@ def _add_c0_minimal_wag_layer(
     # C5n_a resolves the total PEFA-gas controller without inventing a fixed
     # stage-intensity split.  These are its accepted continuous output rows.
     if enable_pefa_controller:
-        model.pefa_pellet_output_t = Expression(
-            model.TIME,
-            rule=lambda _m, _t: development_profile.pefa_pellets_t_h * time_step_hours,
+        if not hasattr(model, "pefa_pellet_output_t"):
+            model.pefa_pellet_output_t = Expression(
+                model.TIME,
+                rule=lambda _m, _t: development_profile.pefa_pellets_t_h
+                * time_step_hours,
+            )
+        pefa_bofg_mwh_per_t = (
+            development_profile.pefa_bofg_mwh_h
+            / development_profile.pefa_pellets_t_h
+        )
+        pefa_cog_mwh_per_t = (
+            development_profile.pefa_cog_mwh_h
+            / development_profile.pefa_pellets_t_h
         )
         model.bofg_to_pefa_malerij = Var(model.TIME, domain=NonNegativeReals)
         model.cog_to_pefa_branderij = Var(model.TIME, domain=NonNegativeReals)
@@ -7058,20 +7344,27 @@ def _add_c0_minimal_wag_layer(
         model.ng_to_pefa_branderij_mwh = Var(model.TIME, domain=NonNegativeReals)
         model.pefa_malerij_heat_balance = Constraint(
             model.TIME,
-            rule=lambda m, t: m.bofg_to_pefa_malerij[t] + m.ng_to_pefa_malerij_mwh[t]
-            == development_profile.pefa_bofg_mwh_h
-            * time_step_hours
-            * _controller_profile_weight("pefa_bofg", int(t)),
+            rule=lambda m, t: (
+                m.bofg_to_pefa_malerij[t] + m.ng_to_pefa_malerij_mwh[t]
+                == pefa_bofg_mwh_per_t
+                * m.pefa_pellet_output_t[t]
+                * _controller_profile_weight("pefa_bofg", int(t))
+                + float(calibration.get("additional_bofg_mwh_per_t_pellet", 0.0))
+                * m.pefa_pellet_output_t[t]
+            ),
         )
         model.pefa_branderij_heat_balance = Constraint(
             model.TIME,
             rule=lambda m, t: m.cog_to_pefa_branderij[t] + m.ng_to_pefa_branderij_mwh[t]
-            == development_profile.pefa_cog_mwh_h
-            * time_step_hours
+            == pefa_cog_mwh_per_t
+            * m.pefa_pellet_output_t[t]
             * _controller_profile_weight("pefa_cog", int(t)),
         )
     else:
-        model.pefa_pellet_output_t = Expression(model.TIME, rule=lambda _m, _t: 0.0)
+        if not hasattr(model, "pefa_pellet_output_t"):
+            model.pefa_pellet_output_t = Expression(
+                model.TIME, rule=lambda _m, _t: 0.0
+            )
         model.bofg_to_pefa_malerij = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.cog_to_pefa_branderij = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.ng_to_pefa_malerij_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
@@ -7176,8 +7469,8 @@ def _add_c0_minimal_wag_layer(
     )
     model.pefa_electricity_mwh = Expression(
         model.TIME,
-        rule=lambda _m, _t: (
-            0.0213 * development_profile.pefa_pellets_t_h * time_step_hours
+        rule=lambda m, t: (
+            0.0213 * m.pefa_pellet_output_t[t]
             if enable_pefa_controller
             else 0.0
         ),
@@ -7229,7 +7522,12 @@ def _add_c0_minimal_wag_layer(
                 if hasattr(m, "eaf_arc_electricity_mwh")
                 else 0.0
             )
-            + m.eaf_secondary_electricity_mwh[t],
+            + m.eaf_secondary_electricity_mwh[t]
+            + (
+                m.eaf_cold_dri_reheat_electricity_mwh[t]
+                if hasattr(m, "eaf_cold_dri_reheat_electricity_mwh")
+                else 0.0
+            ),
         )
         model.bof_oxygen_development_t = Expression(
             model.TIME,
@@ -7290,7 +7588,16 @@ def _add_c0_minimal_wag_layer(
         # across configurations or constructing a residual electricity load.
         model.eaf_total_electricity_mwh = Expression(
             model.TIME,
-            rule=lambda m, t: m.eaf_arc_electricity_mwh[t] if hasattr(m, "eaf_arc_electricity_mwh") else 0.0,
+            rule=lambda m, t: (
+                m.eaf_arc_electricity_mwh[t]
+                if hasattr(m, "eaf_arc_electricity_mwh")
+                else 0.0
+            )
+            + (
+                m.eaf_cold_dri_reheat_electricity_mwh[t]
+                if hasattr(m, "eaf_cold_dri_reheat_electricity_mwh")
+                else 0.0
+            ),
         )
         model.asu_electricity_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.linde_n2_auxiliary_electricity_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
@@ -7415,6 +7722,68 @@ def _add_c0_minimal_wag_layer(
     model.site_baseload_ng_mwh = Expression(
         model.TIME, rule=lambda _m, _t: site_baseload_ng_mwh_h
     )
+    ng_service_active = bool(ng_service_calibration)
+    ironmaking_ng_mwh_per_t = (
+        float(ng_service_calibration.get("ironmaking_target_pj_y", 0.0))
+        * 1_000_000.0
+        / 3.6
+        / float(ng_service_calibration.get("ironmaking_basis_t_y", 1.0))
+    )
+    downstream_ng_mwh_per_t = (
+        float(ng_service_calibration.get("downstream_target_pj_y", 0.0))
+        * 1_000_000.0
+        / 3.6
+        / float(ng_service_calibration.get("downstream_basis_t_y", 1.0))
+    )
+    model.c1_existing_ironmaking_ng_service_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: (
+            ironmaking_ng_mwh_per_t * bf_hot_metal_activity(m, t)
+            if ng_service_active
+            else 0.0
+        ),
+    )
+    model.c1_existing_downstream_ng_service_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: (
+            downstream_ng_mwh_per_t
+            * (hsm_output_activity(m, t) + dsp_output_activity(m, t))
+            if ng_service_active
+            else 0.0
+        ),
+    )
+    model.c1_explicit_downstream_named_ng_mwh = Expression(
+        model.TIME,
+        rule=lambda m, t: (
+            m.ng_to_hsm_mwh[t]
+            + m.ng_to_pefa_malerij_mwh[t]
+            + m.ng_to_pefa_branderij_mwh[t]
+            + m.ng_to_boiler_mwh[t]
+        ),
+    )
+    if ng_service_active:
+        model.c1_downstream_ng_service_covers_explicit_flows = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.c1_existing_downstream_ng_service_mwh[t]
+            >= m.c1_explicit_downstream_named_ng_mwh[t],
+        )
+        model.experimental_ng_service_policy = (
+            "origin_explicit_services_replace_legacy_baseload_and_contain_explicit_downstream_ng"
+        )
+        model.experimental_ng_service_targets = {
+            "ironmaking_target_pj_y": float(
+                ng_service_calibration["ironmaking_target_pj_y"]
+            ),
+            "ironmaking_basis_t_y": float(
+                ng_service_calibration["ironmaking_basis_t_y"]
+            ),
+            "downstream_target_pj_y": float(
+                ng_service_calibration["downstream_target_pj_y"]
+            ),
+            "downstream_basis_t_y": float(
+                ng_service_calibration["downstream_basis_t_y"]
+            ),
+        }
     model.full_site_energy_bridge_active = bool(bridge)
     model.site_baseload_ng_mwh_h = site_baseload_ng_mwh_h
     model.flexible_ng_allocation_policy = flexible_ng_allocation_policy
@@ -7458,6 +7827,41 @@ def _add_c0_minimal_wag_layer(
         model.ng_to_ij01_mwh = Var(model.TIME, domain=NonNegativeReals)
         for t in model.TIME:
             model.ng_to_ij01_mwh[t].fix(0.0)
+        normal_operation_vn25 = (
+            str(generator_unit_interface["operating_mode"])
+            == "normal_operation_vn25_available"
+        )
+        if normal_operation_vn25:
+            required_normal_operation_keys = {
+                "vn25_min_electric_output_mw",
+                "vn25_ramp_mw_per_h",
+                "ij01_forced_off",
+                "development_policy_authorization",
+            }
+            missing_normal_operation_keys = required_normal_operation_keys.difference(
+                generator_unit_interface
+            )
+            if missing_normal_operation_keys:
+                raise S44CModelBuilderError(
+                    "VN25 normal-operation interface is missing: "
+                    f"{sorted(missing_normal_operation_keys)}"
+                )
+            if not bool(generator_unit_interface["ij01_forced_off"]):
+                raise S44CModelBuilderError(
+                    "VN25 normal operation requires IJ01 to be forced off."
+                )
+            if (
+                str(generator_unit_interface["development_policy_authorization"])
+                != "explicit_user_authorized_development_policy_not_site_truth"
+            ):
+                raise S44CModelBuilderError(
+                    "VN25 minimum output and ramp must remain labelled as the "
+                    "explicit user-authorized development policy."
+                )
+            for unit_carrier in ("bfg", "cog", "bofg"):
+                component = getattr(model, f"{unit_carrier}_to_ij01")
+                for t in model.TIME:
+                    component[t].fix(0.0)
         model.bfg_to_vattenfall = Expression(
             model.TIME, rule=lambda m, t: m.bfg_to_vn25[t] + m.bfg_to_ij01[t]
         )
@@ -7539,10 +7943,91 @@ def _add_c0_minimal_wag_layer(
             rule=lambda m, t: m.vn25_electricity_mwh[t]
             <= vn25_electric_capacity_mw,
         )
-        model.vn25_electric_capacity_mw = vn25_electric_capacity_mw
+        model.vn25_electric_capacity_interval_mwh = vn25_electric_capacity_mw
+        model.vn25_electric_capacity_mw = (
+            vn25_electric_capacity_mw / float(time_step_hours)
+        )
         model.generator_operating_mode = str(
             generator_unit_interface["operating_mode"]
         )
+        if normal_operation_vn25:
+            minimum_output_interval_mwh = float(
+                generator_unit_interface["vn25_min_electric_output_mw"]
+            )
+            ramp_mw_per_h = float(
+                generator_unit_interface["vn25_ramp_mw_per_h"]
+            )
+            if not (
+                0.0
+                < minimum_output_interval_mwh
+                <= vn25_electric_capacity_mw
+            ):
+                raise S44CModelBuilderError(
+                    "VN25 interval minimum must be positive and no greater than "
+                    "its interval capacity."
+                )
+            if ramp_mw_per_h <= 0.0:
+                raise S44CModelBuilderError(
+                    "VN25 development ramp must be positive."
+                )
+            model.vn25_minimum_electric_output = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.vn25_electricity_mwh[t]
+                >= minimum_output_interval_mwh,
+            )
+            ramp_energy_mwh = ramp_mw_per_h * float(time_step_hours) ** 2
+            model.vn25_ramp_up = Constraint(
+                model.TIME,
+                rule=lambda m, t: Constraint.Skip
+                if int(t) == 0
+                else m.vn25_electricity_mwh[t]
+                - m.vn25_electricity_mwh[int(t) - 1]
+                <= ramp_energy_mwh,
+            )
+            model.vn25_ramp_down = Constraint(
+                model.TIME,
+                rule=lambda m, t: Constraint.Skip
+                if int(t) == 0
+                else m.vn25_electricity_mwh[int(t) - 1]
+                - m.vn25_electricity_mwh[t]
+                <= ramp_energy_mwh,
+            )
+            if initial_vn25_output_mw is not None:
+                initial_output_mw = float(initial_vn25_output_mw)
+                if not (
+                    minimum_output_interval_mwh / float(time_step_hours)
+                    - TOLERANCE
+                    <= initial_output_mw
+                    <= vn25_electric_capacity_mw / float(time_step_hours)
+                    + TOLERANCE
+                ):
+                    raise S44CModelBuilderError(
+                        "Initial VN25 output lies outside its development "
+                        "normal-operation range."
+                    )
+                initial_energy_mwh = initial_output_mw * float(time_step_hours)
+                model.vn25_initial_ramp_up = Constraint(
+                    expr=model.vn25_electricity_mwh[0] - initial_energy_mwh
+                    <= ramp_energy_mwh
+                )
+                model.vn25_initial_ramp_down = Constraint(
+                    expr=initial_energy_mwh - model.vn25_electricity_mwh[0]
+                    <= ramp_energy_mwh
+                )
+            model.vn25_min_electric_output_interval_mwh = (
+                minimum_output_interval_mwh
+            )
+            model.vn25_min_electric_output_mw = (
+                minimum_output_interval_mwh / float(time_step_hours)
+            )
+            model.vn25_ramp_mw_per_h = ramp_mw_per_h
+            model.vn25_ramp_interval_power_delta_mw = (
+                ramp_mw_per_h * float(time_step_hours)
+            )
+            model.vn25_ramp_interval_energy_delta_mwh = ramp_energy_mwh
+            model.vn25_development_policy_authorization = str(
+                generator_unit_interface["development_policy_authorization"]
+            )
         model.vn25_conversion_loss_mwh = Expression(
             model.TIME, rule=lambda m, t: m.vn25_total_fuel_mwh[t] - m.vn25_electricity_mwh[t]
         )
@@ -7786,8 +8271,20 @@ def _add_c0_minimal_wag_layer(
             rule=gross_electricity_rule or (lambda _m, _t: 0.0),
         )
         model.site_background_electricity_mwh = Expression(
-            model.TIME, rule=lambda _m, _t: site_background_electricity_mwh_h
+            model.TIME,
+            # Under the explicit proportional-allocation diagnostic, the
+            # represented process boundary is the active electricity-demand
+            # boundary.  The independent MER difference between the 16.2-PJ
+            # operating total and the broader 17.8-PJ context remains a
+            # reporting residual and must not be introduced as dispatch load.
+            rule=lambda _m, _t: (
+                0.0 if electricity_overlay else site_background_electricity_mwh_h
+            ),
         )
+        if electricity_overlay:
+            model.experimental_process_electricity_boundary_policy = (
+                "operating_process_total_active_broad_site_difference_reporting_only"
+            )
         model.gross_total_electricity_mwh = Expression(
             model.TIME,
             rule=lambda m, t: m.represented_gross_electricity_before_background_mwh[t]
@@ -7945,17 +8442,31 @@ def _add_c0_minimal_wag_layer(
             - m.gross_grid_import_mwh[t]
             + m.gross_grid_export_mwh[t],
         )
+    def _total_named_ng_procurement_rule(m, t):
+        route_ng = (
+            (m.drp_named_ng_mwh[t] if hasattr(m, "drp_named_ng_mwh") else 0.0)
+            + (m.eaf_named_ng_mwh[t] if hasattr(m, "eaf_named_ng_mwh") else 0.0)
+        )
+        common_ng = m.generator_named_ng_mwh[t] + m.full_site_energy_bridge_named_ng_mwh[t]
+        if ng_service_active:
+            return (
+                common_ng
+                + m.c1_existing_ironmaking_ng_service_mwh[t]
+                + m.c1_existing_downstream_ng_service_mwh[t]
+                + route_ng
+            )
+        return (
+            common_ng
+            + m.ng_to_hsm_mwh[t]
+            + m.ng_to_pefa_malerij_mwh[t]
+            + m.ng_to_pefa_branderij_mwh[t]
+            + m.ng_to_boiler_mwh[t]
+            + m.site_baseload_ng_mwh[t]
+            + route_ng
+        )
+
     model.total_named_ng_procurement_mwh = Expression(
-        model.TIME,
-        rule=lambda m, t: m.ng_to_hsm_mwh[t]
-        + m.ng_to_pefa_malerij_mwh[t]
-        + m.ng_to_pefa_branderij_mwh[t]
-        + m.ng_to_boiler_mwh[t]
-        + m.generator_named_ng_mwh[t]
-        + m.full_site_energy_bridge_named_ng_mwh[t]
-        + m.site_baseload_ng_mwh[t]
-        + (m.drp_named_ng_mwh[t] if hasattr(m, "drp_named_ng_mwh") else 0.0)
-        + (m.eaf_named_ng_mwh[t] if hasattr(m, "eaf_named_ng_mwh") else 0.0),
+        model.TIME, rule=_total_named_ng_procurement_rule
     )
     model.aggregate_generator_technical_interface_active = bool(
         aggregate_generator_technical_interface
@@ -8157,6 +8668,800 @@ def _enforce_continuous_must_run_availability(
             on_var[t].fix(1.0)
 
 
+def _add_pellet_origin_ledger(
+    model: ConcreteModel,
+    *,
+    configuration: str,
+    time_step_hours: float,
+    imported_pellets_t_y: float,
+    initial_internal_inventory_t: float,
+    internal_inventory_capacity_t: float | None = None,
+) -> None:
+    """Conserve internal PeFa and external pellet origins separately.
+
+    C0 imports are BF-grade and can only feed the blast furnaces. C1 imports
+    are DR-grade and can only feed the DRP. PeFa output is the sole internal
+    origin and may serve the configuration's represented BF and DRP demands.
+    The compatibility expression ``imported_pellet_supply_t`` remains the
+    total external flow, but it is no longer mixed into internal inventory.
+    """
+
+    if configuration not in {"C0", "C1"}:
+        raise S44CModelBuilderError("Unknown pellet-origin configuration.")
+    imported_per_interval_t = (
+        float(imported_pellets_t_y) / 8_760.0 * float(time_step_hours)
+    )
+    if min(imported_per_interval_t, float(initial_internal_inventory_t)) < 0.0:
+        raise S44CModelBuilderError("Invalid pellet-origin supply or inventory.")
+    if (
+        internal_inventory_capacity_t is not None
+        and not 0.0
+        <= float(initial_internal_inventory_t)
+        <= float(internal_inventory_capacity_t)
+    ):
+        raise S44CModelBuilderError("Invalid internal PeFa inventory capacity.")
+
+    model.internal_pefa_pellets_to_bf_t = Var(
+        model.TIME, domain=NonNegativeReals
+    )
+    if configuration == "C1":
+        model.internal_pefa_pellets_to_drp_t = Var(
+            model.TIME, domain=NonNegativeReals
+        )
+        model.external_bf_pellets_to_bf_t = Expression(
+            model.TIME, rule=lambda _m, _t: 0.0
+        )
+        model.external_dr_pellets_to_drp_t = Expression(
+            model.TIME, rule=lambda _m, _t: imported_per_interval_t
+        )
+        model.pellet_bf_origin_balance = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.bf_pellet_input_t[t]
+            == m.internal_pefa_pellets_to_bf_t[t],
+        )
+        model.pellet_drp_origin_balance = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.drp_pellet_input[t]
+            == m.internal_pefa_pellets_to_drp_t[t]
+            + m.external_dr_pellets_to_drp_t[t],
+        )
+    else:
+        model.internal_pefa_pellets_to_drp_t = Expression(
+            model.TIME, rule=lambda _m, _t: 0.0
+        )
+        model.external_bf_pellets_to_bf_t = Expression(
+            model.TIME, rule=lambda _m, _t: imported_per_interval_t
+        )
+        model.external_dr_pellets_to_drp_t = Expression(
+            model.TIME, rule=lambda _m, _t: 0.0
+        )
+        model.pellet_bf_origin_balance = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.bf_pellet_input_t[t]
+            == m.internal_pefa_pellets_to_bf_t[t]
+            + m.external_bf_pellets_to_bf_t[t],
+        )
+
+    model.imported_pellet_supply_t = Expression(
+        model.TIME,
+        rule=lambda m, t: m.external_bf_pellets_to_bf_t[t]
+        + m.external_dr_pellets_to_drp_t[t],
+    )
+    model.pellet_inventory = Var(model.TIME, domain=NonNegativeReals)
+    model.pellet_balance = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.pellet_inventory[t]
+        == (
+            float(initial_internal_inventory_t)
+            if int(t) == 0
+            else m.pellet_inventory[int(t) - 1]
+        )
+        + m.pefa_pellet_output_t[t]
+        - m.internal_pefa_pellets_to_bf_t[t]
+        - m.internal_pefa_pellets_to_drp_t[t],
+    )
+    if internal_inventory_capacity_t is not None:
+        model.pellet_capacity = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.pellet_inventory[t]
+            <= float(internal_inventory_capacity_t),
+        )
+    model.pellet_terminal = Constraint(
+        expr=model.pellet_inventory[len(model.TIME) - 1]
+        == float(initial_internal_inventory_t)
+    )
+    if (
+        configuration == "C1"
+        and getattr(model, "c1_inventory_terminal_policy", "")
+        == "executed_state_with_bounded_physical_continuation_no_cyclic_tail_closure"
+    ):
+        model.pellet_terminal.deactivate()
+        model.temporal_tail_cyclic_closures_replaced = tuple(
+            dict.fromkeys(
+                (*model.temporal_tail_cyclic_closures_replaced, "pellet_terminal")
+            )
+        )
+    model.pellet_origin_ledger_status = (
+        "physical_origin_conservation_internal_pefa_and_external_grade_specific"
+    )
+    model.pellet_inventory_origin = "internal_pefa_fired_pellets_only"
+    model.external_pellet_annual_anchor_t_y = float(imported_pellets_t_y)
+
+
+def _add_c1_temporal_plant_dynamics(
+    model: ConcreteModel,
+    *,
+    time_step_hours: float,
+    contract: Mapping[str, Any],
+    initial_rate_t_h: Mapping[str, float],
+) -> None:
+    """Install the governed C1 development dynamics on interval quantities.
+
+    These settings are explicit development policies. They must not be cited
+    as measured Tata control-room limits. Process variables store tonnes per
+    model interval, while the contract and rolling state use tonnes per hour.
+    """
+
+    if float(time_step_hours) not in {0.25, 1.0}:
+        raise S44CModelBuilderError(
+            "C1 temporal plant dynamics require an hourly or quarter-hour grid."
+        )
+    required_initial = {
+        "coking_plant_1",
+        "sintering_plant",
+        "blast_furnace_6",
+        "drp_pellet_input",
+    }
+    missing_initial = required_initial.difference(initial_rate_t_h)
+    if missing_initial:
+        raise S44CModelBuilderError(
+            "C1 temporal dynamics lack rolling boundary rates: "
+            f"{sorted(missing_initial)}"
+        )
+
+    sifa = contract.get("sifa")
+    bf6 = contract.get("bf6")
+    drp = contract.get("drp")
+    kgf1 = contract.get("kgf1")
+    pefa = contract.get("pefa")
+    if not all(
+        isinstance(item, Mapping) for item in (sifa, bf6, drp, kgf1, pefa)
+    ):
+        raise S44CModelBuilderError(
+            "C1 temporal dynamics require SiFa, BF6, DRP, KGF1 and PeFa contracts."
+        )
+
+    # SiFa: small QH changes plus an explicit no-reversal window. Direction
+    # flags carry a strictly positive movement, preventing arbitrary flag
+    # choices on flat intervals from contaminating the rolling state.
+    sifa_ramp_rate = float(sifa["ramp_t_h_per_qh"])
+    sifa_direction_hours = float(
+        sifa.get(
+            "minimum_direction_hours",
+            0.25 * int(sifa["minimum_direction_intervals"]),
+        )
+    )
+    sifa_window_float = sifa_direction_hours / float(time_step_hours)
+    sifa_window = int(round(sifa_window_float))
+    if sifa_ramp_rate <= 0.0 or sifa_window < 1:
+        raise S44CModelBuilderError("Invalid SiFa ramp or direction window.")
+    if not math.isclose(sifa_window_float, sifa_window):
+        raise S44CModelBuilderError("SiFa direction duration is not grid-aligned.")
+    # The QH contract and the hourly discretisation are explicit alternatives.
+    # The hourly value is deliberately conservative: an hourly endpoint must
+    # not silently inherit four QH movements while being represented as one
+    # constant hourly block.
+    sifa_rate_step_t_h = (
+        float(sifa["ramp_t_h_per_hour"])
+        if math.isclose(float(time_step_hours), 1.0)
+        and "ramp_t_h_per_hour" in sifa
+        else sifa_ramp_rate
+    )
+    sifa_ramp_interval = sifa_rate_step_t_h * float(time_step_hours)
+    movement_epsilon = float(sifa.get("movement_epsilon_t_h", 1e-4)) * time_step_hours
+    model.sifa_rate_increase_t = Var(model.TIME, domain=NonNegativeReals)
+    model.sifa_rate_decrease_t = Var(model.TIME, domain=NonNegativeReals)
+    model.sifa_up_direction = Var(model.TIME, domain=Binary)
+    model.sifa_down_direction = Var(model.TIME, domain=Binary)
+
+    def _sifa_previous(m: ConcreteModel, t: int):
+        return (
+            float(initial_rate_t_h["sintering_plant"]) * time_step_hours
+            if int(t) == 0
+            else m.sintering_plant[int(t) - 1]
+        )
+
+    model.sifa_rate_change_identity = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sintering_plant[t] - _sifa_previous(m, int(t))
+        == m.sifa_rate_increase_t[t] - m.sifa_rate_decrease_t[t],
+    )
+    model.sifa_rate_increase_upper = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sifa_rate_increase_t[t]
+        <= sifa_ramp_interval * m.sifa_up_direction[t],
+    )
+    model.sifa_rate_decrease_upper = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sifa_rate_decrease_t[t]
+        <= sifa_ramp_interval * m.sifa_down_direction[t],
+    )
+    model.sifa_rate_increase_lower = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sifa_rate_increase_t[t]
+        >= movement_epsilon * m.sifa_up_direction[t],
+    )
+    model.sifa_rate_decrease_lower = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sifa_rate_decrease_t[t]
+        >= movement_epsilon * m.sifa_down_direction[t],
+    )
+    model.sifa_single_direction = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sifa_up_direction[t] + m.sifa_down_direction[t]
+        <= 1,
+    )
+    model.sifa_no_direction_reversal = ConstraintList()
+    horizon_steps = len(model.TIME)
+    for start in range(horizon_steps):
+        for later in range(start + 1, min(horizon_steps, start + sifa_window)):
+            model.sifa_no_direction_reversal.add(
+                model.sifa_up_direction[start]
+                + model.sifa_down_direction[later]
+                <= 1
+            )
+            model.sifa_no_direction_reversal.add(
+                model.sifa_down_direction[start]
+                + model.sifa_up_direction[later]
+                <= 1
+            )
+    initial_direction = str(sifa.get("initial_direction", "flat"))
+    initial_cooldown = int(sifa.get("initial_cooldown_intervals", 0))
+    if initial_direction not in {"up", "down", "flat"}:
+        raise S44CModelBuilderError("Invalid carried SiFa direction.")
+    if not 0 <= initial_cooldown < sifa_window:
+        raise S44CModelBuilderError("Invalid carried SiFa reversal cooldown.")
+    for interval in range(min(initial_cooldown, horizon_steps)):
+        if initial_direction == "up":
+            model.sifa_down_direction[interval].fix(0.0)
+        elif initial_direction == "down":
+            model.sifa_up_direction[interval].fix(0.0)
+
+    def _add_rate_setpoint_contract(
+        *,
+        component_name: str,
+        prefix: str,
+        block_hours: float,
+        maximum_step_t_h: float,
+    ) -> None:
+        block_steps_float = float(block_hours) / time_step_hours
+        block_steps = int(round(block_steps_float))
+        if (
+            block_steps < 1
+            or not math.isclose(block_steps_float, block_steps)
+            or maximum_step_t_h < 0.0
+        ):
+            raise S44CModelBuilderError(
+                f"Invalid {prefix} setpoint block or step contract."
+            )
+        component = getattr(model, component_name)
+        holds = ConstraintList()
+        ramps = ConstraintList()
+        setattr(model, f"{prefix}_setpoint_holds", holds)
+        setattr(model, f"{prefix}_setpoint_steps", ramps)
+        for t in range(horizon_steps):
+            if t % block_steps:
+                holds.add(component[t] == component[t - 1])
+            else:
+                previous = (
+                    float(initial_rate_t_h[component_name]) * time_step_hours
+                    if t == 0
+                    else component[t - 1]
+                )
+                step_interval = maximum_step_t_h * time_step_hours
+                ramps.add(component[t] - previous <= step_interval)
+                ramps.add(previous - component[t] <= step_interval)
+        setattr(model, f"{prefix}_setpoint_block_steps", block_steps)
+        setattr(model, f"{prefix}_maximum_step_t_h", maximum_step_t_h)
+
+    _add_rate_setpoint_contract(
+        component_name="blast_furnace_6",
+        prefix="bf6",
+        block_hours=float(bf6["setpoint_block_hours"]),
+        maximum_step_t_h=float(bf6["maximum_step_t_h"]),
+    )
+    _add_rate_setpoint_contract(
+        component_name="coking_plant_1",
+        prefix="kgf1",
+        block_hours=float(kgf1["setpoint_block_hours"]),
+        maximum_step_t_h=float(kgf1["maximum_step_t_h"]),
+    )
+    _add_rate_setpoint_contract(
+        component_name="drp_pellet_input",
+        prefix="drp_temporal",
+        block_hours=float(drp["setpoint_block_hours"]),
+        maximum_step_t_h=float(drp["maximum_step_t_h"]),
+    )
+
+    pefa_min_t_h = float(pefa["minimum_output_t_h"])
+    pefa_max_t_h = float(pefa["maximum_output_t_h"])
+    if not 0.0 < pefa_min_t_h <= pefa_max_t_h:
+        raise S44CModelBuilderError("Invalid bounded PeFa output range.")
+    model.pefa_pellet_output_t = Var(model.TIME, domain=NonNegativeReals)
+    model.pefa_output_lower = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.pefa_pellet_output_t[t]
+        >= pefa_min_t_h * time_step_hours,
+    )
+    model.pefa_output_upper = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.pefa_pellet_output_t[t]
+        <= pefa_max_t_h * time_step_hours,
+    )
+    _add_rate_setpoint_contract(
+        component_name="pefa_pellet_output_t",
+        prefix="pefa",
+        block_hours=float(pefa["setpoint_block_hours"]),
+        maximum_step_t_h=float(pefa["maximum_step_t_h"]),
+    )
+    bf_pellets_per_t_hot_metal = float(pefa["bf_pellets_t_per_t_hot_metal"])
+    initial_pellet_inventory_t = float(pefa["initial_inventory_t"])
+    if min(bf_pellets_per_t_hot_metal, initial_pellet_inventory_t) < 0.0:
+        raise S44CModelBuilderError("Invalid PeFa/pellet-bus contract.")
+    model.bf_pellet_input_t = Expression(
+        model.TIME,
+        rule=lambda m, t: bf_pellets_per_t_hot_metal
+        * m.bf_hot_iron_output[t],
+    )
+    _add_pellet_origin_ledger(
+        model,
+        configuration="C1",
+        time_step_hours=time_step_hours,
+        imported_pellets_t_y=float(pefa["imported_pellets_t_y"]),
+        initial_internal_inventory_t=initial_pellet_inventory_t,
+    )
+    model.pefa_price_response_policy = (
+        "bounded_endogenous_response_via_closed_fired_pellet_bus"
+    )
+    model.pellet_storage_capacity_policy = str(pefa["capacity_policy"])
+
+    downstream = contract.get("downstream_block_sensitivity", {})
+    if bool(downstream.get("active", False)):
+        block_hours = float(downstream["block_hours"])
+        block_steps_float = block_hours / time_step_hours
+        block_steps = int(round(block_steps_float))
+        if block_steps < 1 or not math.isclose(block_steps_float, block_steps):
+            raise S44CModelBuilderError("Invalid downstream sensitivity block length.")
+        model.downstream_block_sensitivity_constraints = ConstraintList()
+        for component_name in tuple(downstream.get("components", ())):
+            if component_name not in {"basic_oxygen_furnace", "hot_strip_mill"}:
+                raise S44CModelBuilderError(
+                    f"Unsupported downstream block component: {component_name}."
+                )
+            component = getattr(model, component_name)
+            for t in range(horizon_steps):
+                if t % block_steps:
+                    model.downstream_block_sensitivity_constraints.add(
+                        component[t] == component[t - 1]
+                    )
+        model.downstream_block_sensitivity_status = (
+            "offline_development_sensitivity_not_site_truth"
+        )
+
+    _add_normalized_capacity_contract(
+        model,
+        time_step_hours=time_step_hours,
+        contract=contract,
+        configuration="C1",
+    )
+
+    model.c1_temporal_plant_dynamics_status = (
+        "user_authorized_development_policy_not_site_truth"
+    )
+    model.sifa_ramp_t_h_per_qh = sifa_ramp_rate
+    model.sifa_minimum_direction_intervals = sifa_window
+    model.sifa_minimum_direction_hours = sifa_direction_hours
+    model.sifa_maximum_rate_step_t_h = sifa_rate_step_t_h
+
+
+def _add_normalized_capacity_contract(
+    model: ConcreteModel,
+    *,
+    time_step_hours: float,
+    contract: Mapping[str, Any],
+    configuration: str,
+) -> None:
+    """Apply reproducible relative operating envelopes around flat references.
+
+    The references come from an accepted price-insensitive physical trajectory.
+    Relative widths are shared by asset family across configurations and are
+    planning assumptions, not measured technical nameplate limits.
+    """
+
+    payload = contract.get("normalized_capacity_contract")
+    if not isinstance(payload, Mapping):
+        return
+    assets = payload.get("assets")
+    if not isinstance(assets, Mapping) or not assets:
+        raise S44CModelBuilderError(
+            f"{configuration} normalized capacity contract has no assets."
+        )
+    constraints = ConstraintList()
+    model.normalized_capacity_envelope_constraints = constraints
+    resolved: dict[str, dict[str, float | str]] = {}
+    for component_name, row in assets.items():
+        if not isinstance(row, Mapping) or not hasattr(model, str(component_name)):
+            raise S44CModelBuilderError(
+                f"Invalid {configuration} normalized capacity asset: {component_name}."
+            )
+        reference = float(row["reference_rate_t_h"])
+        half_width = float(row["relative_half_width"])
+        lower = float(row["resolved_minimum_t_h"])
+        upper = float(row["resolved_maximum_t_h"])
+        raw_lower = reference * (1.0 - half_width)
+        raw_upper = reference * (1.0 + half_width)
+        lower_policy = str(row.get("lower_policy", "normalized_family_envelope"))
+        upper_policy = str(row.get("upper_policy", "normalized_family_envelope"))
+        authorized_lower_override = lower_policy.startswith("user_authorized_")
+        authorized_upper_override = upper_policy.startswith("user_authorized_")
+        if (
+            reference <= 0.0
+            or not 0.0 <= half_width < 1.0
+            or not 0.0 <= lower < upper
+            or (lower < raw_lower - 1e-5 and not authorized_lower_override)
+            or (upper > raw_upper + 1e-5 and not authorized_upper_override)
+            or not lower <= reference <= upper
+        ):
+            raise S44CModelBuilderError(
+                f"Invalid normalized capacity envelope for {component_name}."
+            )
+        component = getattr(model, str(component_name))
+        for t in model.TIME:
+            constraints.add(component[t] >= lower * time_step_hours)
+            constraints.add(component[t] <= upper * time_step_hours)
+        resolved[str(component_name)] = {
+            "display_name": str(row.get("display_name", component_name)),
+            "family": str(row.get("family", component_name)),
+            "reference_rate_t_h": reference,
+            "relative_half_width": half_width,
+            "resolved_minimum_t_h": lower,
+            "resolved_maximum_t_h": upper,
+            "lower_policy": lower_policy,
+            "upper_policy": upper_policy,
+            "ramp_fraction_of_reference_per_setpoint": float(
+                row["ramp_fraction_of_reference_per_setpoint"]
+            ),
+        }
+    model.normalized_capacity_contract = resolved
+    model.normalized_capacity_contract_policy = str(payload["policy"])
+    model.normalized_capacity_calibration_evidence_run = str(
+        payload["calibration_evidence_run"]
+    )
+    model.normalized_capacity_price_response_used_for_calibration = bool(
+        not payload.get("price_response_not_used_for_calibration", False)
+    )
+    aggregate_floors = payload.get("aggregate_recoverability_floors", {})
+    if not isinstance(aggregate_floors, Mapping):
+        raise S44CModelBuilderError(
+            f"Invalid {configuration} normalized aggregate recoverability contract."
+        )
+    model.normalized_capacity_aggregate_recoverability = ConstraintList()
+    resolved_aggregate_floors: dict[str, dict[str, Any]] = {}
+    for floor_id, row in aggregate_floors.items():
+        if not isinstance(row, Mapping):
+            raise S44CModelBuilderError(f"Invalid aggregate floor: {floor_id}.")
+        components = tuple(str(name) for name in row["components"])
+        if not components or any(not hasattr(model, name) for name in components):
+            raise S44CModelBuilderError(f"Unknown aggregate-floor component: {floor_id}.")
+        minimum_rate = float(row["minimum_combined_rate_t_h"])
+        if minimum_rate <= 0.0:
+            raise S44CModelBuilderError(f"Invalid aggregate-floor rate: {floor_id}.")
+        for t in model.TIME:
+            model.normalized_capacity_aggregate_recoverability.add(
+                sum(getattr(model, name)[t] for name in components)
+                >= minimum_rate * time_step_hours
+            )
+        resolved_aggregate_floors[str(floor_id)] = {
+            "components": components,
+            "minimum_combined_rate_t_h": minimum_rate,
+            "basis": str(row["basis"]),
+            "methodological_status": str(row["methodological_status"]),
+        }
+    model.normalized_capacity_aggregate_recoverability_floors = (
+        resolved_aggregate_floors
+    )
+
+
+def _add_downstream_temporal_contract(
+    model: ConcreteModel,
+    *,
+    time_step_hours: float,
+    contract: Mapping[str, Any],
+    dsp_component_name: str,
+    initial_rate_t_h: Mapping[str, float],
+) -> None:
+    """Apply the same bounded downstream timing contract to C0 and C1."""
+
+    downstream = contract.get("downstream_temporal_contract")
+    if not isinstance(downstream, Mapping):
+        return
+
+    def add_block_hold(component_name: str, prefix: str, block_hours: float) -> None:
+        block_steps_float = block_hours / time_step_hours
+        block_steps = int(round(block_steps_float))
+        if block_steps <= 0 or not math.isclose(block_steps_float, block_steps):
+            raise S44CModelBuilderError(
+                f"Invalid downstream {prefix} setpoint block."
+            )
+        component = getattr(model, component_name)
+        holds = ConstraintList()
+        setattr(model, f"{prefix}_temporal_block_holds", holds)
+        for t in model.TIME:
+            index = int(t)
+            if index % block_steps:
+                holds.add(component[index] == component[index - index % block_steps])
+        setattr(model, f"{prefix}_temporal_block_steps", block_steps)
+
+    add_block_hold(
+        "hot_strip_mill",
+        "hsm",
+        float(downstream["hsm_setpoint_block_hours"]),
+    )
+    hsm_block_steps = int(model.hsm_temporal_block_steps)
+    hsm_maximum_step_t_h = float(downstream["hsm_maximum_step_t_h"])
+    hsm_initial_rate_t_h = float(initial_rate_t_h["hot_strip_mill"])
+    if hsm_maximum_step_t_h <= 0.0 or hsm_initial_rate_t_h < 0.0:
+        raise S44CModelBuilderError("Invalid HSM campaign boundary contract.")
+    model.hsm_temporal_step_constraints = ConstraintList()
+    for t in model.TIME:
+        index = int(t)
+        if index % hsm_block_steps:
+            continue
+        previous = (
+            hsm_initial_rate_t_h * time_step_hours
+            if index == 0
+            else model.hot_strip_mill[index - 1]
+        )
+        maximum_interval_step = hsm_maximum_step_t_h * time_step_hours
+        model.hsm_temporal_step_constraints.add(
+            model.hot_strip_mill[index] - previous <= maximum_interval_step
+        )
+        model.hsm_temporal_step_constraints.add(
+            previous - model.hot_strip_mill[index] <= maximum_interval_step
+        )
+    model.hsm_temporal_initial_rate_t_h = hsm_initial_rate_t_h
+    model.hsm_temporal_maximum_step_t_h = hsm_maximum_step_t_h
+    model.hsm_temporal_campaign_minimum_hours = float(
+        downstream["hsm_setpoint_block_hours"]
+    )
+    model.hsm_temporal_campaign_status = (
+        "user_authorized_blocked_hourly_development_policy_not_site_truth"
+    )
+    add_block_hold(
+        dsp_component_name,
+        "dsp",
+        float(downstream["dsp_setpoint_block_hours"]),
+    )
+    dsp_max_t_h = float(downstream["dsp_final_product_max_t_h"])
+    if dsp_max_t_h <= 0.0:
+        raise S44CModelBuilderError("DSP temporal envelope must be positive.")
+    dsp_output = getattr(model, dsp_component_name)
+    model.dsp_temporal_output_cap = Constraint(
+        model.TIME,
+        rule=lambda _m, t: dsp_output[t] <= dsp_max_t_h * time_step_hours,
+    )
+    model.downstream_temporal_policy = (
+        "shared_hourly_HSM_DSP_setpoints_and_uniform_DSP_development_envelope"
+    )
+
+
+def _add_c0_temporal_plant_dynamics(
+    model: ConcreteModel,
+    *,
+    time_step_hours: float,
+    contract: Mapping[str, Any],
+    initial_rate_t_h: Mapping[str, float],
+) -> None:
+    """Install configuration-specific C0 development dynamics.
+
+    The limits are governed planning assumptions, not measured Tata control
+    limits. Process variables contain interval quantities; state and contract
+    values use rates per hour.
+    """
+
+    if float(time_step_hours) not in {0.25, 1.0}:
+        raise S44CModelBuilderError(
+            "C0 temporal plant dynamics require an hourly or quarter-hour grid."
+        )
+    required_initial = {
+        "coking_plant_1",
+        "coking_plant_2",
+        "sintering_plant",
+        "blast_furnace_6",
+        "blast_furnace_7",
+        "pefa_pellet_output_t",
+    }
+    missing_initial = required_initial.difference(initial_rate_t_h)
+    if missing_initial:
+        raise S44CModelBuilderError(
+            "C0 temporal dynamics lack rolling boundary rates: "
+            f"{sorted(missing_initial)}"
+        )
+    required_contract = {"sifa", "bf6", "bf7", "kgf1", "kgf2", "pefa"}
+    missing_contract = required_contract.difference(contract)
+    if missing_contract or any(
+        not isinstance(contract[key], Mapping) for key in required_contract
+    ):
+        raise S44CModelBuilderError(
+            "C0 temporal dynamics require governed SiFa, BF6/BF7, "
+            "KGF1/KGF2 and PeFa contracts."
+        )
+
+    horizon_steps = len(model.TIME)
+    sifa = contract["sifa"]
+    sifa_ramp_t_h = float(sifa["ramp_t_h_per_qh"])
+    direction_hours = float(
+        sifa.get(
+            "minimum_direction_hours",
+            0.25 * int(sifa["minimum_direction_intervals"]),
+        )
+    )
+    direction_window_float = direction_hours / float(time_step_hours)
+    direction_window = int(round(direction_window_float))
+    if sifa_ramp_t_h <= 0.0 or direction_window < 1:
+        raise S44CModelBuilderError("Invalid C0 SiFa movement contract.")
+    if not math.isclose(direction_window_float, direction_window):
+        raise S44CModelBuilderError("C0 SiFa direction duration is not grid-aligned.")
+    sifa_rate_step_t_h = (
+        float(sifa["ramp_t_h_per_hour"])
+        if math.isclose(float(time_step_hours), 1.0)
+        and "ramp_t_h_per_hour" in sifa
+        else sifa_ramp_t_h
+    )
+    interval_ramp = sifa_rate_step_t_h * float(time_step_hours)
+    movement_epsilon = float(sifa.get("movement_epsilon_t_h", 1e-4)) * time_step_hours
+    model.sifa_rate_increase_t = Var(model.TIME, domain=NonNegativeReals)
+    model.sifa_rate_decrease_t = Var(model.TIME, domain=NonNegativeReals)
+    model.sifa_up_direction = Var(model.TIME, domain=Binary)
+    model.sifa_down_direction = Var(model.TIME, domain=Binary)
+
+    def previous_sifa(m: ConcreteModel, t: int):
+        return (
+            float(initial_rate_t_h["sintering_plant"]) * time_step_hours
+            if t == 0
+            else m.sintering_plant[t - 1]
+        )
+
+    model.sifa_rate_change_identity = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sintering_plant[t] - previous_sifa(m, int(t))
+        == m.sifa_rate_increase_t[t] - m.sifa_rate_decrease_t[t],
+    )
+    model.sifa_rate_increase_upper = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sifa_rate_increase_t[t]
+        <= interval_ramp * m.sifa_up_direction[t],
+    )
+    model.sifa_rate_decrease_upper = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sifa_rate_decrease_t[t]
+        <= interval_ramp * m.sifa_down_direction[t],
+    )
+    model.sifa_rate_increase_lower = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sifa_rate_increase_t[t]
+        >= movement_epsilon * m.sifa_up_direction[t],
+    )
+    model.sifa_rate_decrease_lower = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sifa_rate_decrease_t[t]
+        >= movement_epsilon * m.sifa_down_direction[t],
+    )
+    model.sifa_single_direction = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.sifa_up_direction[t] + m.sifa_down_direction[t] <= 1,
+    )
+    model.sifa_no_direction_reversal = ConstraintList()
+    for start in range(horizon_steps):
+        for later in range(start + 1, min(horizon_steps, start + direction_window)):
+            model.sifa_no_direction_reversal.add(
+                model.sifa_up_direction[start] + model.sifa_down_direction[later] <= 1
+            )
+            model.sifa_no_direction_reversal.add(
+                model.sifa_down_direction[start] + model.sifa_up_direction[later] <= 1
+            )
+
+    def add_setpoint(component_name: str, prefix: str, payload: Mapping[str, Any]) -> None:
+        block_steps_float = float(payload["setpoint_block_hours"]) / time_step_hours
+        block_steps = int(round(block_steps_float))
+        maximum_step_t_h = float(payload["maximum_step_t_h"])
+        if (
+            block_steps < 1
+            or not math.isclose(block_steps_float, block_steps)
+            or maximum_step_t_h < 0.0
+        ):
+            raise S44CModelBuilderError(f"Invalid C0 {prefix} setpoint contract.")
+        component = getattr(model, component_name)
+        holds = ConstraintList()
+        steps = ConstraintList()
+        setattr(model, f"{prefix}_setpoint_holds", holds)
+        setattr(model, f"{prefix}_setpoint_steps", steps)
+        for t in range(horizon_steps):
+            if t % block_steps:
+                holds.add(component[t] == component[t - 1])
+            else:
+                previous = (
+                    float(initial_rate_t_h[component_name]) * time_step_hours
+                    if t == 0
+                    else component[t - 1]
+                )
+                maximum_interval_step = maximum_step_t_h * time_step_hours
+                steps.add(component[t] - previous <= maximum_interval_step)
+                steps.add(previous - component[t] <= maximum_interval_step)
+        setattr(model, f"{prefix}_setpoint_block_steps", block_steps)
+        setattr(model, f"{prefix}_maximum_step_t_h", maximum_step_t_h)
+
+    for component_name, prefix, key in (
+        ("blast_furnace_6", "bf6", "bf6"),
+        ("blast_furnace_7", "bf7", "bf7"),
+        ("coking_plant_1", "kgf1", "kgf1"),
+        ("coking_plant_2", "kgf2", "kgf2"),
+    ):
+        add_setpoint(component_name, prefix, contract[key])
+
+    pefa = contract["pefa"]
+    pefa_min_t_h = float(pefa["minimum_output_t_h"])
+    pefa_max_t_h = float(pefa["maximum_output_t_h"])
+    pellet_capacity_t = float(pefa["inventory_capacity_t"])
+    initial_pellet_inventory_t = float(pefa["initial_inventory_t"])
+    if not 0.0 < pefa_min_t_h <= pefa_max_t_h:
+        raise S44CModelBuilderError("Invalid C0 PeFa output range.")
+    if not 0.0 <= initial_pellet_inventory_t <= pellet_capacity_t:
+        raise S44CModelBuilderError("Invalid C0 pellet inventory contract.")
+    model.pefa_pellet_output_t = Var(model.TIME, domain=NonNegativeReals)
+    model.pefa_output_lower = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.pefa_pellet_output_t[t]
+        >= pefa_min_t_h * time_step_hours,
+    )
+    model.pefa_output_upper = Constraint(
+        model.TIME,
+        rule=lambda m, t: m.pefa_pellet_output_t[t]
+        <= pefa_max_t_h * time_step_hours,
+    )
+    add_setpoint("pefa_pellet_output_t", "pefa", pefa)
+    _add_pellet_origin_ledger(
+        model,
+        configuration="C0",
+        time_step_hours=time_step_hours,
+        imported_pellets_t_y=float(pefa["imported_pellets_t_y"]),
+        initial_internal_inventory_t=initial_pellet_inventory_t,
+        internal_inventory_capacity_t=pellet_capacity_t,
+    )
+    model.c0_temporal_plant_dynamics_status = (
+        "user_authorized_development_policy_not_site_truth"
+    )
+    model.sifa_minimum_direction_intervals = direction_window
+    model.sifa_minimum_direction_hours = direction_hours
+    model.sifa_maximum_rate_step_t_h = sifa_rate_step_t_h
+    model.c0_temporal_operating_ranges_t_h = {
+        str(asset): tuple(float(value) for value in bounds)
+        for asset, bounds in contract.get("active_operating_ranges_t_h", {}).items()
+    }
+    model.c0_kgf2_bf7_symmetry_status = (
+        "controlled_symmetry_assumption_not_independent_measurement"
+    )
+    model.pefa_price_response_policy = (
+        "bounded_endogenous_response_via_closed_fired_pellet_bus"
+    )
+    _add_normalized_capacity_contract(
+        model,
+        time_step_hours=time_step_hours,
+        contract=contract,
+        configuration="C0",
+    )
+
+
 def _build_c0_model(
     inputs: C0ExecutableInputs,
     *,
@@ -8174,6 +9479,8 @@ def _build_c0_model(
     c0_coke_chain_reconciliation: Mapping[str, float] | None = None,
     c0_fixed_schedule_hours_by_process: Mapping[str, Collection[int]] | None = None,
     c0_downstream_reference_routing: Mapping[str, Any] | None = None,
+    c0_bf_material_interface: Mapping[str, float] | None = None,
+    scrap_supply_ledger: Mapping[str, Any] | None = None,
     linde_n2_auxiliary_electricity_mwh_h: float = 0.0,
     site_background_electricity_mwh_h: float = 0.0,
     site_baseload_ng_mwh_h: float = 0.0,
@@ -8185,6 +9492,10 @@ def _build_c0_model(
     full_site_energy_bridge: Mapping[str, Any] | None = None,
     hsm_source_mix_policy: Mapping[str, Any] | None = None,
     electricity_sale_sensitivity: Mapping[str, Any] | None = None,
+    enforce_final_product_requirement: bool = True,
+    recoverable_handoff_execution_steps: int | None = None,
+    temporal_plant_dynamics: Mapping[str, Any] | None = None,
+    initial_continuous_rate_t_h: Mapping[str, float] | None = None,
 ):
     if time_step_hours not in {1.0, 0.25}:
         raise S44CModelBuilderError("C0 model time step must be 1 hour or 15 minutes.")
@@ -8277,7 +9588,7 @@ def _build_c0_model(
         rule=lambda m, name, t: _process_var(m, name, t) <= inputs.process_limits[name][1] * _on_var(m, name, t),
     )
 
-    model.bf_sinter_input = Expression(
+    model.bf_activity_proxy = Expression(
         model.TIME,
         rule=lambda m, t: m.blast_furnace_6[t] + m.blast_furnace_7[t],
     )
@@ -8287,7 +9598,7 @@ def _build_c0_model(
     )
     model.bf_hot_iron_output = Expression(
         model.TIME,
-        rule=lambda m, t: inputs.bf_hot_iron_per_t_sinter * m.bf_sinter_input[t],
+        rule=lambda m, t: inputs.bf_hot_iron_per_t_sinter * m.bf_activity_proxy[t],
     )
     model.bf6_hot_iron_output = Expression(
         model.TIME,
@@ -8297,6 +9608,48 @@ def _build_c0_model(
         model.TIME,
         rule=lambda m, t: inputs.bf_hot_iron_per_t_sinter * m.blast_furnace_7[t],
     )
+    if c0_bf_material_interface is None:
+        model.bf_sinter_input = Expression(
+            model.TIME, rule=lambda m, t: m.bf_activity_proxy[t]
+        )
+        model.bf_pellet_input_t = Expression(
+            model.TIME, rule=lambda _m, _t: 0.0
+        )
+        model.c0_bf_material_interface_status = "legacy_activity_proxy_boundary"
+    else:
+        required_bf_interface = {
+            "sinter_t_per_t_hot_metal",
+            "pellets_t_per_t_hot_metal",
+        }
+        missing_bf_interface = required_bf_interface.difference(
+            c0_bf_material_interface
+        )
+        if missing_bf_interface:
+            raise S44CModelBuilderError(
+                "C0 BF material interface is missing: "
+                f"{sorted(missing_bf_interface)}"
+            )
+        sinter_per_hot_metal = float(
+            c0_bf_material_interface["sinter_t_per_t_hot_metal"]
+        )
+        pellets_per_hot_metal = float(
+            c0_bf_material_interface["pellets_t_per_t_hot_metal"]
+        )
+        if sinter_per_hot_metal <= 0.0 or pellets_per_hot_metal <= 0.0:
+            raise S44CModelBuilderError(
+                "C0 BF physical burden coefficients must be positive."
+            )
+        model.bf_sinter_input = Expression(
+            model.TIME,
+            rule=lambda m, t: sinter_per_hot_metal * m.bf_hot_iron_output[t],
+        )
+        model.bf_pellet_input_t = Expression(
+            model.TIME,
+            rule=lambda m, t: pellets_per_hot_metal * m.bf_hot_iron_output[t],
+        )
+        model.c0_bf_material_interface_status = (
+            "annual_mer_reconciliation_separate_from_bf_activity_proxy"
+        )
     if c0_downstream_reference_routing is None:
         model.bof_crude_steel_output = Expression(
             model.TIME,
@@ -8347,6 +9700,90 @@ def _build_c0_model(
             rule=lambda m, t: m.c0_bof_scrap_input[t]
             <= float(c0_downstream_reference_routing["bof_total_scrap_max_t_h"]),
         )
+        if scrap_supply_ledger is not None:
+            required_scrap = {
+                "external_scrap_supply_cap_t",
+                "internal_scrap_supply_cap_t",
+                "site_total_scrap_supply_cap_t",
+                "bof_scrap_supply_cap_t",
+            }
+            missing_scrap = required_scrap.difference(scrap_supply_ledger)
+            if missing_scrap:
+                raise S44CModelBuilderError(
+                    f"C0 scrap-origin ledger is missing: {sorted(missing_scrap)}"
+                )
+            model.external_scrap_to_bof_t = Var(
+                model.TIME, domain=NonNegativeReals
+            )
+            model.internal_scrap_to_bof_t = Var(
+                model.TIME, domain=NonNegativeReals
+            )
+            model.external_scrap_to_eaf_t = Expression(
+                model.TIME, rule=lambda _m, _t: 0.0
+            )
+            model.internal_scrap_to_eaf_t = Expression(
+                model.TIME, rule=lambda _m, _t: 0.0
+            )
+            model.c0_bof_scrap_origin_balance = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.external_scrap_to_bof_t[t]
+                + m.internal_scrap_to_bof_t[t]
+                == m.c0_bof_scrap_input[t],
+            )
+            model.c0_external_scrap_cap = Constraint(
+                expr=sum(model.external_scrap_to_bof_t[t] for t in model.TIME)
+                <= float(scrap_supply_ledger["external_scrap_supply_cap_t"])
+            )
+            model.c0_internal_scrap_cap = Constraint(
+                expr=sum(model.internal_scrap_to_bof_t[t] for t in model.TIME)
+                <= float(scrap_supply_ledger["internal_scrap_supply_cap_t"])
+            )
+            model.c0_site_scrap_cap = Constraint(
+                expr=sum(model.c0_bof_scrap_input[t] for t in model.TIME)
+                <= float(scrap_supply_ledger["site_total_scrap_supply_cap_t"])
+            )
+            model.c0_bof_origin_scrap_cap = Constraint(
+                expr=sum(model.c0_bof_scrap_input[t] for t in model.TIME)
+                <= float(scrap_supply_ledger["bof_scrap_supply_cap_t"])
+            )
+            model.c0_scrap_origin_policy = (
+                "external_and_internal_nonrenewable_annual_origin_ledger"
+            )
+            deadline_components = {
+                "external_scrap_supply_deadline_caps_t": (
+                    "c0_external_scrap_deadline_caps",
+                    lambda t: model.external_scrap_to_bof_t[t],
+                ),
+                "internal_scrap_supply_deadline_caps_t": (
+                    "c0_internal_scrap_deadline_caps",
+                    lambda t: model.internal_scrap_to_bof_t[t],
+                ),
+                "bof_scrap_supply_deadline_caps_t": (
+                    "c0_bof_scrap_deadline_caps",
+                    lambda t: model.c0_bof_scrap_input[t],
+                ),
+                "site_total_scrap_supply_deadline_caps_t": (
+                    "c0_site_scrap_deadline_caps",
+                    lambda t: model.c0_bof_scrap_input[t],
+                ),
+            }
+            for ledger_key, (component_name, expression_at) in deadline_components.items():
+                if ledger_key not in scrap_supply_ledger:
+                    continue
+                constraint_list = ConstraintList()
+                setattr(model, component_name, constraint_list)
+                for deadline, cap in sorted(
+                    scrap_supply_ledger[ledger_key].items()
+                ):
+                    endpoint = int(deadline)
+                    if endpoint <= 0 or endpoint > inputs.horizon_hours:
+                        raise S44CModelBuilderError(
+                            "C0 scrap deadline lies outside the physical horizon."
+                        )
+                    constraint_list.add(
+                        sum(expression_at(t) for t in range(endpoint))
+                        <= float(cap)
+                    )
     if c0_downstream_reference_routing is None:
         model.c0_dsp_liquid_steel_input = Expression(model.TIME, rule=lambda _m, _t: 0.0)
         model.c0_dsp_final_product_output = Expression(model.TIME, rule=lambda _m, _t: 0.0)
@@ -8400,6 +9837,8 @@ def _build_c0_model(
     else:
         dry_coal_per_t_coke = float(c0_coke_chain_reconciliation["dry_coal_t_per_t_coke"])
         bf_coke_per_t_hot_metal = float(c0_coke_chain_reconciliation["bf_coke_t_per_t_hot_metal"])
+        model.c0_dry_coal_t_per_t_coke = dry_coal_per_t_coke
+        model.c0_bf_coke_t_per_t_hot_metal = bf_coke_per_t_hot_metal
         model.coke_output_kgf1 = Expression(
             model.TIME,
             rule=lambda m, t: m.coking_plant_1[t] / dry_coal_per_t_coke,
@@ -8412,6 +9851,28 @@ def _build_c0_model(
         model.bf_coke_demand = Expression(
             model.TIME,
             rule=lambda m, t: bf_coke_per_t_hot_metal * m.bf_hot_iron_output[t],
+        )
+    if temporal_plant_dynamics is not None:
+        if initial_continuous_rate_t_h is None:
+            raise S44CModelBuilderError(
+                "C0 temporal plant dynamics require rolling boundary rates."
+            )
+        _add_c0_temporal_plant_dynamics(
+            model,
+            time_step_hours=time_step_hours,
+            contract=temporal_plant_dynamics,
+            initial_rate_t_h=initial_continuous_rate_t_h,
+        )
+        _add_downstream_temporal_contract(
+            model,
+            time_step_hours=time_step_hours,
+            contract=temporal_plant_dynamics,
+            dsp_component_name="c0_dsp_final_product_output",
+            initial_rate_t_h=initial_continuous_rate_t_h,
+        )
+    elif recoverable_handoff_execution_steps is not None:
+        raise S44CModelBuilderError(
+            "A recoverable C0 temporal handoff requires the closed PeFa bus."
         )
     controller_flags = _development_controller_flags(development_controller_activation)
     if development_controller_activation != "none" and not enable_minimal_wag_layer:
@@ -8562,11 +10023,12 @@ def _build_c0_model(
                     "reference_deadline_bands"
                 ),
             )
-    _add_final_product_requirement(
-        model,
-        final_product_target_t=inputs.final_product_target_t,
-        quota_lower_bound=rolling_production_deadline_targets_t is not None,
-    )
+    if enforce_final_product_requirement:
+        _add_final_product_requirement(
+            model,
+            final_product_target_t=inputs.final_product_target_t,
+            quota_lower_bound=rolling_production_deadline_targets_t is not None,
+        )
     if commitment_granularity == "daily_binary_hourly_throughput":
         _add_day_commitment_layer(
             model,
@@ -8600,6 +10062,10 @@ def _build_c0_model(
         activity_to_on_var={name: f"{name}_on" for name in process_names},
         activities=continuous_must_run_activities,
         configuration_id="C0_current_BF_BOF_reference",
+    )
+    _apply_c0_inventory_terminal_policy(
+        model,
+        recoverable_handoff_execution_steps=recoverable_handoff_execution_steps,
     )
     if external_procurement_flow_coefficients is None:
         model.bf_pci_input_t = Expression(
@@ -8789,6 +10255,8 @@ def _build_c1_hybrid_model(
     eaf_material_balance: Mapping[str, float] | None = None,
     bof_material_balance: Mapping[str, float] | None = None,
     scrap_supply_ledger: Mapping[str, Any] | None = None,
+    c1_bf_material_interface: Mapping[str, Any] | None = None,
+    c1_metallics_sensitivity: Mapping[str, Any] | None = None,
     downstream_origin_routing: Mapping[str, float] | None = None,
     c1_liquid_steel_route_band: Mapping[str, float] | None = None,
     continuous_must_run_activities: Collection[str] | None = None,
@@ -8811,6 +10279,16 @@ def _build_c1_hybrid_model(
     bf_electricity_intensity_scale: float = 1.0,
     eaf_heat_state_parameters: EAFHeatStateParameters | None = None,
     initial_drp_pellet_input_t: float | None = None,
+    initial_vn25_output_mw: float | None = None,
+    enforce_final_product_requirement: bool = True,
+    recoverable_handoff_execution_steps: int | None = None,
+    temporal_plant_dynamics: Mapping[str, Any] | None = None,
+    initial_continuous_rate_t_h: Mapping[str, float] | None = None,
+    recoverable_dri_tail_state: bool = False,
+    experimental_self_use_calibration: Mapping[str, Any] | None = None,
+    experimental_process_electricity_overlay: Mapping[str, Any] | None = None,
+    experimental_ng_service_calibration: Mapping[str, Any] | None = None,
+    experimental_coal_wag_calibration: Mapping[str, Any] | None = None,
 ):
     if time_step_hours not in {1.0, 0.25}:
         raise S44CModelBuilderError("C1 model time step must be 1 hour or 15 minutes.")
@@ -8822,9 +10300,10 @@ def _build_c1_hybrid_model(
         eaf_heat_state_parameters is not None
         and eaf_heat_state_parameters.active
     )
-    if heat_state_active and time_step_hours != 0.25:
+    if heat_state_active and time_step_hours not in {0.25, 1.0}:
         raise S44CModelBuilderError(
-            "The discrete EAF heat-state component requires the shared internal 15-minute grid."
+            "The discrete EAF heat-state component requires either the shared "
+            "15-minute grid or the hourly grid with internal EAF batch subslots."
         )
     if initial_drp_pellet_input_t is not None and float(initial_drp_pellet_input_t) < 0.0:
         raise S44CModelBuilderError("Initial DRP pellet input cannot be negative.")
@@ -8875,7 +10354,11 @@ def _build_c1_hybrid_model(
         if missing:
             raise S44CModelBuilderError(f"C1 BOF material balance is missing: {sorted(missing)}")
     if scrap_supply_ledger is not None:
-        required = {"site_total_scrap_supply_cap_t", "bof_scrap_supply_cap_t", "eaf_scrap_supply_cap_t"}
+        required = {
+            "site_total_scrap_supply_cap_t",
+            "bof_scrap_supply_cap_t",
+            "eaf_scrap_supply_cap_t",
+        }
         missing = required.difference(scrap_supply_ledger)
         if missing:
             raise S44CModelBuilderError(f"C1 scrap supply ledger is missing: {sorted(missing)}")
@@ -8891,6 +10374,132 @@ def _build_c1_hybrid_model(
             raise S44CModelBuilderError(
                 "C1 rolling scrap deadlines require site, BOF and EAF cap mappings together."
             )
+        origin_keys = {
+            "external_scrap_supply_cap_t",
+            "internal_scrap_supply_cap_t",
+        }
+        supplied_origin_keys = origin_keys.intersection(scrap_supply_ledger)
+        if supplied_origin_keys and supplied_origin_keys != origin_keys:
+            raise S44CModelBuilderError(
+                "C1 origin-tagged scrap requires external and internal caps together."
+            )
+        origin_deadline_keys = {
+            "external_scrap_supply_deadline_caps_t",
+            "internal_scrap_supply_deadline_caps_t",
+        }
+        supplied_origin_deadlines = origin_deadline_keys.intersection(
+            scrap_supply_ledger
+        )
+        if supplied_origin_deadlines and supplied_origin_deadlines != origin_deadline_keys:
+            raise S44CModelBuilderError(
+                "C1 rolling origin-tagged scrap deadlines require external and "
+                "internal mappings together."
+            )
+        if supplied_origin_deadlines and supplied_origin_keys != origin_keys:
+            raise S44CModelBuilderError(
+                "C1 rolling origin-tagged scrap deadlines require origin horizon caps."
+            )
+    if c1_bf_material_interface is not None:
+        required = {
+            "activity_quantity_role",
+            "activity_rate_unit",
+            "hot_metal_t_per_t_represented_bf_activity",
+            "sinter_t_per_t_hot_metal",
+            "annual_sinter_anchor_t_y",
+            "annual_hot_metal_anchor_t_y",
+        }
+        missing = required.difference(c1_bf_material_interface)
+        if missing:
+            raise S44CModelBuilderError(
+                f"C1 BF material interface is missing: {sorted(missing)}"
+            )
+        if str(c1_bf_material_interface["activity_quantity_role"]) != (
+            "governed_represented_bf_activity_proxy"
+        ):
+            raise S44CModelBuilderError(
+                "C1 BF6 120-170 must remain a governed represented-activity proxy."
+            )
+        if str(c1_bf_material_interface["activity_rate_unit"]) != (
+            "t_represented_bf_activity/h"
+        ):
+            raise S44CModelBuilderError(
+                "C1 BF6 activity must not be labelled as physical sinter throughput."
+            )
+        if any(
+            float(c1_bf_material_interface[key]) <= 0.0
+            for key in required.difference(
+                {"activity_quantity_role", "activity_rate_unit"}
+            )
+        ):
+            raise S44CModelBuilderError(
+                "C1 BF material-interface factors and anchors must be positive."
+            )
+    metallics_mode = "base"
+    dri_thermal_state_mode = "generic_dri_buffer"
+    dri_thermal_state_active = False
+    if c1_metallics_sensitivity is not None:
+        metallics_mode = str(c1_metallics_sensitivity.get("mode", "base"))
+        if metallics_mode not in {"base", "hbi", "high_scrap"}:
+            raise S44CModelBuilderError(
+                f"Unsupported C1 metallics sensitivity mode: {metallics_mode!r}."
+            )
+        if metallics_mode == "hbi" and not heat_state_active:
+            raise S44CModelBuilderError(
+                "The bounded HBI sensitivity is certified only with the EAF heat model."
+            )
+        if metallics_mode == "hbi" and float(
+            c1_metallics_sensitivity.get("hbi_horizon_cap_t", -1.0)
+        ) < 0.0:
+            raise S44CModelBuilderError("The HBI sensitivity requires a non-negative cap.")
+        dri_thermal_state_mode = str(
+            c1_metallics_sensitivity.get(
+                "dri_thermal_state_mode", "generic_dri_buffer"
+            )
+        )
+        if dri_thermal_state_mode not in {
+            "generic_dri_buffer",
+            "hdri_direct_plus_cdri_buffer",
+        }:
+            raise S44CModelBuilderError(
+                f"Unsupported DRI thermal-state mode: {dri_thermal_state_mode!r}."
+            )
+        dri_thermal_state_active = (
+            dri_thermal_state_mode == "hdri_direct_plus_cdri_buffer"
+        )
+        if dri_thermal_state_active:
+            if metallics_mode == "hbi":
+                # HBI is an explicitly separate offline sensitivity.  The
+                # base HDRI/CDRI thermal split is therefore not stacked into
+                # that imported-material variant even though the common
+                # configuration mapping carries the base metadata.
+                dri_thermal_state_active = False
+                dri_thermal_state_mode = "generic_dri_buffer_hbi_sensitivity"
+        if dri_thermal_state_active:
+            required_thermal = {
+                "hdri_temperature_c",
+                "cdri_temperature_c",
+                "cold_dri_max_share_of_eaf_dri",
+                "cold_dri_eaf_arc_electricity_premium_fraction",
+            }
+            missing_thermal = required_thermal.difference(c1_metallics_sensitivity)
+            if missing_thermal:
+                raise S44CModelBuilderError(
+                    "The HDRI/CDRI contract is missing: "
+                    f"{sorted(missing_thermal)}"
+                )
+            cold_share = float(
+                c1_metallics_sensitivity["cold_dri_max_share_of_eaf_dri"]
+            )
+            cold_premium = float(
+                c1_metallics_sensitivity[
+                    "cold_dri_eaf_arc_electricity_premium_fraction"
+                ]
+            )
+            if not 0.0 <= cold_share <= 1.0 or cold_premium < 0.0:
+                raise S44CModelBuilderError(
+                    "The HDRI/CDRI cold share must be in [0, 1] and its electricity "
+                    "premium must be non-negative."
+                )
     if c1_liquid_steel_route_band is not None:
         required = {"bof_lower_share", "bof_upper_share"}
         missing = required.difference(c1_liquid_steel_route_band)
@@ -8945,7 +10554,7 @@ def _build_c1_hybrid_model(
 
     model.drp_pellet_input = Var(model.TIME, domain=NonNegativeReals)
     model.drp_on = Var(model.TIME, domain=on_domain)
-    if heat_state_active:
+    if heat_state_active and time_step_hours == 0.25:
         heat = eaf_heat_state_parameters
         assert heat is not None
         model.eaf_heat_start = Var(model.TIME, domain=Binary)
@@ -9025,6 +10634,120 @@ def _build_c1_hybrid_model(
         model.eaf_arc_on_power_mw = heat.arc_on_power_mw
         model.eaf_secondary_energy_mwh_per_heat = heat.secondary_energy_mwh_per_heat
         model.eaf_quantization_allowance_t = heat.quantization_allowance_t
+        model.eaf_batch_time_contract = "global_15_minute_grid"
+        model.eaf_internal_batch_subslots_per_hour = 1
+    elif heat_state_active:
+        # The deterministic hourly model keeps one global decision interval per
+        # hour.  Only the EAF retains four internal 15-minute batch positions so
+        # the accepted 45-minute heat cycle is not rounded to one hour (which
+        # would incorrectly cap the furnace at 24 heats/day).  All material,
+        # energy and price expressions below remain indexed by the hourly TIME
+        # set; these expressions aggregate the internal phase counts exactly.
+        heat = eaf_heat_state_parameters
+        assert heat is not None
+        subslots_per_hour = 4
+        subslot_count = inputs.horizon_hours * subslots_per_hour
+        model.EAF_SUBTIME = RangeSet(0, subslot_count - 1)
+        model.eaf_heat_start_subslot = Var(model.EAF_SUBTIME, domain=Binary)
+
+        def _hourly_eaf_start_at(m, subslot: int):
+            if subslot >= 0:
+                return m.eaf_heat_start_subslot[subslot]
+            if subslot == -1:
+                return float(heat.initial_start_lag1)
+            if subslot == -2:
+                return float(heat.initial_start_lag2)
+            return 0.0
+
+        model.eaf_heat_start = Expression(
+            model.TIME,
+            rule=lambda m, t: sum(
+                m.eaf_heat_start_subslot[4 * int(t) + p]
+                for p in range(subslots_per_hour)
+            ),
+        )
+        model.eaf_melt = Expression(
+            model.TIME,
+            rule=lambda m, t: sum(
+                _hourly_eaf_start_at(m, 4 * int(t) + p)
+                + _hourly_eaf_start_at(m, 4 * int(t) + p - 1)
+                for p in range(subslots_per_hour)
+            ),
+        )
+        model.eaf_tap = Expression(
+            model.TIME,
+            rule=lambda m, t: sum(
+                _hourly_eaf_start_at(m, 4 * int(t) + p - 2)
+                for p in range(subslots_per_hour)
+            ),
+        )
+        model.eaf_completed_heat = Expression(
+            model.TIME, rule=lambda m, t: m.eaf_tap[t]
+        )
+        model.eaf_on = Expression(
+            model.TIME,
+            rule=lambda m, t: 0.25 * (m.eaf_melt[t] + m.eaf_tap[t]),
+        )
+        model.eaf_single_furnace_occupancy = Constraint(
+            model.EAF_SUBTIME,
+            rule=lambda m, s: _hourly_eaf_start_at(m, int(s))
+            + _hourly_eaf_start_at(m, int(s) - 1)
+            + _hourly_eaf_start_at(m, int(s) - 2)
+            <= 1.0,
+        )
+        model.eaf_melt_subslot = Expression(
+            model.EAF_SUBTIME,
+            rule=lambda m, s: _hourly_eaf_start_at(m, int(s))
+            + _hourly_eaf_start_at(m, int(s) - 1),
+        )
+        model.eaf_tap_subslot = Expression(
+            model.EAF_SUBTIME,
+            rule=lambda m, s: _hourly_eaf_start_at(m, int(s) - 2),
+        )
+        model.eaf_arc_power_mw_subslot = Expression(
+            model.EAF_SUBTIME,
+            rule=lambda m, s: heat.arc_on_power_mw * m.eaf_melt_subslot[s],
+        )
+        maintenance = {
+            int(interval)
+            for interval in heat.maintenance_intervals
+            if int(interval) < subslot_count
+        }
+        for start_subslot in model.EAF_SUBTIME:
+            occupied = {
+                int(start_subslot),
+                int(start_subslot) + 1,
+                int(start_subslot) + 2,
+            }
+            if occupied.intersection(maintenance):
+                model.eaf_heat_start_subslot[start_subslot].fix(0.0)
+        for subslot in range(max(0, subslot_count - 2), subslot_count):
+            model.eaf_heat_start_subslot[subslot].fix(0.0)
+        model.eaf_heat_count_started = Expression(
+            expr=sum(model.eaf_heat_start_subslot[s] for s in model.EAF_SUBTIME)
+        )
+        model.eaf_heat_count_tapped = Expression(
+            expr=sum(model.eaf_tap[t] for t in model.TIME)
+        )
+        model.eaf_arc_on_interval_count = Expression(
+            expr=sum(model.eaf_melt[t] for t in model.TIME)
+        )
+        model.eaf_unfinished_heat_count_end = Expression(
+            expr=model.eaf_heat_start_subslot[subslot_count - 2]
+            + model.eaf_heat_start_subslot[subslot_count - 1]
+        )
+        if heat.require_idle_terminal_state:
+            model.eaf_terminal_idle = Constraint(
+                expr=model.eaf_unfinished_heat_count_end == 0.0
+            )
+        model.eaf_heat_state_active = True
+        model.eaf_heat_size_t_liquid_steel = heat.heat_size_t_liquid_steel
+        model.eaf_arc_energy_mwh_per_heat = heat.arc_energy_mwh_per_heat
+        model.eaf_arc_on_power_mw = heat.arc_on_power_mw
+        model.eaf_secondary_energy_mwh_per_heat = heat.secondary_energy_mwh_per_heat
+        model.eaf_quantization_allowance_t = heat.quantization_allowance_t
+        model.eaf_batch_time_contract = "hourly_grid_with_internal_15_minute_eaf_subslots"
+        model.eaf_internal_batch_subslots_per_hour = subslots_per_hour
     else:
         model.eaf_dri_input = Var(model.TIME, domain=NonNegativeReals)
         model.eaf_on = Var(model.TIME, domain=on_domain)
@@ -9054,15 +10777,73 @@ def _build_c1_hybrid_model(
 
     model.coking_plant_2 = Expression(model.TIME, rule=lambda _m, _t: 0.0)
     model.blast_furnace_7 = Expression(model.TIME, rule=lambda _m, _t: 0.0)
-    model.bf_sinter_input = Expression(model.TIME, rule=lambda m, t: m.blast_furnace_6[t])
+    model.bf6_represented_activity = Expression(
+        model.TIME, rule=lambda m, t: m.blast_furnace_6[t]
+    )
     model.sinter_output = Expression(
         model.TIME,
         rule=lambda m, t: retained.sinter_output_per_t_iron_ore * m.sintering_plant[t],
     )
-    model.bf6_hot_iron_output = Expression(
-        model.TIME,
-        rule=lambda m, t: retained.bf_hot_iron_per_t_sinter * m.blast_furnace_6[t],
-    )
+    if c1_bf_material_interface is None:
+        # Historical static callers retain their former interface. The active
+        # deterministic temporal contract supplies the explicit C1 interface
+        # below, in which BF6 activity is not a physical sinter bus.
+        model.bf6_hot_iron_output = Expression(
+            model.TIME,
+            rule=lambda m, t: retained.bf_hot_iron_per_t_sinter
+            * m.blast_furnace_6[t],
+        )
+        model.bf_sinter_input = Expression(
+            model.TIME, rule=lambda m, t: m.blast_furnace_6[t]
+        )
+        model.c1_bf_activity_quantity_role = "legacy_physical_sinter_interface"
+        model.c1_bf_activity_rate_unit = "t_sinter/h"
+        model.c1_sinter_t_per_t_hot_metal = (
+            1.0 / retained.bf_hot_iron_per_t_sinter
+        )
+    else:
+        hot_metal_per_activity = float(
+            c1_bf_material_interface[
+                "hot_metal_t_per_t_represented_bf_activity"
+            ]
+        )
+        sinter_per_hot_metal = float(
+            c1_bf_material_interface["sinter_t_per_t_hot_metal"]
+        )
+        model.bf6_hot_iron_output = Expression(
+            model.TIME,
+            rule=lambda m, t: hot_metal_per_activity
+            * m.bf6_represented_activity[t],
+        )
+        model.bf_sinter_input = Expression(
+            model.TIME,
+            rule=lambda m, t: sinter_per_hot_metal
+            * m.bf6_hot_iron_output[t],
+        )
+        model.c1_bf_activity_quantity_role = str(
+            c1_bf_material_interface["activity_quantity_role"]
+        )
+        model.c1_bf_activity_rate_unit = str(
+            c1_bf_material_interface["activity_rate_unit"]
+        )
+        model.c1_hot_metal_t_per_t_represented_bf_activity = (
+            hot_metal_per_activity
+        )
+        model.c1_bf_activity_min_t_h = (
+            float(retained.process_limits["blast_furnace_6"][0])
+            / float(time_step_hours)
+        )
+        model.c1_bf_activity_max_t_h = (
+            float(retained.process_limits["blast_furnace_6"][1])
+            / float(time_step_hours)
+        )
+        model.c1_sinter_t_per_t_hot_metal = sinter_per_hot_metal
+        model.c1_annual_sinter_anchor_t_y = float(
+            c1_bf_material_interface["annual_sinter_anchor_t_y"]
+        )
+        model.c1_annual_hot_metal_anchor_t_y = float(
+            c1_bf_material_interface["annual_hot_metal_anchor_t_y"]
+        )
     model.bf7_hot_iron_output = Expression(model.TIME, rule=lambda _m, _t: 0.0)
     model.bf_hot_iron_output = Expression(model.TIME, rule=lambda m, t: m.bf6_hot_iron_output[t])
     if bof_material_balance is None:
@@ -9085,6 +10866,9 @@ def _build_c1_hybrid_model(
             model.TIME,
             rule=lambda m, t: m.bof_scrap_supply_t[t] == bof_scrap_per_t_ls * m.bof_crude_steel_output[t],
         )
+    model.drp_yield_t_dri_per_t_pellets = float(
+        inputs.drp_yield_t_dri_per_t_pellets
+    )
     model.drp_dri_output = Expression(
         model.TIME,
         rule=lambda m, t: inputs.drp_yield_t_dri_per_t_pellets * m.drp_pellet_input[t],
@@ -9111,10 +10895,33 @@ def _build_c1_hybrid_model(
             model.TIME,
             rule=lambda m, t: heat.heat_size_t_liquid_steel * m.eaf_tap[t],
         )
-        model.eaf_dri_input = Expression(
+        model.eaf_dri_equivalent_input = Expression(
             model.TIME,
             rule=lambda m, t: half_hdri_per_heat * m.eaf_melt[t],
         )
+        if metallics_mode == "hbi":
+            model.eaf_dri_input = Var(model.TIME, domain=NonNegativeReals)
+            model.imported_hbi_to_eaf_t = Var(
+                model.TIME, domain=NonNegativeReals
+            )
+            model.eaf_dri_equivalent_balance = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.eaf_dri_input[t]
+                + m.imported_hbi_to_eaf_t[t]
+                == m.eaf_dri_equivalent_input[t],
+            )
+            model.imported_hbi_horizon_cap = Constraint(
+                expr=sum(model.imported_hbi_to_eaf_t[t] for t in model.TIME)
+                <= float(c1_metallics_sensitivity["hbi_horizon_cap_t"])
+            )
+        else:
+            model.eaf_dri_input = Expression(
+                model.TIME,
+                rule=lambda m, t: m.eaf_dri_equivalent_input[t],
+            )
+            model.imported_hbi_to_eaf_t = Expression(
+                model.TIME, rule=lambda _m, _t: 0.0
+            )
         model.eaf_scrap_supply_t = Expression(
             model.TIME,
             rule=lambda m, t: half_scrap_per_heat * m.eaf_melt[t],
@@ -9146,6 +10953,83 @@ def _build_c1_hybrid_model(
                 expr=sum(model.eaf_scrap_supply_t[t] for t in model.TIME) <= scrap_supply_cap_t
             )
         model.scrap_t = Expression(model.TIME, rule=lambda m, t: m.eaf_scrap_supply_t[t])
+    if not hasattr(model, "eaf_dri_equivalent_input"):
+        model.eaf_dri_equivalent_input = Expression(
+            model.TIME, rule=lambda m, t: m.eaf_dri_input[t]
+        )
+    if not hasattr(model, "imported_hbi_to_eaf_t"):
+        model.imported_hbi_to_eaf_t = Expression(
+            model.TIME, rule=lambda _m, _t: 0.0
+        )
+    if dri_thermal_state_active:
+        assert c1_metallics_sensitivity is not None
+        model.hdri_direct_to_eaf_t = Var(model.TIME, domain=NonNegativeReals)
+        model.hdri_to_cdri_storage_t = Var(model.TIME, domain=NonNegativeReals)
+        model.cdri_from_storage_to_eaf_t = Var(model.TIME, domain=NonNegativeReals)
+        model.drp_hdri_allocation_balance = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.drp_dri_output[t]
+            == m.hdri_direct_to_eaf_t[t] + m.hdri_to_cdri_storage_t[t],
+        )
+        model.eaf_dri_thermal_input_balance = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.eaf_dri_input[t]
+            == m.hdri_direct_to_eaf_t[t] + m.cdri_from_storage_to_eaf_t[t],
+        )
+        model.eaf_cdri_share_limit = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.cdri_from_storage_to_eaf_t[t]
+            <= float(
+                c1_metallics_sensitivity["cold_dri_max_share_of_eaf_dri"]
+            )
+            * m.eaf_dri_input[t],
+        )
+        model.cdri_withdrawal_from_prior_inventory = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.cdri_from_storage_to_eaf_t[t]
+            <= (
+                inputs.dri_buffer_initial_t
+                if int(t) == 0
+                else m.dri_inventory[int(t) - 1]
+            ),
+        )
+        arc_mwh_per_t_liquid_steel = (
+            eaf_heat_state_parameters.arc_electricity_mwh_per_t_liquid_steel
+            if heat_state_active and eaf_heat_state_parameters is not None
+            else (
+                float(
+                    c1_energy_boundary[
+                        "eaf_arc_electricity_mwh_per_t_liquid_steel"
+                    ]
+                )
+                if c1_energy_boundary is not None
+                else inputs.eaf_electricity_mwh_per_t_dri * hdri_per_t_ls
+            )
+        )
+        model.eaf_cold_dri_reheat_electricity_mwh = Expression(
+            model.TIME,
+            rule=lambda m, t: float(
+                c1_metallics_sensitivity[
+                    "cold_dri_eaf_arc_electricity_premium_fraction"
+                ]
+            )
+            * arc_mwh_per_t_liquid_steel
+            * m.cdri_from_storage_to_eaf_t[t]
+            / hdri_per_t_ls,
+        )
+    else:
+        model.hdri_direct_to_eaf_t = Expression(
+            model.TIME, rule=lambda m, t: m.eaf_dri_input[t]
+        )
+        model.hdri_to_cdri_storage_t = Expression(
+            model.TIME, rule=lambda _m, _t: 0.0
+        )
+        model.cdri_from_storage_to_eaf_t = Expression(
+            model.TIME, rule=lambda _m, _t: 0.0
+        )
+        model.eaf_cold_dri_reheat_electricity_mwh = Expression(
+            model.TIME, rule=lambda _m, _t: 0.0
+        )
     if scrap_supply_ledger is not None:
         site_cap = float(scrap_supply_ledger["site_total_scrap_supply_cap_t"])
         bof_cap = float(scrap_supply_ledger["bof_scrap_supply_cap_t"])
@@ -9158,6 +11042,66 @@ def _build_c1_hybrid_model(
         model.site_scrap_supply_cap = Constraint(expr=model.site_scrap_supply_total_t <= site_cap)
         model.bof_scrap_supply_cap = Constraint(expr=sum(model.bof_scrap_supply_t[t] for t in model.TIME) <= bof_cap)
         model.eaf_scrap_supply_cap = Constraint(expr=sum(model.eaf_scrap_supply_t[t] for t in model.TIME) <= eaf_cap)
+        origin_active = all(
+            key in scrap_supply_ledger
+            for key in (
+                "external_scrap_supply_cap_t",
+                "internal_scrap_supply_cap_t",
+            )
+        )
+        if origin_active:
+            model.external_scrap_to_bof_t = Var(
+                model.TIME, domain=NonNegativeReals
+            )
+            model.external_scrap_to_eaf_t = Var(
+                model.TIME, domain=NonNegativeReals
+            )
+            model.internal_scrap_to_bof_t = Var(
+                model.TIME, domain=NonNegativeReals
+            )
+            model.internal_scrap_to_eaf_t = Var(
+                model.TIME, domain=NonNegativeReals
+            )
+            model.bof_scrap_origin_balance = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.external_scrap_to_bof_t[t]
+                + m.internal_scrap_to_bof_t[t]
+                == m.bof_scrap_supply_t[t],
+            )
+            model.eaf_scrap_origin_balance = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.external_scrap_to_eaf_t[t]
+                + m.internal_scrap_to_eaf_t[t]
+                == m.eaf_scrap_supply_t[t],
+            )
+            model.external_scrap_supply_total_t = Expression(
+                expr=sum(
+                    model.external_scrap_to_bof_t[t]
+                    + model.external_scrap_to_eaf_t[t]
+                    for t in model.TIME
+                )
+            )
+            model.internal_scrap_supply_total_t = Expression(
+                expr=sum(
+                    model.internal_scrap_to_bof_t[t]
+                    + model.internal_scrap_to_eaf_t[t]
+                    for t in model.TIME
+                )
+            )
+            model.external_scrap_supply_cap = Constraint(
+                expr=model.external_scrap_supply_total_t
+                <= float(scrap_supply_ledger["external_scrap_supply_cap_t"])
+            )
+            model.internal_scrap_supply_cap = Constraint(
+                expr=model.internal_scrap_supply_total_t
+                <= float(scrap_supply_ledger["internal_scrap_supply_cap_t"])
+            )
+            model.c1_scrap_origin_policy = str(
+                scrap_supply_ledger.get(
+                    "origin_policy",
+                    "external_purchase_plus_bounded_internal_reuse_no_caster_link",
+                )
+            )
         deadline_keys = (
             "site_total_scrap_supply_deadline_caps_t",
             "bof_scrap_supply_deadline_caps_t",
@@ -9208,12 +11152,53 @@ def _build_c1_hybrid_model(
                 )
                 <= deadline_maps["eaf_scrap_supply_deadline_caps_t"][int(deadline)],
             )
+            if origin_active:
+                origin_deadline_maps = {
+                    key: {
+                        int(deadline): float(cap)
+                        for deadline, cap in scrap_supply_ledger[key].items()
+                    }
+                    for key in (
+                        "external_scrap_supply_deadline_caps_t",
+                        "internal_scrap_supply_deadline_caps_t",
+                    )
+                }
+                if any(
+                    tuple(sorted(mapping)) != deadlines
+                    for mapping in origin_deadline_maps.values()
+                ):
+                    raise S44CModelBuilderError(
+                        "C1 origin-tagged scrap deadlines must match route deadlines."
+                    )
+                model.external_scrap_supply_deadline_cap = Constraint(
+                    model.scrap_supply_deadlines,
+                    rule=lambda m, deadline: sum(
+                        m.external_scrap_to_bof_t[t]
+                        + m.external_scrap_to_eaf_t[t]
+                        for t in range(int(deadline))
+                    )
+                    <= origin_deadline_maps[
+                        "external_scrap_supply_deadline_caps_t"
+                    ][int(deadline)],
+                )
+                model.internal_scrap_supply_deadline_cap = Constraint(
+                    model.scrap_supply_deadlines,
+                    rule=lambda m, deadline: sum(
+                        m.internal_scrap_to_bof_t[t]
+                        + m.internal_scrap_to_eaf_t[t]
+                        for t in range(int(deadline))
+                    )
+                    <= origin_deadline_maps[
+                        "internal_scrap_supply_deadline_caps_t"
+                    ][int(deadline)],
+                )
     elif bof_material_balance is None:
         model.site_scrap_supply_total_t = Expression(expr=sum(model.scrap_t[t] for t in model.TIME))
     else:
         model.site_scrap_supply_total_t = Expression(
             expr=sum(model.bof_scrap_supply_t[t] + model.scrap_t[t] for t in model.TIME)
         )
+    model.c1_metallics_sensitivity_mode = metallics_mode
     if downstream_origin_routing is None:
         model.retained_bf_bof_final_product_output = Expression(
             model.TIME,
@@ -9250,6 +11235,8 @@ def _build_c1_hybrid_model(
         model.eaf_to_dsp_liquid_steel = Var(model.TIME, domain=NonNegativeReals)
         model.imported_slab_to_hsm = Var(model.TIME, domain=NonNegativeReals)
         model.cold_slab_draw_to_hsm = Var(model.TIME, domain=NonNegativeReals)
+        model.eaf_slab_inventory = Var(model.TIME, domain=NonNegativeReals)
+        model.eaf_slab_draw_to_hsm = Var(model.TIME, domain=NonNegativeReals)
         model.bof_origin_route_balance = Constraint(
             model.TIME,
             rule=lambda m, t: m.bof_to_hsm_slab[t] + m.bof_to_dsp_liquid_steel[t] == m.bof_crude_steel_output[t],
@@ -9267,7 +11254,10 @@ def _build_c1_hybrid_model(
         )
         model.hsm_origin_input_balance = Constraint(
             model.TIME,
-            rule=lambda m, t: m.hot_strip_mill[t] == m.cold_slab_draw_to_hsm[t] + m.eaf_to_hsm_slab[t] + m.imported_slab_to_hsm[t],
+            rule=lambda m, t: m.hot_strip_mill[t]
+            == m.cold_slab_draw_to_hsm[t]
+            + m.eaf_slab_draw_to_hsm[t]
+            + m.imported_slab_to_hsm[t],
         )
         model.dsp_final_product_output = Expression(
             model.TIME,
@@ -9283,7 +11273,7 @@ def _build_c1_hybrid_model(
         )
         model.eaf_final_product_output = Expression(
             model.TIME,
-            rule=lambda m, t: hsm_final_per_t_slab * m.eaf_to_hsm_slab[t]
+            rule=lambda m, t: hsm_final_per_t_slab * m.eaf_slab_draw_to_hsm[t]
             + m.eaf_to_dsp_liquid_steel[t] / dsp_input_per_t_coil,
         )
         model.final_product_output = Expression(
@@ -9332,7 +11322,9 @@ def _build_c1_hybrid_model(
         )
     model.electricity_mwh = Expression(
         model.TIME,
-        rule=lambda m, t: m.drp_electricity_mwh[t] + m.eaf_arc_electricity_mwh[t],
+        rule=lambda m, t: m.drp_electricity_mwh[t]
+        + m.eaf_arc_electricity_mwh[t]
+        + m.eaf_cold_dri_reheat_electricity_mwh[t],
     )
     model.drp_named_ng_mwh = Expression(
         model.TIME,
@@ -9404,7 +11396,7 @@ def _build_c1_hybrid_model(
     model.oxygen_t = Expression(
         model.TIME,
         rule=lambda m, t: inputs.drp_o2_t_per_t_pellets * m.drp_pellet_input[t]
-        + inputs.eaf_o2_t_per_t_dri * m.eaf_dri_input[t],
+        + inputs.eaf_o2_t_per_t_dri * m.eaf_dri_equivalent_input[t],
     )
 
     model.drp_off_on_upper = Constraint(
@@ -9440,14 +11432,49 @@ def _build_c1_hybrid_model(
             <= inputs.drp_ramp_t_pellets_h
         )
 
-    model.dri_buffer_balance = Constraint(
-        model.TIME,
-        rule=lambda m, t: m.dri_inventory[t]
-        == (inputs.dri_buffer_initial_t if t == 0 else m.dri_inventory[t - 1])
-        + m.drp_dri_output[t]
-        - m.eaf_dri_input[t],
-    )
+    if dri_thermal_state_active:
+        model.dri_buffer_balance = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.dri_inventory[t]
+            == (inputs.dri_buffer_initial_t if int(t) == 0 else m.dri_inventory[int(t) - 1])
+            + m.hdri_to_cdri_storage_t[t]
+            - m.cdri_from_storage_to_eaf_t[t],
+        )
+    else:
+        model.dri_buffer_balance = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.dri_inventory[t]
+            == (inputs.dri_buffer_initial_t if int(t) == 0 else m.dri_inventory[int(t) - 1])
+            + m.drp_dri_output[t]
+            - m.eaf_dri_input[t],
+        )
     model.dri_buffer_capacity = Constraint(model.TIME, rule=lambda m, t: m.dri_inventory[t] <= inputs.dri_buffer_capacity_t)
+    if c1_metallics_sensitivity is not None:
+        model.c1_dri_buffer_representation = str(
+            c1_metallics_sensitivity.get(
+                "dri_buffer_representation",
+                "generic_bounded_dri_timing_buffer",
+            )
+        )
+        model.c1_dri_buffer_active_capacity_t = inputs.dri_buffer_capacity_t
+        model.c1_dri_buffer_source_candidate_t = float(
+            c1_metallics_sensitivity.get("dri_buffer_source_candidate_t", 15_350.0)
+        )
+        model.c1_dri_buffer_thermal_or_silo_claim = (
+            "cold_dri_inventory_only_no_separate_silo_or_cooling_dynamics"
+            if dri_thermal_state_active
+            else "none"
+        )
+        model.c1_dri_thermal_state_mode = dri_thermal_state_mode
+        model.c1_hdri_temperature_c = float(
+            c1_metallics_sensitivity.get("hdri_temperature_c", 0.0)
+        )
+        model.c1_cdri_temperature_c = float(
+            c1_metallics_sensitivity.get("cdri_temperature_c", 0.0)
+        )
+        model.c1_cdri_max_share = float(
+            c1_metallics_sensitivity.get("cold_dri_max_share_of_eaf_dri", 0.0)
+        )
     if heat_state_active:
         # A continuously operating DRP necessarily produces DRI in the final
         # quarter, while the last completable EAF heat is already tapping.
@@ -9522,6 +11549,31 @@ def _build_c1_hybrid_model(
             - m.hot_strip_mill[t]
         ),
     )
+    if downstream_origin_routing is not None:
+        eaf_slab_initial_t = float(
+            downstream_origin_routing.get("eaf_slab_initial_t", 0.0)
+        )
+        if not 0.0 <= eaf_slab_initial_t <= retained.cold_slab_store_capacity_t:
+            raise S44CModelBuilderError("Invalid EAF slab rolling-state inventory.")
+        model.eaf_slab_balance = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.eaf_slab_inventory[t]
+            == (eaf_slab_initial_t if int(t) == 0 else m.eaf_slab_inventory[int(t) - 1])
+            + m.eaf_to_hsm_slab[t]
+            - m.eaf_slab_draw_to_hsm[t],
+        )
+        model.shared_cold_slab_capacity = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.cold_slab_inventory[t] + m.eaf_slab_inventory[t]
+            <= retained.cold_slab_store_capacity_t,
+        )
+        model.eaf_slab_terminal = Constraint(
+            expr=model.eaf_slab_inventory[inputs.horizon_hours - 1]
+            == eaf_slab_initial_t
+        )
+        model.eaf_slab_handoff_policy = (
+            "origin_preserving_EAF_slab_inventory_with_shared_cold_slab_capacity"
+        )
     model.coke_capacity = Constraint(model.TIME, rule=lambda m, t: m.coke_inventory[t] <= retained.coke_store_capacity_t)
     model.sinter_capacity = Constraint(model.TIME, rule=lambda m, t: m.sinter_inventory[t] <= retained.sinter_store_capacity_t)
     model.hot_iron_capacity = Constraint(model.TIME, rule=lambda m, t: m.hot_iron_inventory[t] <= retained.hot_iron_store_capacity_t)
@@ -9530,6 +11582,11 @@ def _build_c1_hybrid_model(
     model.sinter_terminal = Constraint(expr=model.sinter_inventory[inputs.horizon_hours - 1] == retained.sinter_store_initial_t)
     model.hot_iron_terminal = Constraint(expr=model.hot_iron_inventory[inputs.horizon_hours - 1] == retained.hot_iron_store_initial_t)
     model.cold_slab_terminal = Constraint(expr=model.cold_slab_inventory[inputs.horizon_hours - 1] == retained.cold_slab_store_initial_t)
+    _apply_c1_inventory_terminal_policy(
+        model,
+        recoverable_handoff_execution_steps=recoverable_handoff_execution_steps,
+        recoverable_dri_tail_state=recoverable_dri_tail_state,
+    )
 
     if c1_retained_route_policy not in {"target_share", "bottom_up_fixed_retained_route", "quota_driven_topology"}:
         raise S44CModelBuilderError(f"Unsupported C1 retained route policy: {c1_retained_route_policy}")
@@ -9604,11 +11661,12 @@ def _build_c1_hybrid_model(
                     "reference_deadline_bands"
                 ),
             )
-    _add_final_product_requirement(
-        model,
-        final_product_target_t=inputs.final_product_target_t,
-        quota_lower_bound=rolling_production_deadline_targets_t is not None,
-    )
+    if enforce_final_product_requirement:
+        _add_final_product_requirement(
+            model,
+            final_product_target_t=inputs.final_product_target_t,
+            quota_lower_bound=rolling_production_deadline_targets_t is not None,
+        )
     if commitment_granularity == "daily_binary_hourly_throughput":
         commitment_definitions = {
             **{
@@ -9653,6 +11711,24 @@ def _build_c1_hybrid_model(
         activities=continuous_must_run_activities,
         configuration_id="C1_phase1_BF_BOF_plus_DRP_EAF",
     )
+    if temporal_plant_dynamics is not None:
+        if initial_continuous_rate_t_h is None:
+            raise S44CModelBuilderError(
+                "Temporal plant dynamics require rolling boundary rates."
+            )
+        _add_c1_temporal_plant_dynamics(
+            model,
+            time_step_hours=time_step_hours,
+            contract=temporal_plant_dynamics,
+            initial_rate_t_h=initial_continuous_rate_t_h,
+        )
+        _add_downstream_temporal_contract(
+            model,
+            time_step_hours=time_step_hours,
+            contract=temporal_plant_dynamics,
+            dsp_component_name="dsp_final_product_output",
+            initial_rate_t_h=initial_continuous_rate_t_h,
+        )
 
     controller_flags = _development_controller_flags(development_controller_activation)
     if development_controller_activation != "none" and not enable_minimal_wag_layer:
@@ -9672,6 +11748,7 @@ def _build_c1_hybrid_model(
                 m.electricity_mwh[t]
                 + m.development_controller_electricity_mwh[t]
                 + m.electricity_boundary_development_mwh[t]
+                + m.experimental_process_electricity_overlay_mwh[t]
             ),
             development_profile=(load_development_controller_profile("C1_phase1_BF_BOF_plus_DRP_EAF") if development_controller_activation != "none" else None),
             enable_hsm_controller=controller_flags["hsm"],
@@ -9692,9 +11769,14 @@ def _build_c1_hybrid_model(
             hsm_source_mix_policy=hsm_source_mix_policy,
             generator_interface_cap_mode=generator_interface_cap_mode,
             generator_unit_interface=generator_unit_interface,
+            initial_vn25_output_mw=initial_vn25_output_mw,
             eaf_secondary_electricity_mwh_per_t_ls_override=eaf_secondary_electricity_mwh_per_t_ls_override,
             dsp_electricity_mwh_per_t_coil_override=dsp_electricity_mwh_per_t_coil_override,
             bf_electricity_intensity_scale=bf_electricity_intensity_scale,
+            experimental_self_use_calibration=experimental_self_use_calibration,
+            experimental_process_electricity_overlay=experimental_process_electricity_overlay,
+            experimental_ng_service_calibration=experimental_ng_service_calibration,
+            experimental_coal_wag_calibration=experimental_coal_wag_calibration,
             kgf_underfiring_activity_rule=(
                 (lambda m, t: m.coke_output[t])
                 if c1_coke_chain_reconciliation is not None
@@ -9719,25 +11801,6 @@ def _build_c1_hybrid_model(
         model.net_grid_import_mwh = Expression(model.TIME, rule=lambda m, t: m.electricity_mwh[t])
         model.wag_electricity_mwh = Expression(model.TIME, rule=lambda _m, _t: 0.0)
 
-    flare_tiebreaker = 0.0
-    controller_tiebreaker = 0.0
-    if enable_minimal_wag_layer:
-        flare_tiebreaker = 1e-6 * sum(
-            model.bfg_flared[t] + model.cog_flared[t] + model.bofg_flared[t]
-            for t in model.TIME
-        )
-    if controller_flags["hsm"]:
-        controller_tiebreaker = sum(
-            model.hsm_carrier_precedence_penalty[t]
-            + 1e-5
-            * (
-                model.ng_to_pefa_malerij_mwh[t]
-                + model.ng_to_pefa_branderij_mwh[t]
-                + model.ng_to_boiler_mwh[t]
-                + model.generator_named_ng_mwh[t]
-            )
-            for t in model.TIME
-        )
     if external_procurement_flow_coefficients is None:
         model.bf_pci_input_t = Expression(
             model.TIME, rule=lambda _m, _t: 0.0
@@ -9762,40 +11825,48 @@ def _build_c1_hybrid_model(
             model.TIME,
             rule=lambda m, t: pefa_ore_factor * m.pefa_pellet_output_t[t],
         )
-    commitment_tiebreak_names = (*retained_process_names, "drp") + (
-        () if heat_state_active else ("eaf",)
-    )
-    day_commitment_tiebreaker = (
-        1e-4
-        * sum(
-            getattr(model, f"{name}_day_on")[d]
-            for name in commitment_tiebreak_names
-            for d in model.COMMITMENT_DAY
+    coal_procurement_multiplier = float(
+        (experimental_coal_wag_calibration or {}).get(
+            "coal_procurement_multiplier", 1.0
         )
-        if commitment_granularity == "daily_binary_hourly_throughput"
-        else 0.0
     )
-    eaf_commitment_term = (
-        sum(model.eaf_heat_start[t] for t in model.TIME)
-        if heat_state_active
-        else sum(model.eaf_on[t] for t in model.TIME)
+    model.c1_adjusted_coking_coal_input_t = Expression(
+        model.TIME,
+        rule=lambda m, t: coal_procurement_multiplier * m.coking_plant_1[t],
     )
+    model.c1_adjusted_pci_input_t = Expression(
+        model.TIME,
+        rule=lambda m, t: coal_procurement_multiplier * m.bf_pci_input_t[t],
+    )
+    model.c1_total_coal_input_t = Expression(
+        model.TIME,
+        rule=lambda m, t: m.c1_adjusted_coking_coal_input_t[t]
+        + m.c1_adjusted_pci_input_t[t],
+    )
+    model.c1_additional_coal_completion_t = Expression(
+        model.TIME,
+        rule=lambda m, t: m.c1_total_coal_input_t[t]
+        - m.coking_plant_1[t]
+        - m.bf_pci_input_t[t],
+    )
+    model.experimental_coal_wag_policy = (
+        "production_linked_coal_procurement_completion_with_carrier_specific_wag_yields"
+        if experimental_coal_wag_calibration
+        else "inactive"
+    )
+    if experimental_coal_wag_calibration:
+        model.experimental_coal_wag_parameters = dict(
+            experimental_coal_wag_calibration
+        )
+    # C1 temporal-contract v2 intentionally carries no default physical
+    # preference.  The previous objective rewarded fewer process-on intervals,
+    # fewer EAF starts, low inventories and flaring/NG routing.  Those are
+    # physical states or audited outcomes, not valid optimisation incentives.
+    # The deterministic controller installs its explicit lexicographic tiers
+    # after model construction.  Keep an algebraic zero objective only for API
+    # compatibility with historical callers that deactivate this component.
     model.static_price_naive_objective = Objective(
-        expr=eaf_commitment_term
-        + sum(model.drp_on[t] for t in model.TIME)
-        + sum(getattr(model, f"{name}_on")[t] for name in retained_process_names for t in model.TIME)
-        + 1e-8
-        * sum(
-            model.dri_inventory[t]
-            + model.coke_inventory[t]
-            + model.sinter_inventory[t]
-            + model.hot_iron_inventory[t]
-            + model.cold_slab_inventory[t]
-            for t in model.TIME
-        )
-        + flare_tiebreaker
-        + controller_tiebreaker
-        + day_commitment_tiebreaker,
+        expr=0.0 * sum(model.final_product_output[t] for t in model.TIME),
         sense=minimize,
     )
     return model
@@ -9820,6 +11891,8 @@ def _build_c1_model(
     eaf_material_balance: Mapping[str, float] | None = None,
     bof_material_balance: Mapping[str, float] | None = None,
     scrap_supply_ledger: Mapping[str, Any] | None = None,
+    c1_bf_material_interface: Mapping[str, Any] | None = None,
+    c1_metallics_sensitivity: Mapping[str, Any] | None = None,
     downstream_origin_routing: Mapping[str, float] | None = None,
     c1_liquid_steel_route_band: Mapping[str, float] | None = None,
     continuous_must_run_activities: Collection[str] | None = None,
@@ -9841,6 +11914,16 @@ def _build_c1_model(
     bf_electricity_intensity_scale: float = 1.0,
     eaf_heat_state_parameters: EAFHeatStateParameters | None = None,
     initial_drp_pellet_input_t: float | None = None,
+    initial_vn25_output_mw: float | None = None,
+    enforce_final_product_requirement: bool = True,
+    recoverable_handoff_execution_steps: int | None = None,
+    temporal_plant_dynamics: Mapping[str, Any] | None = None,
+    initial_continuous_rate_t_h: Mapping[str, float] | None = None,
+    recoverable_dri_tail_state: bool = False,
+    experimental_self_use_calibration: Mapping[str, Any] | None = None,
+    experimental_process_electricity_overlay: Mapping[str, Any] | None = None,
+    experimental_ng_service_calibration: Mapping[str, Any] | None = None,
+    experimental_coal_wag_calibration: Mapping[str, Any] | None = None,
 ):
     if enable_c1_retained_bf_bof_route:
         return _build_c1_hybrid_model(
@@ -9860,6 +11943,8 @@ def _build_c1_model(
             eaf_material_balance=eaf_material_balance,
             bof_material_balance=bof_material_balance,
             scrap_supply_ledger=scrap_supply_ledger,
+            c1_bf_material_interface=c1_bf_material_interface,
+            c1_metallics_sensitivity=c1_metallics_sensitivity,
             downstream_origin_routing=downstream_origin_routing,
             c1_liquid_steel_route_band=c1_liquid_steel_route_band,
             continuous_must_run_activities=continuous_must_run_activities,
@@ -9879,8 +11964,23 @@ def _build_c1_model(
             dsp_electricity_mwh_per_t_coil_override=dsp_electricity_mwh_per_t_coil_override,
             external_procurement_flow_coefficients=external_procurement_flow_coefficients,
             bf_electricity_intensity_scale=bf_electricity_intensity_scale,
+            experimental_self_use_calibration=experimental_self_use_calibration,
+            experimental_process_electricity_overlay=experimental_process_electricity_overlay,
+            experimental_ng_service_calibration=experimental_ng_service_calibration,
+            experimental_coal_wag_calibration=experimental_coal_wag_calibration,
             eaf_heat_state_parameters=eaf_heat_state_parameters,
             initial_drp_pellet_input_t=initial_drp_pellet_input_t,
+            initial_vn25_output_mw=initial_vn25_output_mw,
+            enforce_final_product_requirement=enforce_final_product_requirement,
+            recoverable_handoff_execution_steps=recoverable_handoff_execution_steps,
+            temporal_plant_dynamics=temporal_plant_dynamics,
+            initial_continuous_rate_t_h=initial_continuous_rate_t_h,
+            recoverable_dri_tail_state=recoverable_dri_tail_state,
+        )
+    if recoverable_handoff_execution_steps is not None:
+        raise S44CModelBuilderError(
+            "A recoverable sinter/hot-iron handoff requires the retained C1 "
+            "BF-BOF route."
         )
     if development_controller_activation != "none":
         raise S44CModelBuilderError("Development WAG controllers require the retained C1 BF-BOF route.")

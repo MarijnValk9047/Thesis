@@ -1806,3 +1806,400 @@ accepted only with an explicit timezone-aware receipt and the exact frozen
 different weeks, horizons, scenario counts, configurations, arms or maintenance
 flags fail closed. The method payload and its hash do not include this external
 authorization state. No final price input or solver was used for this audit.
+
+## 12. Deterministic C1 temporal contract v2 supersedes temporal C6 evidence (2026-08-02)
+
+Decision: temporal behaviour must be re-established under
+`c1_deterministic_temporal_v2` before any C6/S10 or stochastic result can be
+used methodologically. Existing fixed-27, V0/V1, mask, checkpoint and frozen
+final-method outputs are retained but are historical/superseded for temporal
+claims. They are not deleted or rewritten. Versioned deterministic state
+loading rejects those old checkpoints and warm starts.
+
+Decision: the C1 component ontology is now connected directly to the shared
+builder for KGF1, sinter, BF6 and DRP `fix_on_over_horizon`. Their current
+positive minimum and maximum throughput bounds remain unchanged. Inventory
+levels, on-hours, EAF-start counts, flaring and timestamp-weighted production,
+import, generation, NG or inventory levels are not valid C1 tie-break terms.
+The deterministic v2 hierarchy uses recoverable physical progress, D-only
+represented cost plus a causally calibrated continuation value, absolute-euro
+economic preservation, normalized total variation of only the four continuous
+assets, quota-neutral daily tap deviation and an algebraic zero final tier.
+
+Decision: `normal_operation_vn25_available` is an explicitly user-authorized
+development policy, not source evidence about Tata Steel. It represents VN25
+at 175--350 MW with a 210-MW/h ramp and IJ01 fully off, with QH capacity,
+volume and rolling-boundary scaling enforced. Startup, minimum-up/down,
+outage and CHP binaries remain omitted. This policy cannot be promoted as
+validated operation until the upstream physical contract closes.
+
+Decision: the artificial 48-hour temporal feasibility-tail is not a cyclic
+inventory period. The executed hour-24 state must admit a complete continuation
+whose inventories remain nonnegative and within their unchanged capacities,
+but `sinter_terminal` and `hot_iron_terminal` may not force the artificial tail
+endpoint exactly back to its initial inventory. The shared C1 builder therefore
+exposes an opt-in recoverable-handoff contract that deactivates only those two
+exact equalities. Its default and explicit hard-terminal path keep the
+equalities active; coke and cold-slab terminal equalities also remain active.
+This is a handoff-semantics repair, not a buffer, throughput, route or yield
+relaxation.
+
+The coefficient audit confirms the existing output-per-input orientation:
+1.230 t sinter/t iron ore, 2.1041666667 t hot metal/t represented sinter and
+1/0.824 t liquid steel/t hot metal. The governed central-builder rerun
+`steel_c6_deterministic_temporal_repair_v1_20260802/d1_shared_builder_tail_45e0fc2_v1`
+still stops at its first strict D1 solve. Full use of the unchanged 640-t sinter
+and 500-t hot-iron capacities reduces the algebraic lower bound from
+24,122.330097 t to 23,001.779936 t BOF liquid steel, but the unchanged route
+upper remains 18,337.544033 t. The residual incompatibility is
+4,664.235903 t. The decision remains
+`physically_infeasible_under_source_contract`; D2--D5 did not start and no
+bound change is authorized. `full_four_week_matrix_authorized=false`; no S10,
+final-period or stochastic solve may start.
+
+## Deterministic C1 Material-Chain And Scrap-Origin Repair (2026-08-03)
+
+This decision supersedes only the active temporal diagnosis immediately above;
+the earlier runs remain historical evidence. The diagnosed incompatibility was
+not a source-contract infeasibility. It arose because the shared C1 builder
+used the governed BF6 activity proxy as though it were a physical sinter bus.
+Temporal v2 now keeps three distinct quantities: 120--170
+t represented BF activity/h, hot-metal output equal to 2.1041666667 times that
+activity, and physical sinter consumption. The central C1 material link is
+1.0 t sinter/t hot metal, configuration-matched to the separate 2.8-Mt/y
+sinter and 2.8-Mt/y hot-metal anchors. The 1.088-t/t value is an offline
+sensitivity only. No throughput bound, route bound or must-run status changed.
+
+The tail IIS also proved that exact coke closure was part of the same artificial
+48-hour conversion pressure. In recoverable-handoff mode, exact `coke_terminal`,
+`sinter_terminal` and `hot_iron_terminal` equalities are therefore inactive;
+their balances, non-negativity and unchanged capacities remain active. The
+default/hard mode and the 168-hour week/campaign terminal retain all exact
+closures. Executed state is still exported at hour 24, never from the tail.
+
+BOF and EAF scrap are now origin-tagged as external or internal, with exact
+per-route coverage and shared annual caps of 1.3 Mt external, 0.6 Mt internal
+and 1.9 Mt total. Cumulative use is carried in rolling state and constrained at
+the physical-horizon quota endpoint, without an invented daily delivery
+profile. Only external scrap enters represented procurement cost. Internal
+reuse is a finite shared source and cannot be duplicated by reporting labels
+or a later caster/HSM/DSP recovery link.
+
+The base metallics contract keeps HDRI active, HBI exactly zero and one generic
+17,760-t DRI timing buffer; the 15,350-t candidate remains provenance only.
+HBI and high-scrap are separate, predetermined offline sensitivities that
+replace DRI-equivalent input at fixed EAF output and may not be stacked.
+
+Run
+`steel_c6_deterministic_temporal_repair_v1_20260802/c1_material_chain_scrap_d1_fixed27_v7_20260803`
+proves D1 flat: all six tiers close, the EAF has 27 starts, 27 taps and zero
+unfinished heats, the four C1 assets have zero off-intervals, and all 96 VN25,
+IJ01, WAG, NG and flare interval checks pass. The former forced
+23,001.779936-t BOF lower bound does not recur. The first subsequent hard
+failure is D3 band certification: fixed 20--22 taps are solver-proven
+infeasible and the `D3_fixed_23` physical tier ends with solver status
+`aborted`. The governed decision is therefore `needs_bounded_fix`; D2, the
+remainder of D3, D4, D5 and both offline metallics sensitivities were not run.
+No S10, bidding, stochastic or four-week solve is authorized:
+`full_four_week_matrix_authorized=false`.
+
+## Deterministic C1 Scalar Temporal V3 Week Gate (2026-08-03)
+
+Temporal v3 uses one operational scalar objective: executed-day represented
+procurement cost plus a calibrated linear remaining-heat continuation value.
+All physical, route, inventory, EAF and recoverability requirements remain hard;
+TV and quota-neutral heat selection remain reporting-only. The fixed 26--28
+reference certificates, strict cost endpoints, D1 flat and D2 price-direction
+checks pass under this formulation.
+
+The accepted failure evidence is governed run
+`steel_c6_deterministic_scalar_temporal_repair_v1_20260803/scalar_temporal_repair_validation_20260803_08`.
+D3 causal day 2 is solver-proven infeasible. Its IIS-equivalent conservation
+proof contains KGF1 minimum, coke and hot-iron balances, the 24-hour BOF route
+upper and the recursive handoff requirement. KGF1 minimum creates
+394.608532 t/h BOF-liquid-steel equivalent against a BOF upper of
+382.032167 t/h. This gives a 301.832752-t day-2 handoff contradiction and a
+2,112.829265-t minimum excess at exact 168-hour coke/hot-iron closure. The
+separate hard-week IIS confirms the same constraint family without any EAF,
+price or objective term.
+
+The temporal annual-anchor evaluator is corrected from `0.0036` to `3.6e-6`
+PJ/MWh. Earlier temporal energy deviations with the former factor are
+superseded. The corrected D1 output has exact carrier/electricity/generator/CO2
+identities but remains a non-representative single-day annualisation. D3 never
+produces an accepted representative-week anchor and D5 is not executed, so no
+claim of correct whole-plant temporal behaviour is permitted.
+
+Decision: `physically_infeasible_under_source_contract`. Do not tune KGF1,
+coke/BF yields, the BOF route upper, inventories or week closure to obtain a
+pass. A source-backed or explicit methodological contract decision is required
+before D3 and D5 can resume. S10, stochasticity and the four-week matrix remain
+blocked; `full_four_week_matrix_authorized=false`.
+
+## Deterministic C1 Scalar Temporal V3 Causal Week And D5 PASS (2026-08-03)
+
+This decision supersedes the active conclusion from governed run `_08`; that
+run and its KGF1--BOF conflict proof remain historical diagnostic evidence.
+The conflict came from combining the raw 1.0-Mt/y KGF1 coke anchor with the
+smaller active fixed-reference BOF route as though both represented the same
+scale. The shared builder now applies one explicit development reconciliation:
+the raw KGF1 coke anchor is multiplied by the active BOF central-reference
+scale `3,329,952.026 / 3,400,000` before conversion to dry coal. The resulting
+KGF1 floor is `143.667350012 t dry coal/h`; the existing 180-t/h upper bound,
+must-run status, coke yield, BOF route band and inventories are unchanged. This
+floor is not claimed as a Tata technical minimum.
+
+The accepted governed evidence is
+`steel_c6_deterministic_scalar_temporal_repair_v1_20260803/scalar_temporal_repair_validation_20260803_19`.
+It completes 37 model builds and 36 solve attempts with no failure, unknown
+case or infeasible case. The certified normal-day reference band is 26--28
+taps and the calibrated temporary continuation value is
+`EUR 152,585.113294/remaining tap`.
+
+D3 completes seven causal replans with daily taps
+`[28, 28, 26, 28, 26, 28, 27]`, exactly 191 taps and zero remaining quota.
+Full rolling inventory, scrap-origin, continuous-rate, VN25 and unfinished-heat
+state is exported after each executed day. Reachable EAF carry-in witnesses,
+zero/lagged normal days, 23/25-hour days and the hard 168-hour front-loaded,
+back-loaded and alternating patterns all have accepted physical certificates.
+
+D5 proves the strict scalar oracle, 6-second operational solve, cold repeat and
+warm repeat select the same 27-tap executed integer signature and exported
+state. Because the flat-price continuation calibration deliberately leaves
+26--28 set-valued, the free 72-hour model may select 26 taps at the same exact
+scalar objective. D5 therefore additionally proves that the canonical strict
+48-hour executed prefix has a feasible 72-hour continuation with the identical
+exported state. This is recorded as
+`free_scalar_equivalence_plus_fixed_executed_prefix_extension`; no arbitrary
+tie-break was added.
+
+The D3 representative-week and all D5 annual operational anchor gates pass,
+all carrier/electricity/generator/CO2 identities close and there is no material
+D5 anchor drift. This validates internal consistency and behaviour within the
+represented C1 boundary. It does not establish complete real-plant behaviour:
+several generator-carrier and partial-boundary anchors remain materially
+different, and the representative week is synthetic rather than a measured
+operating year. Anchors remain validation-only and never enter constraints or
+the objective.
+
+Decision:
+`deterministic_operational_repair_pass_ready_for_single_s10_smoke`. This label
+does not itself authorize or start that smoke test. No S10, stochastic or
+four-week solve was started; `full_four_week_matrix_authorized=false`.
+
+## 2026-08-05 — C0 temporal comparison is a partial-coverage behaviour gate
+
+- Adopt `c0_deterministic_scalar_temporal_v1` with the maintenance-excluded
+  calendar and procurement-only objective; C0 has no EAF continuation value.
+- Compare production on the common 6.75-Mt/y basis while retaining both raw
+  MER-C0 anchors and the 0.9375-scaled comparison values. Do not scale full-site
+  energy or emissions anchors.
+- Keep KGF2/BF7 dynamics explicitly classified as controlled development
+  symmetry, and C0 BF burden as annual material reconciliation rather than a
+  complete technological recipe.
+- Accept run `c0_c1_high_volatility_week_20260805_07` as
+  `c0_example_week_behaviour_pass_anchor_coverage_partial`. It proves rolling
+  feasibility and internal identities on one selected week, not representative
+  annual operation. KGF1/KGF2 and PeFa invariance at their lower bounds and the
+  C0 coke-anchor excess remain visible evidence gaps, not calibration targets.
+- No market stage is reopened by this decision. DAM, mFRR, stochasticity, S10,
+  ETS objective and the four-week matrix remain outside scope;
+  `full_four_week_matrix_authorized=false`.
+
+## 2026-08-05 — Four selected deterministic example weeks
+
+- Authorize and accept exactly four separate deterministic example-week runs:
+  typical winter, high prices, high volatility and typical summer, for C0/C1
+  and price-insensitive/perfect-foresight dispatch.
+- This is not a continuous four-week episode and does not authorize a DAM,
+  mFRR, stochastic, S10 or four-week market matrix.
+- Treat hourly results as post-solve aggregation of the QH decisions. Economic
+  totals must therefore be identical between QH and H reporting; H is not a
+  second optimisation model.
+- Define average electricity price paid as realised grid-electricity cost
+  divided by purchased grid MWh. Define electricity consumed as grid import
+  plus represented internal generation.
+- Report total production cost as represented procurement objective plus the
+  governed reporting valuation of imported BF pellets, which are represented
+  physically but inactive in the scalar objective. Do not silently imply a
+  broader full-cost accounting boundary.
+- Run `c0_c1_four_example_weeks_20260805_18` passes all four child gates and
+  128/128 optimal attempts without fallback. The broader four-week market
+  matrix remains unauthorized.
+
+## 2026-08-05 — Headline production reporting uses one 6.75-Mt denominator
+
+- Present C0 and C1 headline production results on one normalized 6.75-Mt/y
+  final-product basis. Keep raw MER quantities in audit/provenance fields, not
+  as competing headline denominators in recurring figures.
+- Normalize only the downstream HSM/DSP comparison split from the respective
+  raw saleable-output totals: C0 5.282609/1.467391 Mt/y and C1
+  5.303571/1.446429 Mt/y. Keep physical route contracts and plant constraints
+  unchanged.
+- Recurring example-week figure packages use PNG only unless another format is
+  explicitly requested.
+- Governed run `c0_c1_normalized_675_week_20260805_17` passes with 32/32
+  optimal attempts, no fallback, 17 PNG figures and no physical-audit failure.
+  `full_four_week_matrix_authorized=false`.
+
+## 2026-08-05 — C0 anchor-derived envelopes and shared downstream timing
+
+- Supersede the C0 example-week run `_07` with governed run
+  `c0_c1_downstream_contract_week_20260805_16`.
+- Keep 6.75 Mt/y as the common operational final-product denominator. Retain
+  7.2 Mt/y as the raw MER C0 liquid-steel validation anchor; do not interpret
+  it as an interchangeable final-product target.
+- Do not scale technical minimum loads arithmetically with annual production.
+  Where no sourced capacity range exists, use an explicitly labelled
+  anchor-derived development envelope and preserve that uncertainty.
+- Adopt 120--140 t/h for C0 KGF1/KGF2 and the C0 annual coke reconciliation
+  0.285714 t coke/t represented hot metal. These are development assumptions,
+  not measured Tata operating limits.
+- Apply one-hour setpoints to HSM and DSP and a shared DSP development upper
+  envelope of 1.5 Mt/y divided by 8,760 h. No ramp, minimum-up/down time or
+  nameplate capacity is inferred.
+- Permit EAF-origin slab carry-over in the existing shared cold-slab capacity
+  during a recoverable physical tail. This prevents a final tail heat from
+  being forced instantaneously through HSM/DSP while preserving origin and
+  total-storage conservation.
+- The accepted decision remains
+  `c0_example_week_behaviour_pass_anchor_coverage_partial`. No DAM, mFRR,
+  stochastic, S10, ETS-objective or four-week run is authorised;
+  `full_four_week_matrix_authorized=false`.
+
+## 2026-08-06 — C1 base DRI interface separates direct HDRI and stored CDRI
+
+- Supersede the generic base DRI timing-buffer semantics with an explicit
+  direct-HDRI/cold-DRI interface while retaining the 17,760-t capacity and all
+  rolling/campaign terminal rules.
+- Allocate DRP output to direct 600 °C HDRI or cooling-to-storage; cover EAF
+  DRI input with direct HDRI plus 50 °C CDRI withdrawn from prior inventory.
+  Limit CDRI to 30% of interval DRI input and apply 25% additional represented
+  EAF arc electricity to its liquid-steel-equivalent quantity.
+- Classify 50 °C, the 30% share and the 25% premium as user-authorised
+  development policy rather than Tata technical truth. Do not infer cooling
+  time, thermal degradation or detailed silo physics.
+- Keep the HBI case non-stacked and separate. Do not change C0/C1 continuous
+  plant envelopes in the same evidence step.
+- Accept hourly high-volatility run `hw_week_hdri_cdri_figures_13` as
+  `hourly_example_week_physical_and_behaviour_pass`: all 30 solves and physical
+  gates pass. This is a selected-week behaviour result, not annual or market
+  certification. `full_four_week_matrix_authorized=false`.
+
+## 2026-08-06 — Common normalized capacity method remains development evidence
+
+- Replace unlike C0/C1 ad-hoc continuous-plant ranges for KGF, SiFa, BF and
+  PeFa with family-matched relative envelopes around the accepted flat-price
+  physical trajectories. Keep the reference level configuration-specific.
+- Use the smallest calibrated candidate: KGF ±3%, SiFa ±20%, BF ±15% and PeFa
+  ±3%. Keep setpoint/ramp fractions separate from capacity half-widths. No
+  price-response output is used to select these values.
+- Retain a C0-only combined BF6+BF7 activity floor of 304.61538462 t/h. Without
+  it, the normalized independent ranges depleted the cold-slab state and made
+  the flat rolling week solver-proven infeasible. The floor is the retained sum
+  of the preceding C0 BF activity minima, not a new nameplate claim.
+- Accept `hw_norm_cap_final_fig17` as selected-week physical and behaviour
+  evidence: 30/30 optimal attempts, all hard audits pass, and figure package v7
+  produces its governed 19-figure selection. This does not certify an annual
+  operating envelope or real Tata ramp limits.
+- No DAM, mFRR, stochastic, S10 or four-week run is authorized;
+  `full_four_week_matrix_authorized=false`.
+
+## 2026-08-06 — Annual hourly inventory terminal uses a 0.5% capacity band
+
+- Replace exact equality to the annual cold-start inventory vector with a
+  symmetric terminal band of 0.5% of each modelled inventory capacity.
+- For the C1 internal-pellet inventory, which deliberately has no finite
+  modelled storage capacity, use 0.5% of its 50,000-t terminal target as the
+  band scale. This is not a new physical storage-capacity claim.
+- Apply the same band to the penultimate-day 48-hour recoverability proof and
+  the executed year-end state. Do not add an inventory objective or penalty.
+- Diagnostic `c0_terminal_band_diagnostic_20260806_03` found a minimum C0
+  common band of 0.264035% of capacity. Governed certification
+  `hourly_terminal_band_certification_20260806_02` passes C0 and C1 day 364
+  and day 365 with 4/4 optimal solves and zero MIP gap.
+- No full-year solve, DAM, mFRR, stochastic, S10 or four-week run is authorized;
+  `full_four_week_matrix_authorized=false`.
+
+## 2026-08-06 — Hourly rolling model uses 24 h execution plus 48 h physical lookahead
+
+- Replace the former 48-hour total horizon with a 72-hour model horizon: the
+  first 24 hours are executed and costed, while the following 48 hours are a
+  price-blind physical-feasibility certificate.
+- Exclude all tail variables and tail prices from represented procurement cost.
+  Export rolling state exclusively after hour 24.
+- When the remaining week fits inside 72 hours, enforce route and inventory
+  closure with the actual plant, ramp, recipe and inventory equations rather
+  than the aggregate future-capacity proxy.
+- Resolve C0 weekly terminal inventory targets from the governed physical input
+  contract (360 t coke, 320 t sinter, 250 t hot iron and 12,500 t cold slab)
+  with the accepted 1% band. The superseded calibrated handoff targets are not
+  weekly terminal quantities.
+- Governed run `hsm_eaf_72h_feasibility_week_20260806_38` passes all 37 solves
+  at optimal status for C0/C1 and price-insensitive/perfect-foresight cases;
+  all hard audits pass and figure package v8 produces 19 figures. This is a
+  representative-week certificate, not a full-year certificate.
+- `full_four_week_matrix_authorized=false`.
+
+## 2026-08-06 — Hourly LEAR-support full-year gate stops on C1 PF day 352
+
+- Under the governed v41 contract, C0 price-insensitive, C0 D-only perfect
+  foresight and C1 price-insensitive complete all 8,760 hours. C1 D-only
+  perfect foresight is solver-proven infeasible on day 352.
+- The IIS contains the exact coke balance, annual KGF1 physical-tail upper,
+  terminal coke/hot-iron/cold-slab lower bounds and exact remaining product
+  recovery. A diagnostic feasibility relaxation requires only 0.618331 t coke
+  over the remaining 336 hours.
+- The allowed architectural repair remains accepted: when the year endpoint is
+  physically visible, exact plant and balance equations replace every abstract
+  future-residual envelope. Shifted-tail warm starts audit only initialized
+  overlap; solved incumbents still undergo the complete hard audit.
+- A separately preserved v42 sensitivity widens the annual KGF1 reconciliation
+  from an absolute one-ton band to 10 ppm and completes all four annual cases,
+  anchors and 19-figure package. This sensitivity is explicitly not accepted:
+  the annual route/terminal tolerance was outside the autonomous-change scope.
+- Active code and checkpoints therefore remain on
+  `c1_deterministic_hourly_annual_v41_replan_numerical_handoff_reserve` with the
+  one-ton reconciliation tolerance. The gate is `needs_bounded_fix` pending an
+  explicit user decision on KGF1 annual-anchor semantics or tolerance.
+- No DAM, mFRR, stochastic, S10 or four-week solve is authorized;
+  `full_four_week_matrix_authorized=false`.
+
+## 2026-08-07 — Shared annual recoverability uses a shiftable daily witness
+
+- Require both C0 and C1 to finish inside the common reported final-product
+  band 6.746–6.754 Mt. For C0, map that reporting band through the existing
+  normalization factor; do not change physical yields or recipes.
+- Replace the C1 scalar remainder-only certificate with a price-blind,
+  calendar-day-indexed continuation for EAF taps, BOF liquid steel, imported
+  slab, DSP/HSM input and combined origin-preserving slab inventory. Link all
+  complete future days inside the 48-hour physical lookahead to the detailed
+  plant model. The continuation is a feasibility witness and is excluded from
+  represented procurement cost.
+- Supersede the arbitrary 1%-of-capacity annual slab-return band with a
+  symmetric 10%-of-capacity band around the governed terminal stock. Keep
+  non-slab inventory terminal bands unchanged. This preserves a positive slab
+  reserve while avoiding a false 1.7-kt final-product shortage caused by
+  locking 12.25 kt of slab at the year endpoint.
+- Diagnostic run
+  `shared_annual_recoverability_v52_c1_day28_smoke_20260807_01` passes the
+  first 76 causal days for both C0 and C1, including the 25-hour DST day and
+  the former day-75 problem zone; all 152 daily physical audits pass. This is
+  a bounded prefix certificate, not yet an 8,760-hour annual certificate.
+- No DAM, mFRR, stochastic, S10 or four-week solve is authorized;
+  `full_four_week_matrix_authorized=false`.
+
+## 2026-08-07 — Hourly deterministic annual baseline is accepted
+
+- Accept governed run `deterministic_hourly_final_year_v60_20260807_01` as the
+  hourly C0/C1 price-insensitive and D-only perfect-foresight annual baseline.
+  All 1,460 daily solves complete; the physical, production-comparability and
+  perfect-foresight gates pass.
+- Interpret the annual anchor output as complete for the represented model
+  boundary with partial full-site coverage. Do not use residuals as physical
+  or economic plugs.
+- Preserve the prepared QH annual calendar/price interface as a separate,
+  counterfactual mean-preserving shape contract on the same hourly support.
+  It is preparation only: no QH annual execution or acceptance is implied.
+- No DAM, bidding, mFRR, stochasticity, S10 or four-week solve is authorized;
+  `full_four_week_matrix_authorized=false`.
