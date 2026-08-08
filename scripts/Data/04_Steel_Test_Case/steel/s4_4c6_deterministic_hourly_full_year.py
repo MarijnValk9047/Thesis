@@ -240,7 +240,8 @@ def prepare_lear_strict_hourly_year_inputs(
     day_contract.to_csv(output / "annual_day_contract.csv", index=False)
     input_summary = {
         "status": "lear_strict_hourly_year_inputs_ready",
-        "calendar_hours": int(len(calendar)),
+        "calendar_hours": int(config["period"]["expected_hours"]),
+        "calendar_intervals": int(len(calendar)),
         "calendar_days": int(day_contract.shape[0]),
         "day_length_counts": {
             str(key): int(number)
@@ -970,12 +971,50 @@ def _build_example_week_figure_package(
     end_local = start_local + pd.Timedelta(days=7)
     timestamps = pd.to_datetime(dispatch["timestamp_utc"], utc=True).dt.tz_convert("Europe/Amsterdam")
     selected = dispatch[(timestamps >= start_local) & (timestamps < end_local)].copy()
+    if selected.shape[0] == 4 * 168 * 4:
+        selected["timestamp_utc"] = pd.to_datetime(
+            selected["timestamp_utc"], utc=True
+        ).dt.floor("h")
+        keys = ["configuration", "strategy", "day", "timestamp_utc"]
+        aggregations: dict[str, str] = {}
+        for column in selected.columns:
+            if column in keys or column == "hour":
+                continue
+            if column.endswith("_mwh") or column in {
+                "eaf_starts",
+                "eaf_taps",
+                "final_product_t",
+                "direct_co2_t",
+                "bfg_combustion_co2_t",
+                "bofg_combustion_co2_t",
+                "cog_combustion_co2_t",
+                "named_ng_combustion_co2_t",
+                "unmodelled_direct_co2_t",
+                "drp_dri_output_t",
+                "eaf_dri_input_t",
+                "hdri_direct_to_eaf_t",
+                "hdri_to_cdri_storage_t",
+                "cdri_from_storage_to_eaf_t",
+            }:
+                aggregations[column] = "sum"
+            elif "inventory" in column or "capacity" in column:
+                aggregations[column] = "last"
+            else:
+                aggregations[column] = "mean"
+        selected = selected.groupby(keys, as_index=False, sort=False).agg(aggregations)
+        selected["hour"] = selected.groupby(
+            ["configuration", "strategy", "day"], sort=False
+        ).cumcount()
     if selected.shape[0] != 4 * 168:
         raise HourlyTemporalValidationError(
             "The configured figure week must contain 168 hours for all four cases."
         )
     selected_days = set(int(day) for day in selected["day"].unique())
     selected_costs = costs[costs["day"].astype(int).isin(selected_days)].copy()
+    # The standard figure package consumes an hourly comparison table.  QH
+    # source ledgers retain identical weekly totals after aggregation, but the
+    # reporting key must match that hourly view.
+    selected_costs["granularity"] = "H"
     figure_root = output / "standard_figure_package"
     figure_root.mkdir(parents=True, exist_ok=True)
     selected.to_csv(figure_root / "hourly_dispatch.csv", index=False)
@@ -1123,7 +1162,8 @@ def run_hourly_full_year(
         "run_family_id": config["run_family_id"],
         "period_start_local_date": config["period"]["start_local_date"],
         "period_end_exclusive_local_date": config["period"]["end_exclusive_local_date"],
-        "calendar_hours": int(len(calendar)),
+        "calendar_hours": int(config["period"]["expected_hours"]),
+        "calendar_intervals": int(len(calendar)),
         "calendar_days": int(calendar["calendar_day_index"].nunique()),
         "configurations": selected_configuration_ids,
         "strategies": (
@@ -1238,7 +1278,7 @@ def run_hourly_full_year(
             hours: (
                 _qh_context(
                     c1_config, C0_ANNUAL_QH_CONTRACT_VERSION,
-                    execution_hours=hours, physical_horizon_hours=72,
+                    execution_hours=hours, physical_horizon_hours=hours + 48,
                 )
                 if is_qh else _hourly_context(
                     c1_config, C0_ANNUAL_HOURLY_CONTRACT_VERSION,
@@ -1251,7 +1291,7 @@ def run_hourly_full_year(
             hours: (
                 _qh_context(
                     c1_config, C1_ANNUAL_QH_CONTRACT_VERSION,
-                    execution_hours=hours, physical_horizon_hours=72,
+                    execution_hours=hours, physical_horizon_hours=hours + 48,
                 )
                 if is_qh else _hourly_context(
                     c1_config, C1_ANNUAL_HOURLY_CONTRACT_VERSION,
@@ -1320,38 +1360,47 @@ def run_hourly_full_year(
             calibration_attempts,
             artifact_name=heat_calibration_path.name,
         )
-    c0_calibration_path = output / (
-        "qh_c0_inventory_continuation_calibration.json"
-        if is_qh else "c0_inventory_continuation_calibration.json"
-    )
-    c0_calibration_state = _initial_state(
-        C0_CONFIGURATION,
-        c0_config=c0_config,
-        c1_config=c1_config,
-        first_quota_target=int(heat_schedule[0]["quota_period_target"]),
-        strategy="calibration",
-        temporal_contract_version=c0_annual_contract,
-        time_step_hours=0.25 if is_qh else 1.0,
-    )
-    if not c0_calibration_path.exists():
-        seed_run_id = str(
-            config.get("calibration", {}).get("c0_inventory_seed_run_id", "")
+    c0_selected = any(case_id.startswith("C0__") for case_id in execution_order)
+    c0_inventory_values: dict[str, float] = {}
+    if c0_selected:
+        c0_calibration_path = output / (
+            "qh_c0_inventory_continuation_calibration.json"
+            if is_qh else "c0_inventory_continuation_calibration.json"
         )
-        if seed_run_id and not is_qh:
-            _materialize_compatible_c0_calibration_seed(
-                c0_calibration_path,
-                seed_run_id=seed_run_id,
-                current_state=c0_calibration_state,
+        c0_calibration_state = _initial_state(
+            C0_CONFIGURATION,
+            c0_config=c0_config,
+            c1_config=c1_config,
+            first_quota_target=int(heat_schedule[0]["quota_period_target"]),
+            strategy="calibration",
+            temporal_contract_version=c0_annual_contract,
+            time_step_hours=0.25 if is_qh else 1.0,
+        )
+        if not c0_calibration_path.exists():
+            seed_run_id = str(
+                config.get("calibration", {}).get("c0_inventory_seed_run_id", "")
             )
-    if c0_calibration_path.exists():
-        c0_inventory_values = {
-            str(key): float(item)
-            for key, item in json.loads(c0_calibration_path.read_text(encoding="utf-8"))["values_eur_per_t"].items()
-        }
-    else:
-        c0_inventory_values = _calibrate_c0_inventory_continuation(
-            contexts[C0_CONFIGURATION][24], c0_calibration_state, c0_config, c1_config, output, calibration_attempts
-        )
+            if seed_run_id and not is_qh:
+                _materialize_compatible_c0_calibration_seed(
+                    c0_calibration_path,
+                    seed_run_id=seed_run_id,
+                    current_state=c0_calibration_state,
+                )
+        if c0_calibration_path.exists():
+            c0_inventory_values = {
+                str(key): float(item)
+                for key, item in json.loads(c0_calibration_path.read_text(encoding="utf-8"))["values_eur_per_t"].items()
+            }
+        else:
+            c0_inventory_values = _calibrate_c0_inventory_continuation(
+                contexts[C0_CONFIGURATION][24],
+                c0_calibration_state,
+                c0_config,
+                c1_config,
+                output,
+                calibration_attempts,
+                artifact_name=c0_calibration_path.name,
+            )
     _write_csv(output / "calibration_solver_attempts.csv", calibration_attempts)
 
     started = time.perf_counter()
@@ -1709,7 +1758,8 @@ def run_hourly_full_year(
         dispatch, costs, attempts, audits, final_cases = _consolidate_checkpoints(
             output, execution_order
         )
-        dispatch.to_parquet(output / "hourly_dispatch_partial.parquet", index=False)
+        dispatch_name = "qh_dispatch_partial.parquet" if is_qh else "hourly_dispatch_partial.parquet"
+        dispatch.to_parquet(output / dispatch_name, index=False)
         costs.to_csv(output / "represented_cost_ledger_partial.csv", index=False)
         attempts.to_csv(output / "solver_attempts_partial.csv", index=False)
         audits.to_csv(output / "physical_audit_partial.csv", index=False)
@@ -1721,7 +1771,7 @@ def run_hourly_full_year(
         summary = {
             **manifest,
             "decision": (
-                "hourly_bounded_causal_prefix_pass"
+                ("qh_bounded_causal_prefix_pass" if is_qh else "hourly_bounded_causal_prefix_pass")
                 if passed and complete_cases
                 else "needs_bounded_fix"
             ),
@@ -1740,7 +1790,8 @@ def run_hourly_full_year(
     dispatch, costs, attempts, audits, final_cases = _consolidate_checkpoints(
         output, execution_order
     )
-    dispatch.to_parquet(output / "hourly_dispatch.parquet", index=False)
+    dispatch_name = "qh_dispatch.parquet" if is_qh else "hourly_dispatch.parquet"
+    dispatch.to_parquet(output / dispatch_name, index=False)
     costs.to_csv(output / "represented_cost_ledger.csv", index=False)
     attempts.to_csv(output / "solver_attempts.csv", index=False)
     audits.to_csv(output / "physical_audit.csv", index=False)
@@ -1751,7 +1802,11 @@ def run_hourly_full_year(
         summary = {
             **manifest,
             "decision": (
-                "hourly_c0_c1_physical_feasibility_shakedown_pass"
+                (
+                    "qh_c0_c1_physical_feasibility_shakedown_pass"
+                    if is_qh
+                    else "hourly_c0_c1_physical_feasibility_shakedown_pass"
+                )
                 if passed
                 else "needs_bounded_fix"
             ),
@@ -1801,7 +1856,11 @@ def run_hourly_full_year(
                 **row,
                 "last_accepted_baseline_value": "",
                 "delta_vs_last_accepted": "",
-                "baseline_status": "no_prior_accepted_full_year_hourly_baseline",
+                "baseline_status": (
+                    "no_prior_accepted_full_year_qh_baseline"
+                    if is_qh
+                    else "no_prior_accepted_full_year_hourly_baseline"
+                ),
             }
             for row in anchor_rows
             if row.get("anchor_family")
@@ -1815,7 +1874,8 @@ def run_hourly_full_year(
             "calendar_coverage": "2024-10-01_to_2025-09-30",
             "full_year_certified": True,
             "constraints_or_objective_use_anchors": False,
-            "last_accepted_hourly_full_year_baseline_available": False,
+            "last_accepted_full_year_baseline_granularity": "QH" if is_qh else "H",
+            "last_accepted_full_year_baseline_available": False,
             "not_comparable_metrics": sorted(
                 {
                     str(row["metric"])
@@ -1870,7 +1930,7 @@ def run_hourly_full_year(
     summary = {
         **manifest,
         "decision": (
-            "hourly_c0_c1_pi_pf_full_year_pass"
+            ("qh_c0_c1_pi_pf_full_year_pass" if is_qh else "hourly_c0_c1_pi_pf_full_year_pass")
             if passed
             else "needs_bounded_fix"
         ),

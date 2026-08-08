@@ -315,9 +315,16 @@ def test_c0_fixed_bf_floor_is_replaced_by_stateful_week_recoverability(hourly_c0
     assert model.c0_week_route_audit["C0_DSP_final_product_t"][
         "maximum_future_day_t"
     ] == pytest.approx(24.0 * 1_500_000.0 / 8_760.0)
-    bof_scrap_cap_t_h = float(
-        value(model.c0_bof_hourly_scrap_cap[model.TIME.first()].upper)
+    assert not model.c0_bof_hourly_scrap_cap.active
+    assert model.c0_bof_scrap_timing_policy == (
+        "annual_cumulative_ledger_no_invented_intraday_arrival_profile"
     )
+    assert not model.c0_dsp_final_product_hourly_cap.active
+    assert len(model.c0_governed_dsp_final_product_interval_cap) == len(model.TIME)
+    assert model.c0_dsp_capacity_policy == (
+        "v60_v11_governed_dsp_rate_scaled_to_model_interval"
+    )
+    bof_scrap_cap_t_h = 1_410_000.0 / 8_760.0
     assert model.c0_week_route_audit["C0_BOF_crude_steel_output_t"][
         "maximum_future_day_t"
     ] == pytest.approx(bof_scrap_cap_t_h / 0.208 * 24.0)

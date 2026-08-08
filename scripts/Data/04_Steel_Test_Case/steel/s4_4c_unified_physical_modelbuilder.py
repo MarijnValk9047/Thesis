@@ -9698,7 +9698,8 @@ def _build_c0_model(
         model.c0_bof_hourly_scrap_cap = Constraint(
             model.TIME,
             rule=lambda m, t: m.c0_bof_scrap_input[t]
-            <= float(c0_downstream_reference_routing["bof_total_scrap_max_t_h"]),
+            <= float(c0_downstream_reference_routing["bof_total_scrap_max_t_h"])
+            * float(time_step_hours),
         )
         if scrap_supply_ledger is not None:
             required_scrap = {
@@ -9814,7 +9815,8 @@ def _build_c0_model(
         model.c0_dsp_final_product_hourly_cap = Constraint(
             model.TIME,
             rule=lambda m, t: m.c0_dsp_final_product_output[t]
-            <= float(c0_downstream_reference_routing["dsp_final_product_max_t_h"]),
+            <= float(c0_downstream_reference_routing["dsp_final_product_max_t_h"])
+            * float(time_step_hours),
         )
         model.c0_hsm_final_product_output = Expression(
             model.TIME,
@@ -10966,24 +10968,65 @@ def _build_c1_hybrid_model(
         model.hdri_direct_to_eaf_t = Var(model.TIME, domain=NonNegativeReals)
         model.hdri_to_cdri_storage_t = Var(model.TIME, domain=NonNegativeReals)
         model.cdri_from_storage_to_eaf_t = Var(model.TIME, domain=NonNegativeReals)
-        model.drp_hdri_allocation_balance = Constraint(
-            model.TIME,
-            rule=lambda m, t: m.drp_dri_output[t]
-            == m.hdri_direct_to_eaf_t[t] + m.hdri_to_cdri_storage_t[t],
+        cold_dri_max_share = float(
+            c1_metallics_sensitivity["cold_dri_max_share_of_eaf_dri"]
         )
-        model.eaf_dri_thermal_input_balance = Constraint(
-            model.TIME,
-            rule=lambda m, t: m.eaf_dri_input[t]
-            == m.hdri_direct_to_eaf_t[t] + m.cdri_from_storage_to_eaf_t[t],
-        )
-        model.eaf_cdri_share_limit = Constraint(
-            model.TIME,
-            rule=lambda m, t: m.cdri_from_storage_to_eaf_t[t]
-            <= float(
-                c1_metallics_sensitivity["cold_dri_max_share_of_eaf_dri"]
+        if math.isclose(time_step_hours, 0.25):
+            # V60 is the accepted hourly lineage.  Preserve its thermal-state
+            # accounting when the surrounding model is refined to native QHs:
+            # DRP output, direct H-DRI delivery, C-DRI storage/withdrawal and
+            # the cold-share cap close over each civil hour (four QHs).  A
+            # per-QH equality would introduce a new instantaneous hot-material
+            # transfer rule and makes every positive EAF heat impossible: one
+            # half-heat requires more direct H-DRI than the DRP can produce in
+            # a single QH, although the accepted V60 hourly balance closes.
+            thermal_blocks = tuple(
+                tuple(range(start, min(start + 4, inputs.horizon_hours)))
+                for start in range(0, inputs.horizon_hours, 4)
             )
-            * m.eaf_dri_input[t],
-        )
+            model.DRI_THERMAL_BLOCK = RangeSet(0, len(thermal_blocks) - 1)
+            model.drp_hdri_allocation_balance = Constraint(
+                model.DRI_THERMAL_BLOCK,
+                rule=lambda m, b: sum(m.drp_dri_output[t] for t in thermal_blocks[int(b)])
+                == sum(
+                    m.hdri_direct_to_eaf_t[t] + m.hdri_to_cdri_storage_t[t]
+                    for t in thermal_blocks[int(b)]
+                ),
+            )
+            model.eaf_dri_thermal_input_balance = Constraint(
+                model.DRI_THERMAL_BLOCK,
+                rule=lambda m, b: sum(m.eaf_dri_input[t] for t in thermal_blocks[int(b)])
+                == sum(
+                    m.hdri_direct_to_eaf_t[t] + m.cdri_from_storage_to_eaf_t[t]
+                    for t in thermal_blocks[int(b)]
+                ),
+            )
+            model.eaf_cdri_share_limit = Constraint(
+                model.DRI_THERMAL_BLOCK,
+                rule=lambda m, b: sum(
+                    m.cdri_from_storage_to_eaf_t[t] for t in thermal_blocks[int(b)]
+                )
+                <= cold_dri_max_share
+                * sum(m.eaf_dri_input[t] for t in thermal_blocks[int(b)]),
+            )
+            model.dri_thermal_accounting_interval = "hourly_v60_on_native_qh_grid"
+        else:
+            model.drp_hdri_allocation_balance = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.drp_dri_output[t]
+                == m.hdri_direct_to_eaf_t[t] + m.hdri_to_cdri_storage_t[t],
+            )
+            model.eaf_dri_thermal_input_balance = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.eaf_dri_input[t]
+                == m.hdri_direct_to_eaf_t[t] + m.cdri_from_storage_to_eaf_t[t],
+            )
+            model.eaf_cdri_share_limit = Constraint(
+                model.TIME,
+                rule=lambda m, t: m.cdri_from_storage_to_eaf_t[t]
+                <= cold_dri_max_share * m.eaf_dri_input[t],
+            )
+            model.dri_thermal_accounting_interval = "model_interval"
         model.cdri_withdrawal_from_prior_inventory = Constraint(
             model.TIME,
             rule=lambda m, t: m.cdri_from_storage_to_eaf_t[t]

@@ -114,6 +114,11 @@ DT = 1.0
 EAF_SUBSLOTS_PER_HOUR = 4
 STATE_FEASIBILITY_TOLERANCE = 1e-8
 ANNUAL_RECOVERABILITY_NUMERICAL_TOLERANCE_T = 1e-4
+# Independently derived annual-band and downstream-capacity coefficients can
+# differ by a few ulps when the remaining horizon must run at its exact
+# theoretical maximum.  One gram closes that arithmetic seam without changing
+# any physically meaningful annual operating band.
+ANNUAL_COEFFICIENT_CLOSURE_TOLERANCE_T = 1e-6
 # Do not tighten the source contract by accumulating a positive numerical
 # reserve at every remaining replan.  Solver feasibility tolerances are
 # handled by ANNUAL_RECOVERABILITY_NUMERICAL_TOLERANCE_T instead.
@@ -754,7 +759,8 @@ def _c1_annual_progress_corridor_bounds(
                 annual
                 - C1_ANNUAL_PRODUCT_COMPARABILITY_TOLERANCE_T
                 - completed
-                - ANNUAL_RECOVERABILITY_NUMERICAL_TOLERANCE_T,
+                - ANNUAL_RECOVERABILITY_NUMERICAL_TOLERANCE_T
+                - ANNUAL_COEFFICIENT_CLOSURE_TOLERANCE_T,
             ),
             max(
                 0.0,
@@ -891,13 +897,23 @@ def _add_c1_daily_contract(
         model.eaf_daily_heat_upper = Constraint(expr=executed_taps <= int(upper_taps))
     else:
         model.eaf_daily_heat_fixed = Constraint(expr=executed_taps == int(fixed_taps))
-    # The builder owns a four-subslot heat automaton per model interval; QH
-    # affects the interval duration, not this internal state representation.
-    execution_subslots = execution_steps * EAF_SUBSLOTS_PER_HOUR
+    native_qh = math.isclose(
+        float(context.time_grid.time_step_hours), 0.25, abs_tol=1e-12
+    )
+    # Hourly models retain four internal EAF subslots per interval. Native-QH
+    # models already expose one heat-state slot per model interval.
+    execution_subslots = (
+        execution_steps if native_qh
+        else execution_steps * EAF_SUBSLOTS_PER_HOUR
+    )
+    heat_start = (
+        model.eaf_heat_start if native_qh
+        else model.eaf_heat_start_subslot
+    )
     if week_boundary:
         model.eaf_week_boundary_idle = Constraint(
-            expr=model.eaf_heat_start_subslot[execution_subslots - 2]
-            + model.eaf_heat_start_subslot[execution_subslots - 1]
+            expr=heat_start[execution_subslots - 2]
+            + heat_start[execution_subslots - 1]
             == 0
         )
     tail_days = tuple(physical_tail_heat_days or ())
@@ -935,10 +951,12 @@ def _add_c1_daily_contract(
                 )
                 == quota_target
             )
-            boundary_subslot = end_step * EAF_SUBSLOTS_PER_HOUR
+            boundary_subslot = (
+                end_step if native_qh else end_step * EAF_SUBSLOTS_PER_HOUR
+            )
             model.eaf_physical_tail_calendar_constraints.add(
-                model.eaf_heat_start_subslot[boundary_subslot - 2]
-                + model.eaf_heat_start_subslot[boundary_subslot - 1]
+                heat_start[boundary_subslot - 2]
+                + heat_start[boundary_subslot - 1]
                 == 0
             )
         model.eaf_physical_tail_calendar_audit.append(dict(row))
@@ -1089,8 +1107,8 @@ def _add_execution_year_terminal(
     targets_t: Mapping[str, float],
     *,
     final_year_day: bool,
-    execution_hours: int = EXECUTION_HOURS,
-    physical_horizon_hours: int = PHYSICAL_HORIZON_HOURS,
+    execution_steps: int = EXECUTION_HOURS,
+    physical_horizon_steps: int = PHYSICAL_HORIZON_HOURS,
     recovery_terminal_index: int | None = None,
 ) -> None:
     """Apply true year closure or prove it in the preceding physical tail."""
@@ -1117,11 +1135,11 @@ def _add_execution_year_terminal(
     if not final_year_day and recovery_terminal_index is None:
         return
     terminal_index = (
-        int(execution_hours) - 1
+        int(execution_steps) - 1
         if final_year_day
         else int(recovery_terminal_index)
     )
-    if not 0 <= terminal_index < int(physical_horizon_hours):
+    if not 0 <= terminal_index < int(physical_horizon_steps):
         raise HourlyTemporalValidationError(
             "Annual inventory recovery index is outside the physical tail."
         )
@@ -1222,11 +1240,15 @@ def _add_year_end_recovery_execution_contract(
     )
     model.hourly_year_end_future_replan_handoffs = future_replan_handoffs
     model.hourly_year_end_numerical_handoff_reserve_t = numerical_handoff_reserve_t
+    model.hourly_year_end_coefficient_closure_tolerance_t = (
+        ANNUAL_COEFFICIENT_CLOSURE_TOLERANCE_T
+    )
     model.hourly_year_end_product_recovery = ConstraintList()
     model.hourly_year_end_product_recovery.add(
         float(state.cumulative_production_t) + full_horizon_product
         >= annual_product_lower
         - ANNUAL_RECOVERABILITY_NUMERICAL_TOLERANCE_T
+        - ANNUAL_COEFFICIENT_CLOSURE_TOLERANCE_T
         + numerical_handoff_reserve_t
     )
     model.hourly_year_end_product_recovery.add(
@@ -1255,11 +1277,50 @@ def _add_year_end_recovery_execution_contract(
             expr=sum(model.eaf_tap[t] for t in range(horizon_steps))
             == int(remaining_taps)
         )
-        final_subslot = horizon_steps * EAF_SUBSLOTS_PER_HOUR
-        model.hourly_year_end_eaf_idle = Constraint(
-            expr=model.eaf_heat_start_subslot[final_subslot - 2]
-            + model.eaf_heat_start_subslot[final_subslot - 1]
-            == 0
+        if hasattr(model, "eaf_heat_start_subslot"):
+            final_subslot = horizon_steps * EAF_SUBSLOTS_PER_HOUR
+            idle_expression = (
+                model.eaf_heat_start_subslot[final_subslot - 2]
+                + model.eaf_heat_start_subslot[final_subslot - 1]
+            )
+            idle_index_policy = "hourly_internal_eaf_subslots"
+        else:
+            idle_expression = (
+                model.eaf_heat_start[horizon_steps - 2]
+                + model.eaf_heat_start[horizon_steps - 1]
+            )
+            idle_index_policy = "native_qh_eaf_start_intervals"
+        model.hourly_year_end_eaf_idle = Constraint(expr=idle_expression == 0)
+        model.year_end_eaf_idle_index_policy = idle_index_policy
+
+
+def _apply_c0_governed_intraday_contract(
+    model: Any,
+    context: Any,
+    config: Mapping[str, Any],
+) -> None:
+    """Replace stale raw-route caps with the active V60/V11 boundaries."""
+
+    if hasattr(model, "c0_bof_hourly_scrap_cap"):
+        model.c0_bof_hourly_scrap_cap.deactivate()
+    model.c0_bof_scrap_timing_policy = (
+        "annual_cumulative_ledger_no_invented_intraday_arrival_profile"
+    )
+    if hasattr(model, "c0_dsp_final_product_hourly_cap"):
+        model.c0_dsp_final_product_hourly_cap.deactivate()
+    if not hasattr(model, "c0_governed_dsp_final_product_interval_cap"):
+        dsp_maximum_t_h = float(
+            config["plant_dynamics"]["downstream_temporal_contract"]
+            ["dsp_final_product_max_t_h"]
+        )
+        interval_hours = float(context.time_grid.time_step_hours)
+        model.c0_governed_dsp_final_product_interval_cap = Constraint(
+            model.TIME,
+            rule=lambda m, t: m.c0_dsp_final_product_output[t]
+            <= dsp_maximum_t_h * interval_hours,
+        )
+        model.c0_dsp_capacity_policy = (
+            "v60_v11_governed_dsp_rate_scaled_to_model_interval"
         )
 
 
@@ -1273,6 +1334,7 @@ def _add_c0_annual_progress_contract(
 
     if hasattr(model, "normalized_capacity_aggregate_recoverability"):
         model.normalized_capacity_aggregate_recoverability.deactivate()
+    _apply_c0_governed_intraday_contract(model, context, config)
     model.c0_fixed_bf_aggregate_floor_active = False
     model.c0_stateful_recoverability_contract = (
         "annual_terminal_recoverability_with_48h_progress_corridor_v2"
@@ -1693,7 +1755,7 @@ def _add_c1_annual_residual_product_certificate(
         == float(annual_target_taps * 325) - eaf_completed
     )
     cold_slab_capacity = float(
-        value(model.cold_slab_capacity[execution_hours - 1].upper)
+        value(model.cold_slab_capacity[execution_steps - 1].upper)
     )
     cold_slab_terminal_lower = max(
         0.0,
@@ -1706,15 +1768,16 @@ def _add_c1_annual_residual_product_certificate(
         - ANNUAL_TERMINAL_WIP_INVENTORY_BAND_FRACTION * cold_slab_capacity,
     )
     cold_slab_net = (
-        model.cold_slab_inventory[execution_hours - 1]
+        model.cold_slab_inventory[execution_steps - 1]
         - cold_slab_terminal_lower
     )
     eaf_slab_net = (
-        model.eaf_slab_inventory[execution_hours - 1]
+        model.eaf_slab_inventory[execution_steps - 1]
         - eaf_slab_terminal_lower
     )
 
-    last = execution_hours - 1
+    last = execution_steps - 1
+    interval_hours = float(context.time_grid.time_step_hours)
 
     model.c1_future_continuous_reachability = ConstraintList()
 
@@ -1754,7 +1817,8 @@ def _add_c1_annual_residual_product_certificate(
             )
             model.c1_future_continuous_reachability.add(
                 reachable
-                <= component[reachability_anchor] + float(maximum_step) * blocks
+                <= component[reachability_anchor] / interval_hours
+                + float(maximum_step) * blocks
             )
         return sum(rates[hour] for hour in range(ramp_hours)) + float(
             maximum_rate
@@ -1809,11 +1873,12 @@ def _add_c1_annual_residual_product_certificate(
         raise HourlyTemporalValidationError(
             "The annual residual certificate requires an explicit HSM capacity."
         )
+    hsm_maximum_rate_t_h = float(hsm_limits[1]) / interval_hours
     future_hsm_upper = future_reachable_upper_sum(
         "hsm",
         model.hot_strip_mill,
         minimum_rate=0.0,
-        maximum_rate=float(hsm_limits[1]),
+        maximum_rate=hsm_maximum_rate_t_h,
         maximum_step=float(downstream["hsm_maximum_step_t_h"]),
         block_hours=int(downstream["hsm_setpoint_block_hours"]),
         available_hours=downstream_future_hours,
@@ -2071,7 +2136,7 @@ def _add_c1_annual_residual_product_certificate(
                 * dsp_input_per_final
                 * hours
             )
-            daily.add(hsm_day <= float(hsm_limits[1]) * hours)
+            daily.add(hsm_day <= hsm_maximum_rate_t_h * hours)
             daily.add(dsp_day <= bof_day + eaf_day)
             daily.add(
                 slab_end
@@ -2133,7 +2198,9 @@ def _add_c1_annual_residual_product_certificate(
             float(state.cumulative_production_t)
             + current_product
             + daily_future_final
-            >= annual_product_lower - ANNUAL_RECOVERABILITY_NUMERICAL_TOLERANCE_T
+            >= annual_product_lower
+            - ANNUAL_RECOVERABILITY_NUMERICAL_TOLERANCE_T
+            - ANNUAL_COEFFICIENT_CLOSURE_TOLERANCE_T
         )
         daily.add(
             float(state.cumulative_production_t)
@@ -2212,7 +2279,7 @@ def _add_c1_annual_residual_product_certificate(
         expr=imported_completed
         + sum(
             model.imported_slab_to_hsm[t]
-            for t in range(physical_horizon_hours)
+            for t in range(physical_horizon_steps)
         )
         + imported_rate * future_after_physical_horizon
         >= minimum_annual_imported_slab
@@ -2372,7 +2439,7 @@ def _add_c1_annual_residual_product_certificate(
         "hsm",
         model.hot_strip_mill,
         minimum_rate=0.0,
-        maximum_rate=float(hsm_limits[1]),
+        maximum_rate=hsm_maximum_rate_t_h,
         maximum_step=float(downstream["hsm_maximum_step_t_h"]),
         block_hours=int(downstream["hsm_setpoint_block_hours"]),
         available_hours=tail_downstream_hours,
@@ -2604,7 +2671,7 @@ def _add_annual_physical_tail_handoff_viability(
             "dsp_final_product_max_t_h"
         ]
     )
-    full_routes = _c0_route_expressions_over_hours(model, horizon)
+    full_routes = _c0_route_expressions_over_hours(model, horizon_steps)
     model.c0_physical_tail_route_handoff = ConstraintList()
     model.c0_physical_tail_route_handoff_audit = {}
     endpoint_hours = int(state.executed_hours) + horizon
@@ -2661,7 +2728,7 @@ def _add_c0_executed_inventory_continuation(
         target = float(
             context.terminal_inventory_band[C0_CONFIGURATION][inventory_id]["target_t"]
         )
-        handoff = getattr(model, str(component_name))[_execution_hours(context) - 1]
+        handoff = getattr(model, str(component_name))[_execution_steps(context) - 1]
         model.c0_inventory_continuation_constraints.add(
             model.c0_inventory_shortfall_t[inventory_id] >= target - handoff
         )
@@ -2693,13 +2760,14 @@ def _add_c0_week_contract(
         raise HourlyTemporalValidationError("Unexpected C0 rolling contract.")
     if hasattr(model, "normalized_capacity_aggregate_recoverability"):
         model.normalized_capacity_aggregate_recoverability.deactivate()
+    _apply_c0_governed_intraday_contract(model, context, config)
     model.c0_fixed_bf_aggregate_floor_active = False
     model.c0_stateful_recoverability_contract = str(rolling["contract_version"])
 
     fraction = float(rolling["route_band_fraction"])
     quota_hours = int(rolling["quota_period_hours"])
     future_days = 7 - int(day_index)
-    route_expressions = _c0_route_expressions(model)
+    route_expressions = _c0_route_expressions(model, _execution_steps(context))
     model.c0_week_route_recoverability = ConstraintList()
     route_audit: dict[str, dict[str, float]] = {}
     for route_id, annual_target in rolling["route_annual_targets_t_y"].items():
@@ -2716,8 +2784,8 @@ def _add_c0_week_contract(
                 config["c0_material_contract"]["bof_scrap_t_per_t_liquid_steel"]
             )
             scrap_cap_t_h = float(
-                value(model.c0_bof_hourly_scrap_cap[model.TIME.first()].upper)
-            )
+                config["c0_material_contract"]["annual_bof_scrap_cap_t_y"]
+            ) / HOURS_PER_YEAR
             maximum_future_day = min(
                 maximum_future_day,
                 scrap_cap_t_h / scrap_per_t_liquid_steel * EXECUTION_HOURS,
@@ -2747,6 +2815,8 @@ def _add_c0_week_contract(
     model.c0_week_route_audit = route_audit
 
     remaining_period_hours = (future_days + 1) * EXECUTION_HOURS
+    execution_last = _execution_steps(context) - 1
+    interval_hours = float(context.time_grid.time_step_hours)
     if future_days > 0 and remaining_period_hours > PHYSICAL_HORIZON_HOURS:
         bf_assets = ("blast_furnace_6", "blast_furnace_7")
         future_hours = future_days * EXECUTION_HOURS
@@ -2769,7 +2839,7 @@ def _add_c0_week_contract(
                 )
                 model.c0_future_reachable_bf_constraints.add(
                     reachable
-                    <= getattr(model, asset)[EXECUTION_HOURS - 1]
+                    <= getattr(model, asset)[execution_last] / interval_hours
                     + maximum_step * (future_hour + 1)
                 )
         conversion = rolling["active_conversion_reuse"]
@@ -2810,12 +2880,12 @@ def _add_c0_week_contract(
                 )
                 model.c0_future_reachable_supply_constraints.add(
                     reachable
-                    <= getattr(model, asset)[EXECUTION_HOURS - 1]
+                    <= getattr(model, asset)[execution_last] / interval_hours
                     + maximum_step * math.ceil((future_hour + 1) / block_hours)
                 )
         inventory_bands = context.terminal_inventory_band[C0_CONFIGURATION]
         future_hot_metal_from_sinter = (
-            model.sinter_inventory[EXECUTION_HOURS - 1]
+            model.sinter_inventory[execution_last]
             + float(conversion["sinter_t_per_t_sifa_activity"])
             * sum(
                 model.c0_future_reachable_supply_rate_t_h[
@@ -2826,7 +2896,7 @@ def _add_c0_week_contract(
             - float(inventory_bands["sinter_inventory_t"]["lower_t"])
         ) / float(conversion["sinter_t_per_t_hot_metal"])
         future_hot_metal_from_coke = (
-            model.coke_inventory[EXECUTION_HOURS - 1]
+            model.coke_inventory[execution_last]
             + float(conversion["coke_t_per_t_activity"])
             * sum(
                 model.c0_future_reachable_supply_rate_t_h[asset, future_hour]
@@ -2856,7 +2926,7 @@ def _add_c0_week_contract(
             ]["lower_t"]
         )
         model.c0_hot_iron_calendar_recoverability = Constraint(
-            expr=model.hot_iron_inventory[EXECUTION_HOURS - 1]
+            expr=model.hot_iron_inventory[execution_last]
             + model.c0_future_hot_metal_recoverable_t
             >= float(conversion["bof_hot_metal_t_per_t_liquid_steel"])
             * (bof_lower - bof_completed - bof_route)
@@ -2865,7 +2935,9 @@ def _add_c0_week_contract(
 
     if remaining_period_hours <= PHYSICAL_HORIZON_HOURS:
         model.c0_physical_tail_week_closure = ConstraintList()
-        tail_routes = _c0_route_expressions_over_hours(model, remaining_period_hours)
+        tail_routes = _c0_route_expressions_over_hours(
+            model, _steps_for_hours(context, remaining_period_hours)
+        )
         for route_id, annual_target in rolling["route_annual_targets_t_y"].items():
             target = float(annual_target) * quota_hours / HOURS_PER_YEAR
             completed = float(state.cumulative_route_progress_t.get(route_id, 0.0))
@@ -2888,7 +2960,7 @@ def _add_c0_week_contract(
     continuation = 0.0
     for inventory_id, component_name in inventory_map.items():
         band = week_inventory_bands[inventory_id]
-        handoff = getattr(model, str(component_name))[EXECUTION_HOURS - 1]
+        handoff = getattr(model, str(component_name))[execution_last]
         model.c0_inventory_continuation_constraints.add(
             model.c0_inventory_shortfall_t[inventory_id]
             >= float(band["target_t"]) - handoff
@@ -3027,25 +3099,6 @@ def _build_model(
         if native_dri_terminal is not None and native_dri_terminal.active:
             native_dri_terminal.deactivate()
         model.qh_physical_tail_replaces_native_dri_cyclic_closure = True
-    if configuration == C1_CONFIGURATION and (
-        annual_readiness
-        or str(context.temporal_contract_version) == C1_ANNUAL_QH_CONTRACT_VERSION
-    ):
-        # The 48 h fixed-recovery checkpoint belongs to the representative
-        # finite-tail diagnostic.  An annual rolling state instead exports the
-        # executed inventory and proves a bounded physical continuation, so a
-        # reset of DRI or slabs within that continuation would contradict the
-        # annual recoverability contract.
-        replaced = []
-        for name in (
-            "temporal_fixed_recovery_dri_terminal",
-            "temporal_fixed_recovery_cold_slab_terminal",
-        ):
-            component = getattr(model, name, None)
-            if component is not None and component.active:
-                component.deactivate()
-                replaced.append(name)
-        model.annual_recoverability_replaces_fixed_recovery_checkpoint = tuple(replaced)
     if configuration == C1_CONFIGURATION:
         _add_c1_daily_contract(
             model,
@@ -3121,8 +3174,8 @@ def _build_model(
             model,
             annual_initial_inventory_targets_t,
             final_year_day=final_year_day,
-            execution_hours=execution_hours,
-            physical_horizon_hours=int(physical_horizon_hours),
+            execution_steps=execution_steps,
+            physical_horizon_steps=physical_horizon_steps,
             recovery_terminal_index=year_terminal_recovery_index,
         )
         if year_terminal_recovery_index is not None:
@@ -3312,6 +3365,7 @@ def _advance_state(
 ) -> SteelRollingState:
     execution_hours = _execution_hours(context)
     execution_steps = _execution_steps(context)
+    interval_hours = float(context.time_grid.time_step_hours)
     last = execution_steps - 1
     produced = sum(
         _component_value(model, "final_product_output", t)
@@ -3351,19 +3405,34 @@ def _advance_state(
             _component_value(model, "internal_scrap_to_bof_t", t)
             for t in range(execution_steps)
         ),
-        pefa_last_output_t_h=_component_value(model, "pefa_pellet_output_t", last),
+        pefa_last_output_t_h=(
+            _component_value(model, "pefa_pellet_output_t", last) / interval_hours
+        ),
         pellet_inventory_t=_component_value(model, "pellet_inventory", last),
-        hsm_last_input_t_h=_component_value(model, "hot_strip_mill", last),
+        hsm_last_input_t_h=(
+            _component_value(model, "hot_strip_mill", last) / interval_hours
+        ),
     )
     if configuration == C0_CONFIGURATION:
         return SteelRollingState(
             **common,
             last_continuous_rate_t_h={
-                asset: _component_value(model, asset, last)
+                asset: _component_value(model, asset, last) / interval_hours
                 for asset in C0_CONTINUOUS_ASSETS
             },
         )
-    boundary = execution_steps * EAF_SUBSLOTS_PER_HOUR
+    if hasattr(model, "eaf_heat_start_subslot"):
+        boundary = execution_steps * EAF_SUBSLOTS_PER_HOUR
+        eaf_start_lag1 = int(
+            round(value(model.eaf_heat_start_subslot[boundary - 1]))
+        )
+        eaf_start_lag2 = int(
+            round(value(model.eaf_heat_start_subslot[boundary - 2]))
+        )
+    else:
+        boundary = execution_steps
+        eaf_start_lag1 = int(round(value(model.eaf_heat_start[boundary - 1])))
+        eaf_start_lag2 = int(round(value(model.eaf_heat_start[boundary - 2])))
     taps = int(
         round(
             sum(
@@ -3386,14 +3455,16 @@ def _advance_state(
         cooldown = max(0, window - (execution_steps - movement))
     return SteelRollingState(
         **common,
-        eaf_start_lag1=int(round(value(model.eaf_heat_start_subslot[boundary - 1]))),
-        eaf_start_lag2=int(round(value(model.eaf_heat_start_subslot[boundary - 2]))),
+        eaf_start_lag1=eaf_start_lag1,
+        eaf_start_lag2=eaf_start_lag2,
         drp_last_pellet_input_t=_component_value(model, "drp_pellet_input", last),
         last_continuous_rate_t_h={
-            asset: _component_value(model, asset, last)
+            asset: _component_value(model, asset, last) / interval_hours
             for asset in CONTINUOUS_ASSETS
         },
-        last_vn25_output_mw=_component_value(model, "vn25_electricity_mwh", last),
+        last_vn25_output_mw=(
+            _component_value(model, "vn25_electricity_mwh", last) / interval_hours
+        ),
         eaf_quota_period_id=state.eaf_quota_period_id,
         eaf_quota_target_taps=state.eaf_quota_target_taps,
         eaf_quota_completed_taps=int(state.eaf_quota_completed_taps) + taps,
@@ -3943,6 +4014,7 @@ def _calibrate_c0_inventory_continuation(
     c1_config: Mapping[str, Any],
     output: Path,
     attempts: list[dict[str, Any]],
+    artifact_name: str = "c0_inventory_continuation_calibration.json",
 ) -> dict[str, float]:
     rolling = c0_config["c0_hourly_rolling_contract"]
     calibration = rolling["inventory_value_calibration"]
@@ -3981,6 +4053,7 @@ def _calibrate_c0_inventory_continuation(
                 case_id=f"c0_inventory_value_{inventory_id}_reference",
                 output=output,
                 strict=True,
+                diagnose_infeasible=True,
             )
         except HourlyTemporalValidationError as exc:
             if "solver-proven infeasible" not in str(exc):
@@ -4001,6 +4074,7 @@ def _calibrate_c0_inventory_continuation(
                 case_id=f"c0_inventory_value_{inventory_id}_reachable_reference",
                 output=output,
                 strict=True,
+                diagnose_infeasible=True,
             )
             reference_level = _component_value(
                 reference_model, str(component_name), execution_steps - 1
@@ -4128,7 +4202,7 @@ def _calibrate_c0_inventory_continuation(
             "marginal_value_eur_per_t": values[str(inventory_id)],
         }
     evidence["values_eur_per_t"] = values
-    _write_json(output / "c0_inventory_continuation_calibration.json", evidence)
+    _write_json(output / artifact_name, evidence)
     return values
 
 
